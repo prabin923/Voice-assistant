@@ -17,6 +17,8 @@ export default function VoiceAssistant() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSupported, setIsSupported] = useState(true);
   const [branding, setBranding] = useState<BrandingConfig>({
     hotelName: "Voice Receptionist",
     tagline: "AI-Powered Hotel Assistant",
@@ -56,18 +58,56 @@ export default function VoiceAssistant() {
         recognitionRef.current.onresult = (event: any) => {
           const currentTranscript = event.results[0][0].transcript;
           setTranscript(currentTranscript);
+          setErrorMessage(null);
           handleUserAudioComplete(currentTranscript);
         };
 
         recognitionRef.current.onerror = (event: any) => {
-          console.error("Speech recognition error:", event.error);
+          // Use console.warn instead of console.error to prevent
+          // Next.js dev overlay from showing for expected browser errors
+          const errorType = event.error as string;
           setIsListening(false);
           setIsProcessing(false);
+
+          switch (errorType) {
+            case "network":
+              setErrorMessage(
+                "Network error: Speech recognition requires an internet connection. Please check your connectivity and try again."
+              );
+              break;
+            case "not-allowed":
+            case "service-not-allowed":
+              setErrorMessage(
+                "Microphone access denied. Please allow microphone permissions in your browser settings."
+              );
+              break;
+            case "no-speech":
+              setErrorMessage(
+                "No speech detected. Please tap the microphone and speak clearly."
+              );
+              break;
+            case "aborted":
+              // User or system aborted — no need to show an error
+              break;
+            default:
+              setErrorMessage(
+                `Speech recognition error: ${errorType}. Please try again.`
+              );
+          }
+
+          // Clear error after 6 seconds
+          setTimeout(() => setErrorMessage(null), 6000);
+          console.warn("[Voice Assistant] Speech recognition event:", errorType);
         };
 
         recognitionRef.current.onend = () => {
           setIsListening(false);
         };
+      } else {
+        setIsSupported(false);
+        setErrorMessage(
+          "Speech recognition is not supported in this browser. Please use Chrome or Edge."
+        );
       }
 
       synthRef.current = window.speechSynthesis;
@@ -101,7 +141,7 @@ export default function VoiceAssistant() {
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
       speakText(reply);
     } catch (error) {
-      console.error("Failed to fetch response:", error);
+      console.warn("[Voice Assistant] Failed to fetch response:", error);
       const errorMsg = "I'm sorry, I'm having trouble connecting right now.";
       setMessages((prev) => [...prev, { role: "assistant", content: errorMsg }]);
       speakText(errorMsg);
@@ -229,7 +269,7 @@ export default function VoiceAssistant() {
           )}
           <button
             onClick={toggleListening}
-            disabled={isProcessing}
+            disabled={isProcessing || !isSupported}
             className={`
               relative z-10 flex flex-col items-center justify-center cursor-pointer
               w-36 h-36 sm:w-40 sm:h-40 rounded-full transition-all duration-500 ease-out
@@ -331,6 +371,14 @@ export default function VoiceAssistant() {
           )}
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Error Banner */}
+        {errorMessage && (
+          <div className="w-full mt-4 px-5 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm flex items-center gap-3 z-10 animate-in">
+            <span className="text-red-400 text-lg">⚠</span>
+            <p>{errorMessage}</p>
+          </div>
+        )}
       </main>
 
       {/* Footer */}
