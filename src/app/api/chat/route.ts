@@ -1,9 +1,8 @@
 // ============================================================
 // UNIVERSAL CHAT API — /api/chat
 // ============================================================
-// Accepts a user message, generates a contextual reply using
-// the current hotel configuration. Ready for integration with
-// any hotel management system.
+// Accepts a user message + optional language code, generates
+// a contextual reply using the hotel config and response engine.
 // ============================================================
 
 import { NextResponse } from 'next/server';
@@ -12,7 +11,7 @@ import { generateResponse } from '@/lib/responseEngine';
 
 export async function POST(req: Request) {
   try {
-    const { message } = await req.json();
+    const { message, language } = await req.json();
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json(
@@ -22,15 +21,17 @@ export async function POST(req: Request) {
     }
 
     const config = getHotelConfig();
+    const langCode = language || config.language || 'en-US';
 
     // Simulate slight processing delay for realism
-    await new Promise(resolve => setTimeout(resolve, 400));
+    await new Promise(resolve => setTimeout(resolve, 300));
 
-    const reply = generateResponse(message, config);
+    const reply = generateResponse(message, config, langCode);
 
     return NextResponse.json({
       reply,
       hotelName: config.branding.hotelName,
+      language: langCode,
       timestamp: new Date().toISOString(),
     });
 
