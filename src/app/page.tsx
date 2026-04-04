@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { Mic, Volume2, Loader2, Phone, Settings, Globe, ChevronDown } from "lucide-react";
 
@@ -19,7 +19,29 @@ interface LanguageOption {
   ttsLang: string;
 }
 
-// All supported languages — mirror of languages.ts for the client
+interface UIStrings {
+  tapToSpeak: string;
+  listening: string;
+  speaking: string;
+  ready: string;
+  configure: string;
+  searchLanguage: string;
+  welcomeHint: string;
+  speakingIn: string;
+  footer: string;
+  you: string;
+  errorNetwork: string;
+  errorMicDenied: string;
+  errorNoSpeech: string;
+  errorGeneric: string;
+  errorUnsupported: string;
+  errorConnection: string;
+  virtualReceptionist: string;
+  poweredByAI: string;
+  languagesSupported: string;
+}
+
+// All supported languages
 const ALL_LANGUAGES: LanguageOption[] = [
   { code: "en-US",  name: "English (US)",       nativeName: "English",       flag: "🇺🇸", ttsLang: "en-US" },
   { code: "en-GB",  name: "English (UK)",       nativeName: "English",       flag: "🇬🇧", ttsLang: "en-GB" },
@@ -57,6 +79,29 @@ const ALL_LANGUAGES: LanguageOption[] = [
   { code: "fil-PH", name: "Filipino",           nativeName: "Filipino",      flag: "🇵🇭", ttsLang: "fil-PH" },
 ];
 
+// UI string translations — keyed by primary language code
+const UI_TRANSLATIONS: Record<string, UIStrings> = {
+  en: { tapToSpeak: "Tap to Speak", listening: "Listening...", speaking: "Speaking...", ready: "Ready", configure: "Configure", searchLanguage: "Search language...", welcomeHint: "Tap the microphone and ask me anything.", speakingIn: "Speaking in", footer: "Universal Voice Receptionist", you: "You", errorNetwork: "Network error: Speech recognition requires an internet connection.", errorMicDenied: "Microphone access denied. Please allow microphone permissions.", errorNoSpeech: "No speech detected. Please tap the microphone and speak clearly.", errorGeneric: "Speech recognition error", errorUnsupported: "Speech recognition is not supported in this browser. Please use Chrome or Edge.", errorConnection: "I'm sorry, I'm having trouble connecting right now.", virtualReceptionist: "Virtual Receptionist", poweredByAI: "Powered by AI", languagesSupported: "Languages Supported" },
+  es: { tapToSpeak: "Toca para hablar", listening: "Escuchando...", speaking: "Hablando...", ready: "Listo", configure: "Configurar", searchLanguage: "Buscar idioma...", welcomeHint: "Toca el micrófono y pregúntame lo que necesites.", speakingIn: "Hablando en", footer: "Recepcionista Virtual Universal", you: "Tú", errorNetwork: "Error de red: El reconocimiento de voz requiere conexión a internet.", errorMicDenied: "Acceso al micrófono denegado. Permite los permisos del micrófono.", errorNoSpeech: "No se detectó voz. Toca el micrófono y habla claramente.", errorGeneric: "Error de reconocimiento de voz", errorUnsupported: "El reconocimiento de voz no está soportado en este navegador. Use Chrome o Edge.", errorConnection: "Lo siento, tengo problemas de conexión en este momento.", virtualReceptionist: "Recepcionista Virtual", poweredByAI: "Impulsado por IA", languagesSupported: "Idiomas soportados" },
+  fr: { tapToSpeak: "Appuyez pour parler", listening: "Écoute en cours...", speaking: "En cours de parole...", ready: "Prêt", configure: "Configurer", searchLanguage: "Rechercher une langue...", welcomeHint: "Appuyez sur le microphone et posez-moi une question.", speakingIn: "Parlant en", footer: "Réceptionniste Virtuel Universel", you: "Vous", errorNetwork: "Erreur réseau : La reconnaissance vocale nécessite une connexion internet.", errorMicDenied: "Accès au microphone refusé. Veuillez autoriser les permissions du microphone.", errorNoSpeech: "Aucune parole détectée. Appuyez sur le microphone et parlez clairement.", errorGeneric: "Erreur de reconnaissance vocale", errorUnsupported: "La reconnaissance vocale n'est pas supportée dans ce navigateur. Utilisez Chrome ou Edge.", errorConnection: "Désolé, j'ai des difficultés de connexion en ce moment.", virtualReceptionist: "Réceptionniste Virtuel", poweredByAI: "Propulsé par l'IA", languagesSupported: "Langues prises en charge" },
+  de: { tapToSpeak: "Tippen zum Sprechen", listening: "Zuhören...", speaking: "Sprechen...", ready: "Bereit", configure: "Konfigurieren", searchLanguage: "Sprache suchen...", welcomeHint: "Tippen Sie auf das Mikrofon und fragen Sie mich.", speakingIn: "Spricht in", footer: "Universeller Virtueller Rezeptionist", you: "Sie", errorNetwork: "Netzwerkfehler: Die Spracherkennung benötigt eine Internetverbindung.", errorMicDenied: "Mikrofonzugriff verweigert. Bitte erlauben Sie die Mikrofonberechtigungen.", errorNoSpeech: "Keine Sprache erkannt. Tippen Sie auf das Mikrofon und sprechen Sie deutlich.", errorGeneric: "Spracherkennungsfehler", errorUnsupported: "Die Spracherkennung wird in diesem Browser nicht unterstützt. Verwenden Sie Chrome oder Edge.", errorConnection: "Entschuldigung, ich habe gerade Verbindungsprobleme.", virtualReceptionist: "Virtueller Rezeptionist", poweredByAI: "KI-gestützt", languagesSupported: "Unterstützte Sprachen" },
+  ja: { tapToSpeak: "タップして話す", listening: "聞いています...", speaking: "話しています...", ready: "準備完了", configure: "設定", searchLanguage: "言語を検索...", welcomeHint: "マイクをタップして何でもお聞きください。", speakingIn: "使用言語", footer: "ユニバーサル・バーチャル・レセプショニスト", you: "あなた", errorNetwork: "ネットワークエラー：音声認識にはインターネット接続が必要です。", errorMicDenied: "マイクへのアクセスが拒否されました。", errorNoSpeech: "音声が検出されませんでした。マイクをタップしてはっきりと話してください。", errorGeneric: "音声認識エラー", errorUnsupported: "このブラウザでは音声認識がサポートされていません。ChromeまたはEdgeをご使用ください。", errorConnection: "申し訳ございません、現在接続に問題があります。", virtualReceptionist: "バーチャル受付", poweredByAI: "AI搭載", languagesSupported: "対応言語" },
+  zh: { tapToSpeak: "点击说话", listening: "正在聆听...", speaking: "正在播放...", ready: "就绪", configure: "配置", searchLanguage: "搜索语言...", welcomeHint: "点击麦克风，随时向我提问。", speakingIn: "当前语言", footer: "通用虚拟接待员", you: "您", errorNetwork: "网络错误：语音识别需要互联网连接。", errorMicDenied: "麦克风访问被拒绝。请允许麦克风权限。", errorNoSpeech: "未检测到语音。请点击麦克风并清晰说话。", errorGeneric: "语音识别错误", errorUnsupported: "此浏览器不支持语音识别。请使用Chrome或Edge。", errorConnection: "抱歉，目前连接出现问题。", virtualReceptionist: "虚拟接待员", poweredByAI: "AI驱动", languagesSupported: "支持的语言" },
+  ko: { tapToSpeak: "탭하여 말하기", listening: "듣고 있습니다...", speaking: "말하고 있습니다...", ready: "준비됨", configure: "설정", searchLanguage: "언어 검색...", welcomeHint: "마이크를 탭하고 무엇이든 물어보세요.", speakingIn: "사용 언어", footer: "유니버설 가상 안내원", you: "나", errorNetwork: "네트워크 오류: 음성 인식에는 인터넷 연결이 필요합니다.", errorMicDenied: "마이크 접근이 거부되었습니다.", errorNoSpeech: "음성이 감지되지 않았습니다.", errorGeneric: "음성 인식 오류", errorUnsupported: "이 브라우저에서는 음성 인식이 지원되지 않습니다.", errorConnection: "죄송합니다, 현재 연결에 문제가 있습니다.", virtualReceptionist: "가상 안내원", poweredByAI: "AI 기반", languagesSupported: "지원 언어" },
+  hi: { tapToSpeak: "बोलने के लिए टैप करें", listening: "सुन रहा हूँ...", speaking: "बोल रहा हूँ...", ready: "तैयार", configure: "सेटिंग्स", searchLanguage: "भाषा खोजें...", welcomeHint: "माइक्रोफ़ोन पर टैप करें और कुछ भी पूछें।", speakingIn: "भाषा", footer: "यूनिवर्सल वर्चुअल रिसेप्शनिस्ट", you: "आप", errorNetwork: "नेटवर्क त्रुटि: वाक् पहचान के लिए इंटरनेट आवश्यक है।", errorMicDenied: "माइक्रोफ़ोन एक्सेस अस्वीकृत।", errorNoSpeech: "कोई आवाज़ नहीं मिली।", errorGeneric: "वाक् पहचान त्रुटि", errorUnsupported: "इस ब्राउज़र में वाक् पहचान समर्थित नहीं है।", errorConnection: "क्षमा करें, अभी कनेक्शन में समस्या है।", virtualReceptionist: "वर्चुअल रिसेप्शनिस्ट", poweredByAI: "AI संचालित", languagesSupported: "समर्थित भाषाएँ" },
+  ne: { tapToSpeak: "बोल्नको लागि ट्याप गर्नुहोस्", listening: "सुनिरहेको छ...", speaking: "बोलिरहेको छ...", ready: "तयार", configure: "सेटिङ", searchLanguage: "भाषा खोज्नुहोस्...", welcomeHint: "माइक्रोफोनमा ट्याप गर्नुहोस् र जे पनि सोध्नुहोस्।", speakingIn: "भाषा", footer: "युनिभर्सल भर्चुअल रिसेप्सनिस्ट", you: "तपाईं", errorNetwork: "नेटवर्क त्रुटि: भाषण पहिचानका लागि इन्टरनेट आवश्यक छ।", errorMicDenied: "माइक्रोफोन पहुँच अस्वीकार।", errorNoSpeech: "कुनै आवाज फेला परेन।", errorGeneric: "भाषण पहिचान त्रुटि", errorUnsupported: "यो ब्राउजरमा भाषण पहिचान समर्थित छैन।", errorConnection: "माफ गर्नुहोस्, अहिले जडान समस्या छ।", virtualReceptionist: "भर्चुअल रिसेप्सनिस्ट", poweredByAI: "AI द्वारा संचालित", languagesSupported: "समर्थित भाषाहरू" },
+  ar: { tapToSpeak: "انقر للتحدث", listening: "جارٍ الاستماع...", speaking: "جارٍ التحدث...", ready: "جاهز", configure: "إعدادات", searchLanguage: "ابحث عن لغة...", welcomeHint: "انقر على الميكروفون واسألني أي شيء.", speakingIn: "اللغة الحالية", footer: "موظف استقبال افتراضي عالمي", you: "أنت", errorNetwork: "خطأ في الشبكة: التعرف على الكلام يتطلب اتصالاً بالإنترنت.", errorMicDenied: "تم رفض الوصول إلى الميكروفون.", errorNoSpeech: "لم يتم اكتشاف أي كلام.", errorGeneric: "خطأ في التعرف على الكلام", errorUnsupported: "التعرف على الكلام غير مدعوم في هذا المتصفح.", errorConnection: "عذراً، أواجه مشكلة في الاتصال حالياً.", virtualReceptionist: "موظف استقبال افتراضي", poweredByAI: "بدعم الذكاء الاصطناعي", languagesSupported: "اللغات المدعومة" },
+  pt: { tapToSpeak: "Toque para falar", listening: "Ouvindo...", speaking: "Falando...", ready: "Pronto", configure: "Configurar", searchLanguage: "Pesquisar idioma...", welcomeHint: "Toque no microfone e pergunte o que quiser.", speakingIn: "Falando em", footer: "Recepcionista Virtual Universal", you: "Você", errorNetwork: "Erro de rede: reconhecimento de voz requer internet.", errorMicDenied: "Acesso ao microfone negado.", errorNoSpeech: "Nenhuma fala detectada.", errorGeneric: "Erro de reconhecimento de voz", errorUnsupported: "Reconhecimento de voz não suportado neste navegador.", errorConnection: "Desculpe, problemas de conexão.", virtualReceptionist: "Recepcionista Virtual", poweredByAI: "Impulsionado por IA", languagesSupported: "Idiomas suportados" },
+  ru: { tapToSpeak: "Нажмите, чтобы говорить", listening: "Слушаю...", speaking: "Говорю...", ready: "Готов", configure: "Настройки", searchLanguage: "Поиск языка...", welcomeHint: "Нажмите на микрофон и задайте любой вопрос.", speakingIn: "Язык", footer: "Универсальный виртуальный портье", you: "Вы", errorNetwork: "Ошибка сети: для распознавания речи требуется интернет.", errorMicDenied: "Доступ к микрофону запрещён.", errorNoSpeech: "Речь не обнаружена.", errorGeneric: "Ошибка распознавания речи", errorUnsupported: "Распознавание речи не поддерживается.", errorConnection: "Извините, проблемы с подключением.", virtualReceptionist: "Виртуальный портье", poweredByAI: "На базе ИИ", languagesSupported: "Поддерживаемые языки" },
+  it: { tapToSpeak: "Tocca per parlare", listening: "Ascolto...", speaking: "Parlando...", ready: "Pronto", configure: "Configura", searchLanguage: "Cerca lingua...", welcomeHint: "Tocca il microfono e chiedimi qualsiasi cosa.", speakingIn: "Lingua attiva", footer: "Receptionist Virtuale Universale", you: "Tu", errorNetwork: "Errore di rete: riconoscimento vocale richiede internet.", errorMicDenied: "Accesso al microfono negato.", errorNoSpeech: "Nessun discorso rilevato.", errorGeneric: "Errore riconoscimento vocale", errorUnsupported: "Riconoscimento vocale non supportato.", errorConnection: "Problemi di connessione.", virtualReceptionist: "Receptionist Virtuale", poweredByAI: "Con IA", languagesSupported: "Lingue supportate" },
+  tr: { tapToSpeak: "Konuşmak için dokunun", listening: "Dinliyor...", speaking: "Konuşuyor...", ready: "Hazır", configure: "Ayarlar", searchLanguage: "Dil ara...", welcomeHint: "Mikrofona dokunun ve istediğinizi sorun.", speakingIn: "Konuşma dili", footer: "Evrensel Sanal Resepsiyonist", you: "Siz", errorNetwork: "Ağ hatası: internet bağlantısı gerekiyor.", errorMicDenied: "Mikrofon erişimi reddedildi.", errorNoSpeech: "Konuşma algılanmadı.", errorGeneric: "Konuşma tanıma hatası", errorUnsupported: "Bu tarayıcıda konuşma tanıma desteklenmiyor.", errorConnection: "Bağlantı sorunları yaşıyorum.", virtualReceptionist: "Sanal Resepsiyonist", poweredByAI: "Yapay Zeka ile", languagesSupported: "Desteklenen diller" },
+};
+
+function getUI(langCode: string): UIStrings {
+  const primary = langCode.split("-")[0];
+  return UI_TRANSLATIONS[primary] || UI_TRANSLATIONS["en"];
+}
+
 export default function VoiceAssistant() {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -74,6 +119,9 @@ export default function VoiceAssistant() {
     accentColor: "#f43f5e",
     welcomeMessage: "Welcome! How may I assist you today?",
   });
+
+  // Derive current UI strings from selected language
+  const ui = useMemo(() => getUI(selectedLanguage.code), [selectedLanguage]);
 
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -133,28 +181,23 @@ export default function VoiceAssistant() {
           const errorType = event.error as string;
           setIsListening(false);
           setIsProcessing(false);
+          const currentUI = getUI(selectedLanguage.code);
 
           switch (errorType) {
             case "network":
-              setErrorMessage(
-                "Network error: Speech recognition requires an internet connection."
-              );
+              setErrorMessage(currentUI.errorNetwork);
               break;
             case "not-allowed":
             case "service-not-allowed":
-              setErrorMessage(
-                "Microphone access denied. Please allow microphone permissions."
-              );
+              setErrorMessage(currentUI.errorMicDenied);
               break;
             case "no-speech":
-              setErrorMessage(
-                "No speech detected. Please tap the microphone and speak clearly."
-              );
+              setErrorMessage(currentUI.errorNoSpeech);
               break;
             case "aborted":
               break;
             default:
-              setErrorMessage(`Speech recognition error: ${errorType}.`);
+              setErrorMessage(`${currentUI.errorGeneric}: ${errorType}`);
           }
           setTimeout(() => setErrorMessage(null), 6000);
           console.warn("[Voice Assistant] Speech recognition event:", errorType);
@@ -165,9 +208,7 @@ export default function VoiceAssistant() {
         };
       } else {
         setIsSupported(false);
-        setErrorMessage(
-          "Speech recognition is not supported in this browser. Please use Chrome or Edge."
-        );
+        setErrorMessage(ui.errorUnsupported);
       }
 
       synthRef.current = window.speechSynthesis;
@@ -202,9 +243,9 @@ export default function VoiceAssistant() {
       speakText(reply);
     } catch (error) {
       console.warn("[Voice Assistant] Failed to fetch response:", error);
-      const errorMsg = "I'm sorry, I'm having trouble connecting right now.";
-      setMessages((prev) => [...prev, { role: "assistant", content: errorMsg }]);
-      speakText(errorMsg);
+      const currentUI = getUI(selectedLanguage.code);
+      setMessages((prev) => [...prev, { role: "assistant", content: currentUI.errorConnection }]);
+      speakText(currentUI.errorConnection);
     } finally {
       setIsProcessing(false);
     }
@@ -218,7 +259,6 @@ export default function VoiceAssistant() {
     utterance.lang = selectedLanguage.ttsLang;
 
     const voices = synthRef.current.getVoices();
-    // Try to find a voice that matches the selected language
     const matchingVoice = voices.find(v => v.lang === selectedLanguage.ttsLang) ||
       voices.find(v => v.lang.startsWith(selectedLanguage.ttsLang.split("-")[0])) ||
       voices.find(v => v.name.includes("Female") || v.name.includes("Google")) ||
@@ -243,7 +283,6 @@ export default function VoiceAssistant() {
       synthRef.current?.cancel();
       setIsSpeaking(false);
 
-      // Update recognition language before starting
       if (recognitionRef.current) {
         recognitionRef.current.lang = selectedLanguage.code;
       }
@@ -263,7 +302,6 @@ export default function VoiceAssistant() {
     setShowLanguageMenu(false);
     setLanguageSearch("");
 
-    // Re-initialize recognition with new language
     if (recognitionRef.current) {
       recognitionRef.current.lang = lang.code;
     }
@@ -275,8 +313,11 @@ export default function VoiceAssistant() {
     l.code.toLowerCase().includes(languageSearch.toLowerCase())
   );
 
+  // RTL direction for Arabic/Hebrew
+  const isRTL = ["ar", "he"].includes(selectedLanguage.code.split("-")[0]);
+
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans selection:bg-rose-500/30">
+    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans selection:bg-rose-500/30" dir={isRTL ? "rtl" : "ltr"}>
       {/* Background */}
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-neutral-900 via-neutral-950 to-neutral-950 -z-10" />
 
@@ -311,19 +352,17 @@ export default function VoiceAssistant() {
             </button>
 
             {showLanguageMenu && (
-              <div className="absolute right-0 mt-2 w-72 max-h-80 bg-neutral-900 border border-neutral-700 rounded-2xl shadow-2xl overflow-hidden z-30 animate-in">
-                {/* Search */}
+              <div className="absolute right-0 mt-2 w-72 max-h-80 bg-neutral-900 border border-neutral-700 rounded-2xl shadow-2xl overflow-hidden z-30 animate-in" dir="ltr">
                 <div className="p-3 border-b border-neutral-800">
                   <input
                     type="text"
-                    placeholder="Search language..."
+                    placeholder={ui.searchLanguage}
                     value={languageSearch}
                     onChange={(e) => setLanguageSearch(e.target.value)}
                     className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:border-neutral-500"
                     autoFocus
                   />
                 </div>
-                {/* Language List */}
                 <div className="max-h-60 overflow-y-auto scrollbar-thin">
                   {filteredLanguages.map((lang) => (
                     <button
@@ -362,7 +401,7 @@ export default function VoiceAssistant() {
               </span>
             )}
             <span className="text-sm font-medium text-neutral-400 hidden sm:inline">
-              {isListening ? "Listening..." : isSpeaking ? "Speaking..." : "Ready"}
+              {isListening ? ui.listening : isSpeaking ? ui.speaking : ui.ready}
             </span>
           </div>
 
@@ -371,7 +410,7 @@ export default function VoiceAssistant() {
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-neutral-400 border border-neutral-800 hover:border-neutral-600 hover:text-white transition-all"
           >
             <Settings className="w-4 h-4" />
-            <span className="hidden sm:inline">Configure</span>
+            <span className="hidden sm:inline">{ui.configure}</span>
           </Link>
         </div>
       </header>
@@ -445,7 +484,7 @@ export default function VoiceAssistant() {
             ) : (
               <div className="flex flex-col items-center gap-2">
                 <Mic className="w-10 h-10 text-neutral-300" />
-                <span className="text-xs text-neutral-400 font-medium">Tap to Speak</span>
+                <span className="text-xs text-neutral-400 font-medium">{ui.tapToSpeak}</span>
               </div>
             )}
           </button>
@@ -456,9 +495,9 @@ export default function VoiceAssistant() {
           {messages.length === 0 ? (
             <div className="text-center text-neutral-500 py-8">
               <p className="text-lg mb-1">{branding.welcomeMessage}</p>
-              <p className="text-sm">Tap the microphone and ask me anything.</p>
+              <p className="text-sm">{ui.welcomeHint}</p>
               <p className="text-xs mt-2 text-neutral-600">
-                {selectedLanguage.flag} Speaking in {selectedLanguage.nativeName}
+                {selectedLanguage.flag} {ui.speakingIn} {selectedLanguage.nativeName}
               </p>
             </div>
           ) : (
@@ -480,7 +519,7 @@ export default function VoiceAssistant() {
                   {msg.role === "assistant" ? (
                     <Phone className="w-3.5 h-3.5" style={{ color: branding.accentColor }} />
                   ) : (
-                    <span className="text-xs">You</span>
+                    <span className="text-xs">{ui.you}</span>
                   )}
                 </div>
                 <div
@@ -531,7 +570,7 @@ export default function VoiceAssistant() {
 
       {/* Footer */}
       <footer className="text-center py-4 text-xs text-neutral-600 border-t border-white/5">
-        Universal Voice Receptionist • Powered by AI • {ALL_LANGUAGES.length} Languages Supported
+        {ui.footer} • {ui.poweredByAI} • {ALL_LANGUAGES.length} {ui.languagesSupported}
       </footer>
     </div>
   );
