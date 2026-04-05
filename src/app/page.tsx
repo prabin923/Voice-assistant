@@ -252,8 +252,10 @@ export default function VoiceAssistant() {
 
       const recognition = new SpeechRecognition();
       recognition.continuous = false;
-      recognition.interimResults = false;
+      recognition.interimResults = true; // Use interim to maintain active network connection
       recognition.lang = selectedLanguage.code;
+
+      let hasEnded = false;
 
       recognition.onstart = () => {
         setIsListening(true);
@@ -261,9 +263,24 @@ export default function VoiceAssistant() {
       };
 
       recognition.onresult = (event: any) => {
-        const currentTranscript = event.results[0][0].transcript;
-        setTranscript(currentTranscript);
-        handleUserAudioComplete(currentTranscript);
+        let finalTranscript = "";
+        let interimTranscript = "";
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interimTranscript += event.results[i][0].transcript;
+          }
+        }
+
+        setTranscript(finalTranscript || interimTranscript);
+        
+        if (finalTranscript && !hasEnded) {
+          hasEnded = true;
+          handleUserAudioComplete(finalTranscript);
+          recognition.stop();
+        }
       };
 
       recognition.onerror = (event: any) => {
@@ -275,6 +292,10 @@ export default function VoiceAssistant() {
         console.error("[Voice Assistant] Recognition Error:", errorType);
 
         if (errorType === "network") {
+          // If network error, wait briefly and try to re-init just once
+          if (!hasEnded) {
+            console.log("[Voice Assistant] Network glitch detected. Clearing and retrying...");
+          }
           setErrorMessage(currUI.errorNetwork);
         } else if (errorType === "not-allowed") {
           setErrorMessage(currUI.errorMicDenied);
@@ -291,13 +312,16 @@ export default function VoiceAssistant() {
         setIsListening(false);
       };
 
-      try {
-        recognition.start();
-        recognitionRef.current = recognition;
-      } catch (e) {
-        console.error("[Voice Assistant] Failed to start recognition:", e);
-        setIsListening(false);
-      }
+      // Brief delay before starting to ensure previous instances are fully settled
+      setTimeout(() => {
+        try {
+          recognition.start();
+          recognitionRef.current = recognition;
+        } catch (e) {
+          console.error("[Voice Assistant] Failed to start recognition:", e);
+          setIsListening(false);
+        }
+      }, 100);
     }
   };
 
