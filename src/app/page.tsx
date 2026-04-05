@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Mic, Volume2, Loader2, Phone, Settings, Globe, ChevronDown } from "lucide-react";
+import { Mic, Volume2, Loader2, Phone, PhoneCall, Settings, Globe, ChevronDown } from "lucide-react";
+import CallOverlay from "@/components/CallOverlay";
 
 interface BrandingConfig {
   hotelName: string;
@@ -113,6 +114,7 @@ export default function VoiceAssistant() {
   const [selectedLanguage, setSelectedLanguage] = useState<LanguageOption>(ALL_LANGUAGES[0]);
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [languageSearch, setLanguageSearch] = useState("");
+  const [inCall, setInCall] = useState(false);
   const [branding, setBranding] = useState<BrandingConfig>({
     hotelName: "Voice Receptionist",
     tagline: "AI-Powered Hotel Assistant",
@@ -164,48 +166,61 @@ export default function VoiceAssistant() {
     if (typeof window !== "undefined") {
       const SpeechRecognition =
         (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      
       if (SpeechRecognition) {
-        recognitionRef.current = new SpeechRecognition();
-        recognitionRef.current.continuous = false;
-        recognitionRef.current.interimResults = false;
-        recognitionRef.current.lang = selectedLanguage.code;
+        // Clean up any existing instance
+        if (recognitionRef.current) {
+          try { recognitionRef.current.stop(); } catch (e) {}
+        }
 
-        recognitionRef.current.onresult = (event: any) => {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = selectedLanguage.code;
+
+        recognition.onresult = (event: any) => {
           const currentTranscript = event.results[0][0].transcript;
           setTranscript(currentTranscript);
           setErrorMessage(null);
           handleUserAudioComplete(currentTranscript);
         };
 
-        recognitionRef.current.onerror = (event: any) => {
+        recognition.onerror = (event: any) => {
           const errorType = event.error as string;
           setIsListening(false);
           setIsProcessing(false);
           const currentUI = getUI(selectedLanguage.code);
 
+          console.error("[Voice Assistant] Recognition Error:", errorType);
+
           switch (errorType) {
             case "network":
-              setErrorMessage(currentUI.errorNetwork);
+              setErrorMessage(`${currentUI.errorNetwork} (Code: ${errorType})`);
               break;
             case "not-allowed":
             case "service-not-allowed":
               setErrorMessage(currentUI.errorMicDenied);
               break;
             case "no-speech":
-              setErrorMessage(currentUI.errorNoSpeech);
+              // Gentle warning for no speech
               break;
             case "aborted":
+              console.log("[Voice Assistant] Recognition aborted.");
               break;
             default:
               setErrorMessage(`${currentUI.errorGeneric}: ${errorType}`);
           }
-          setTimeout(() => setErrorMessage(null), 6000);
-          console.warn("[Voice Assistant] Speech recognition event:", errorType);
+          
+          if (errorType !== "no-speech" && errorType !== "aborted") {
+            setTimeout(() => setErrorMessage(null), 8000);
+          }
         };
 
-        recognitionRef.current.onend = () => {
+        recognition.onend = () => {
           setIsListening(false);
         };
+
+        recognitionRef.current = recognition;
       } else {
         setIsSupported(false);
         setErrorMessage(ui.errorUnsupported);
@@ -213,6 +228,12 @@ export default function VoiceAssistant() {
 
       synthRef.current = window.speechSynthesis;
     }
+
+    return () => {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (e) {}
+      }
+    };
   }, [selectedLanguage]);
 
   // Ensure voices are loaded
@@ -490,6 +511,16 @@ export default function VoiceAssistant() {
           </button>
         </div>
 
+        {/* Call Receptionist Button */}
+        <button
+          onClick={() => setInCall(true)}
+          disabled={!isSupported}
+          className="group flex items-center gap-3 px-6 py-3 rounded-2xl border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 hover:border-green-500/50 text-green-400 hover:text-green-300 transition-all duration-300 mb-4"
+        >
+          <PhoneCall className="w-5 h-5 group-hover:animate-ring" />
+          <span className="text-sm font-medium">Call Receptionist</span>
+        </button>
+
         {/* Conversation View */}
         <div className="w-full space-y-5 max-h-[45vh] overflow-y-auto px-2 sm:px-4 z-10 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-neutral-800">
           {messages.length === 0 ? (
@@ -572,6 +603,17 @@ export default function VoiceAssistant() {
       <footer className="text-center py-4 text-xs text-neutral-600 border-t border-white/5">
         {ui.footer} • {ui.poweredByAI} • {ALL_LANGUAGES.length} {ui.languagesSupported}
       </footer>
+
+      {/* Phone Call Overlay */}
+      {inCall && (
+        <CallOverlay
+          hotelName={branding.hotelName}
+          accentColor={branding.accentColor}
+          languageCode={selectedLanguage.code}
+          ttsLang={selectedLanguage.ttsLang}
+          onEnd={() => setInCall(false)}
+        />
+      )}
     </div>
   );
 }
