@@ -227,101 +227,106 @@ export default function VoiceAssistant() {
     if (isListening) {
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch (e) {}
+        recognitionRef.current = null;
       }
       setIsListening(false);
     } else {
-      // 1. Cancel any speaking
+      // 1. Cancel everything first
       synthRef.current?.cancel();
       setIsSpeaking(false);
       setErrorMessage(null);
 
-      // 2. Clear existing instance
-      if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch (e) {}
-      }
-
-      // 3. Create FRESH instance for this session (fixes 'network' state)
-      const SpeechRecognition =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      
-      if (!SpeechRecognition) {
-        setIsSupported(false);
-        setErrorMessage(ui.errorUnsupported);
-        return;
-      }
-
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = true; // Use interim to maintain active network connection
-      recognition.lang = selectedLanguage.code;
-
-      let hasEnded = false;
-
-      recognition.onstart = () => {
-        setIsListening(true);
-        setTranscript("");
-      };
-
-      recognition.onresult = (event: any) => {
-        let finalTranscript = "";
-        let interimTranscript = "";
-
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimTranscript += event.results[i][0].transcript;
-          }
+      const performStart = (retryCount = 0) => {
+        // 2. Clear existing instance
+        if (recognitionRef.current) {
+          try { recognitionRef.current.stop(); } catch (e) {}
+          recognitionRef.current = null;
         }
 
-        setTranscript(finalTranscript || interimTranscript);
+        // 3. Create FRESH instance
+        const SpeechRecognition =
+          (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
         
-        if (finalTranscript && !hasEnded) {
-          hasEnded = true;
-          handleUserAudioComplete(finalTranscript);
-          recognition.stop();
+        if (!SpeechRecognition) {
+          setIsSupported(false);
+          setErrorMessage(ui.errorUnsupported);
+          return;
         }
-      };
 
-      recognition.onerror = (event: any) => {
-        const errorType = event.error as string;
-        setIsListening(false);
-        setIsProcessing(false);
-        const currUI = getUI(selectedLanguage.code);
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.lang = selectedLanguage.code;
+        recognition.maxAlternatives = 1;
 
-        console.error("[Voice Assistant] Recognition Error:", errorType);
+        let hasEnded = false;
 
-        if (errorType === "network") {
-          // If network error, wait briefly and try to re-init just once
-          if (!hasEnded) {
-            console.log("[Voice Assistant] Network glitch detected. Clearing and retrying...");
+        recognition.onstart = () => {
+          setIsListening(true);
+          setTranscript("");
+          console.log("[Voice Assistant] Capture started...");
+        };
+
+        recognition.onresult = (event: any) => {
+          let finalTranscript = "";
+          let interimTranscript = "";
+
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
+            else interimTranscript += event.results[i][0].transcript;
           }
-          setErrorMessage(currUI.errorNetwork);
-        } else if (errorType === "not-allowed") {
-          setErrorMessage(currUI.errorMicDenied);
-        } else if (errorType !== "no-speech" && errorType !== "aborted") {
-          setErrorMessage(`${currUI.errorGeneric}: ${errorType}`);
-        }
-        
-        if (errorType !== "no-speech" && errorType !== "aborted") {
-          setTimeout(() => setErrorMessage(null), 8000);
-        }
-      };
 
-      recognition.onend = () => {
-        setIsListening(false);
-      };
+          setTranscript(finalTranscript || interimTranscript);
+          
+          if (finalTranscript && !hasEnded) {
+            hasEnded = true;
+            handleUserAudioComplete(finalTranscript);
+            try { recognition.stop(); } catch(e) {}
+          }
+        };
 
-      // Brief delay before starting to ensure previous instances are fully settled
-      setTimeout(() => {
+        recognition.onerror = (event: any) => {
+          const errorType = event.error as string;
+          setIsListening(false);
+          setIsProcessing(false);
+          const currUI = getUI(selectedLanguage.code);
+
+          console.error(`[Voice Assistant] Recognition Error (${errorType}):`);
+
+          if (errorType === "network") {
+            if (retryCount < 1) {
+              console.log("[Voice Assistant] Network glitch. Auto-retrying in 1.5s...");
+              setTimeout(() => performStart(retryCount + 1), 1500);
+            } else {
+              setErrorMessage(currUI.errorNetwork);
+            }
+          } else if (errorType === "not-allowed") {
+            setErrorMessage(currUI.errorMicDenied);
+          } else if (errorType !== "no-speech" && errorType !== "aborted") {
+            setErrorMessage(`${currUI.errorGeneric}: ${errorType}`);
+          }
+          
+          if (errorType !== "no-speech" && errorType !== "aborted" && errorType !== "network") {
+            setTimeout(() => setErrorMessage(null), 8000);
+          }
+        };
+
+        recognition.onend = () => {
+          setIsListening(false);
+          console.log("[Voice Assistant] Capture ended.");
+        };
+
         try {
           recognition.start();
           recognitionRef.current = recognition;
         } catch (e) {
-          console.error("[Voice Assistant] Failed to start recognition:", e);
+          console.error("[Voice Assistant] Fatal Start Error:", e);
           setIsListening(false);
         }
-      }, 100);
+      };
+
+      // Start initial attempt
+      performStart(0);
     }
   };
 
