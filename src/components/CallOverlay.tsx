@@ -127,9 +127,14 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
       if (e.error === "no-speech" && autoListenRef.current) {
         setTimeout(() => startListening(), 500);
       } else if (e.error === "network") {
-        setCallLog((prev) => [...prev, { role: "assistant", text: "Connection lost. Please check your internet." }]);
-        // Stop auto-listening on network failure to avoid loops
-        autoListenRef.current = false;
+        // Try to recover once if it's a network glitch
+        if (autoListenRef.current) {
+          console.log("[Call Session] Attempting network recovery...");
+          setTimeout(() => startListening(), 1500);
+        } else {
+          setCallLog((prev) => [...prev, { role: "assistant", text: "Connection lost. Please check your internet." }]);
+          autoListenRef.current = false;
+        }
       }
     };
 

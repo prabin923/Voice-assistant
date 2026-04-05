@@ -158,90 +158,17 @@ export default function VoiceAssistant() {
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, []);
 
-  // Initialize speech recognition
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const SpeechRecognition =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      
-      if (SpeechRecognition) {
-        // Clean up any existing instance
-        if (recognitionRef.current) {
-          try { recognitionRef.current.stop(); } catch (e) {}
-        }
-
-        const recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = false;
-        recognition.lang = selectedLanguage.code;
-
-        recognition.onresult = (event: any) => {
-          const currentTranscript = event.results[0][0].transcript;
-          setTranscript(currentTranscript);
-          setErrorMessage(null);
-          handleUserAudioComplete(currentTranscript);
-        };
-
-        recognition.onerror = (event: any) => {
-          const errorType = event.error as string;
-          setIsListening(false);
-          setIsProcessing(false);
-          const currentUI = getUI(selectedLanguage.code);
-
-          console.error("[Voice Assistant] Recognition Error:", errorType);
-
-          switch (errorType) {
-            case "network":
-              setErrorMessage(`${currentUI.errorNetwork} (Code: ${errorType})`);
-              break;
-            case "not-allowed":
-            case "service-not-allowed":
-              setErrorMessage(currentUI.errorMicDenied);
-              break;
-            case "no-speech":
-              // Gentle warning for no speech
-              break;
-            case "aborted":
-              console.log("[Voice Assistant] Recognition aborted.");
-              break;
-            default:
-              setErrorMessage(`${currentUI.errorGeneric}: ${errorType}`);
-          }
-          
-          if (errorType !== "no-speech" && errorType !== "aborted") {
-            setTimeout(() => setErrorMessage(null), 8000);
-          }
-        };
-
-        recognition.onend = () => {
-          setIsListening(false);
-        };
-
-        recognitionRef.current = recognition;
-      } else {
-        setIsSupported(false);
-        setErrorMessage(ui.errorUnsupported);
-      }
-
-      synthRef.current = window.speechSynthesis;
-    }
-
-    return () => {
-      if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch (e) {}
-      }
-    };
-  }, [selectedLanguage]);
-
-  // Ensure voices are loaded
   useEffect(() => {
     if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.onvoiceschanged = () => {
-        window.speechSynthesis.getVoices();
-      };
+      synthRef.current = window.speechSynthesis;
+      const loadVoices = () => { window.speechSynthesis.getVoices(); };
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+      loadVoices();
     }
   }, []);
 
@@ -298,22 +225,78 @@ export default function VoiceAssistant() {
 
   const toggleListening = () => {
     if (isListening) {
-      recognitionRef.current?.stop();
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (e) {}
+      }
       setIsListening(false);
     } else {
+      // 1. Cancel any speaking
       synthRef.current?.cancel();
       setIsSpeaking(false);
+      setErrorMessage(null);
 
+      // 2. Clear existing instance
       if (recognitionRef.current) {
-        recognitionRef.current.lang = selectedLanguage.code;
+        try { recognitionRef.current.stop(); } catch (e) {}
       }
 
-      try {
-        recognitionRef.current?.start();
+      // 3. Create FRESH instance for this session (fixes 'network' state)
+      const SpeechRecognition =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      
+      if (!SpeechRecognition) {
+        setIsSupported(false);
+        setErrorMessage(ui.errorUnsupported);
+        return;
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = selectedLanguage.code;
+
+      recognition.onstart = () => {
         setIsListening(true);
         setTranscript("");
+      };
+
+      recognition.onresult = (event: any) => {
+        const currentTranscript = event.results[0][0].transcript;
+        setTranscript(currentTranscript);
+        handleUserAudioComplete(currentTranscript);
+      };
+
+      recognition.onerror = (event: any) => {
+        const errorType = event.error as string;
+        setIsListening(false);
+        setIsProcessing(false);
+        const currUI = getUI(selectedLanguage.code);
+
+        console.error("[Voice Assistant] Recognition Error:", errorType);
+
+        if (errorType === "network") {
+          setErrorMessage(currUI.errorNetwork);
+        } else if (errorType === "not-allowed") {
+          setErrorMessage(currUI.errorMicDenied);
+        } else if (errorType !== "no-speech" && errorType !== "aborted") {
+          setErrorMessage(`${currUI.errorGeneric}: ${errorType}`);
+        }
+        
+        if (errorType !== "no-speech" && errorType !== "aborted") {
+          setTimeout(() => setErrorMessage(null), 8000);
+        }
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      try {
+        recognition.start();
+        recognitionRef.current = recognition;
       } catch (e) {
-        console.warn("[Voice Assistant] Error starting recognition", e);
+        console.error("[Voice Assistant] Failed to start recognition:", e);
+        setIsListening(false);
       }
     }
   };
