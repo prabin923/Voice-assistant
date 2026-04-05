@@ -237,13 +237,11 @@ export default function VoiceAssistant() {
       setErrorMessage(null);
 
       const performStart = (retryCount = 0) => {
-        // 2. Clear existing instance
         if (recognitionRef.current) {
           try { recognitionRef.current.stop(); } catch (e) {}
           recognitionRef.current = null;
         }
 
-        // 3. Create FRESH instance
         const SpeechRecognition =
           (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
         
@@ -254,9 +252,13 @@ export default function VoiceAssistant() {
         }
 
         const recognition = new SpeechRecognition();
-        recognition.continuous = false;
+        
+        // Defensive Config: Use continuous mode but manual stop
+        recognition.continuous = true; 
         recognition.interimResults = true;
-        recognition.lang = selectedLanguage.code;
+        
+        // Fallback locale if retry happens (common for niche lang network errors)
+        recognition.lang = retryCount > 0 ? "en-US" : selectedLanguage.code;
         recognition.maxAlternatives = 1;
 
         let hasEnded = false;
@@ -264,7 +266,7 @@ export default function VoiceAssistant() {
         recognition.onstart = () => {
           setIsListening(true);
           setTranscript("");
-          console.log("[Voice Assistant] Capture started...");
+          console.log(`[Voice Assistant] Capture started with locale: ${recognition.lang}`);
         };
 
         recognition.onresult = (event: any) => {
@@ -280,52 +282,54 @@ export default function VoiceAssistant() {
           
           if (finalTranscript && !hasEnded) {
             hasEnded = true;
-            handleUserAudioComplete(finalTranscript);
+            // Stop early manually since we are in continuous mode
             try { recognition.stop(); } catch(e) {}
+            handleUserAudioComplete(finalTranscript);
           }
         };
 
         recognition.onerror = (event: any) => {
           const errorType = event.error as string;
-          setIsListening(false);
-          setIsProcessing(false);
+          // Only stop state if we aren't retrying
+          if (errorType !== "network" || retryCount >= 1) {
+            setIsListening(false);
+            setIsProcessing(false);
+          }
+          
           const currUI = getUI(selectedLanguage.code);
-
-          console.error(`[Voice Assistant] Recognition Error (${errorType}):`);
+          console.error(`[Voice Assistant] Recognition Error (${errorType}) | Retry: ${retryCount}`);
 
           if (errorType === "network") {
             if (retryCount < 1) {
-              console.log("[Voice Assistant] Network glitch. Auto-retrying in 1.5s...");
-              setTimeout(() => performStart(retryCount + 1), 1500);
+              console.log("[Voice Assistant] Attempting connection recovery with fallback locale...");
+              setTimeout(() => performStart(retryCount + 1), 500);
             } else {
               setErrorMessage(currUI.errorNetwork);
+              setIsListening(false);
             }
           } else if (errorType === "not-allowed") {
             setErrorMessage(currUI.errorMicDenied);
           } else if (errorType !== "no-speech" && errorType !== "aborted") {
             setErrorMessage(`${currUI.errorGeneric}: ${errorType}`);
           }
-          
-          if (errorType !== "no-speech" && errorType !== "aborted" && errorType !== "network") {
-            setTimeout(() => setErrorMessage(null), 8000);
-          }
         };
 
         recognition.onend = () => {
-          setIsListening(false);
-          console.log("[Voice Assistant] Capture ended.");
+          if (!hasEnded) setIsListening(false);
+          console.log("[Voice Assistant] Capture session closed.");
         };
 
-        try {
-          recognition.start();
-          recognitionRef.current = recognition;
-        } catch (e) {
-          console.error("[Voice Assistant] Fatal Start Error:", e);
-          setIsListening(false);
-        }
+        // Added extended delay per hardware requirements
+        setTimeout(() => {
+          try {
+            recognition.start();
+            recognitionRef.current = recognition;
+          } catch (e) {
+            setIsListening(false);
+          }
+        }, 300);
       };
 
-      // Start initial attempt
       performStart(0);
     }
   };
