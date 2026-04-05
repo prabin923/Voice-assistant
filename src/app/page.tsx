@@ -236,7 +236,19 @@ export default function VoiceAssistant() {
       setIsSpeaking(false);
       setErrorMessage(null);
 
-      const performStart = (retryCount = 0) => {
+      const performStart = async (retryCount = 0) => {
+        // 1. Force Microphone "Warming" (fixes macOS permission/network race)
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          // If we got here, mic is definitely open. Close temporarily if not needed or reuse.
+          stream.getTracks().forEach(t => t.stop());
+        } catch (e) {
+          console.error("[Voice Assistant] No Microphone Access:", e);
+          setErrorMessage(getUI(selectedLanguage.code).errorMicDenied);
+          setIsListening(false);
+          return;
+        }
+
         if (recognitionRef.current) {
           try { recognitionRef.current.stop(); } catch (e) {}
           recognitionRef.current = null;
@@ -253,11 +265,9 @@ export default function VoiceAssistant() {
 
         const recognition = new SpeechRecognition();
         
-        // Defensive Config: Use continuous mode but manual stop
+        // Use standard settings for maximum compatibility
         recognition.continuous = true; 
         recognition.interimResults = true;
-        
-        // Fallback locale if retry happens (common for niche lang network errors)
         recognition.lang = retryCount > 0 ? "en-US" : selectedLanguage.code;
         recognition.maxAlternatives = 1;
 
@@ -266,7 +276,7 @@ export default function VoiceAssistant() {
         recognition.onstart = () => {
           setIsListening(true);
           setTranscript("");
-          console.log(`[Voice Assistant] Capture started with locale: ${recognition.lang}`);
+          console.log(`[Voice Assistant] Capture session started (${recognition.lang})`);
         };
 
         recognition.onresult = (event: any) => {
@@ -282,7 +292,6 @@ export default function VoiceAssistant() {
           
           if (finalTranscript && !hasEnded) {
             hasEnded = true;
-            // Stop early manually since we are in continuous mode
             try { recognition.stop(); } catch(e) {}
             handleUserAudioComplete(finalTranscript);
           }
@@ -290,27 +299,23 @@ export default function VoiceAssistant() {
 
         recognition.onerror = (event: any) => {
           const errorType = event.error as string;
-          // Only stop state if we aren't retrying
-          if (errorType !== "network" || retryCount >= 1) {
-            setIsListening(false);
-            setIsProcessing(false);
-          }
-          
-          const currUI = getUI(selectedLanguage.code);
           console.error(`[Voice Assistant] Recognition Error (${errorType}) | Retry: ${retryCount}`);
 
           if (errorType === "network") {
-            if (retryCount < 1) {
-              console.log("[Voice Assistant] Attempting connection recovery with fallback locale...");
+            if (retryCount < 2) { // 2 Retries now
+              console.log("[Voice Assistant] Attempting auto-recovery...");
               setTimeout(() => performStart(retryCount + 1), 500);
             } else {
-              setErrorMessage(currUI.errorNetwork);
+              setErrorMessage(getUI(selectedLanguage.code).errorNetwork);
               setIsListening(false);
+              setIsProcessing(false);
             }
           } else if (errorType === "not-allowed") {
-            setErrorMessage(currUI.errorMicDenied);
+            setErrorMessage(getUI(selectedLanguage.code).errorMicDenied);
+            setIsListening(false);
           } else if (errorType !== "no-speech" && errorType !== "aborted") {
-            setErrorMessage(`${currUI.errorGeneric}: ${errorType}`);
+            setErrorMessage(`${getUI(selectedLanguage.code).errorGeneric}: ${errorType}`);
+            setIsListening(false);
           }
         };
 
@@ -319,15 +324,16 @@ export default function VoiceAssistant() {
           console.log("[Voice Assistant] Capture session closed.");
         };
 
-        // Added extended delay per hardware requirements
+        // Extra delay per Chrome's security model
         setTimeout(() => {
           try {
             recognition.start();
             recognitionRef.current = recognition;
           } catch (e) {
+            console.error("[Voice Assistant] Start failure:", e);
             setIsListening(false);
           }
-        }, 300);
+        }, 150);
       };
 
       performStart(0);
