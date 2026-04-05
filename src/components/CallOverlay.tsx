@@ -25,10 +25,13 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
   const [callLog, setCallLog] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
 
   const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const autoListenRef = useRef(true);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const [useServerMode, setUseServerMode] = useState(false);
 
   // Scroll call log
   useEffect(() => {
@@ -96,10 +99,63 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
   }, [languageCode, speak]);
 
   // Init speech recognition
+  // Speaker/Mute logic
+  const stopServerListening = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      setIsListening(false);
+    }
+  }, []);
+
+  const endCall = useCallback(() => {
+    autoListenRef.current = false;
+    if (recognitionRef.current) try { recognitionRef.current.stop(); } catch {}
+    stopServerListening();
+    synthRef.current?.cancel();
+    setCallState("ended");
+    setIsListening(false);
+    setIsSpeaking(false);
+    setTimeout(() => onEnd(), 1200);
+  }, [onEnd, stopServerListening]);
+
+  // Server-side recording for Calls
+  const startServerListening = useCallback(async () => {
+    if (isMuted || !autoListenRef.current) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = recorder;
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      recorder.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const fd = new FormData();
+        fd.append('audio', blob);
+        fd.append('language', languageCode);
+        try {
+          const res = await fetch('/api/stt', { method: 'POST', body: fd });
+          const data = await res.json();
+          if (data.text) sendMessage(data.text);
+          else if (autoListenRef.current) startServerListening();
+        } catch {
+          if (autoListenRef.current) setTimeout(startServerListening, 1000);
+        } finally { stream.getTracks().forEach(t => t.stop()); }
+      };
+      recorder.start();
+      setIsListening(true);
+      setLiveTranscript("Listening (AI Mode)...");
+    } catch { setIsListening(false); }
+  }, [isMuted, languageCode, sendMessage]);
+
   const startListening = useCallback(() => {
     if (isMuted || !autoListenRef.current) return;
+    if (useServerMode) {
+      startServerListening();
+      return;
+    }
+
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
+    if (!SR) { setUseServerMode(true); startServerListening(); return; }
 
     const rec = new SR();
     rec.continuous = false;
@@ -107,13 +163,10 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
     rec.lang = languageCode;
 
     rec.onresult = (e: any) => {
-      let interim = "";
       let final = "";
       for (let i = 0; i < e.results.length; i++) {
         if (e.results[i].isFinal) final += e.results[i][0].transcript;
-        else interim += e.results[i][0].transcript;
       }
-      setLiveTranscript(interim || final);
       if (final) {
         setLiveTranscript("");
         sendMessage(final);
@@ -122,25 +175,15 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
 
     rec.onerror = (e: any) => {
       setIsListening(false);
-      console.error("[Call Session] Recognition Error:", e.error);
-      
-      if (e.error === "no-speech" && autoListenRef.current) {
-        setTimeout(() => startListening(), 500);
-      } else if (e.error === "network") {
-        // Try to recover once if it's a network glitch
-        if (autoListenRef.current) {
-          console.log("[Call Session] Attempting network recovery...");
-          setTimeout(() => startListening(), 1500);
-        } else {
-          setCallLog((prev) => [...prev, { role: "assistant", text: "Connection lost. Please check your internet." }]);
-          autoListenRef.current = false;
-        }
+      if (e.error === "network") {
+        setUseServerMode(true);
+        setTimeout(startServerListening, 100);
+      } else if (e.error === "no-speech" && autoListenRef.current) {
+        setTimeout(startListening, 500);
       }
     };
 
-    rec.onend = () => {
-      setIsListening(false);
-    };
+    rec.onend = () => setIsListening(false);
 
     try {
       rec.start();
@@ -162,17 +205,6 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
       return () => clearTimeout(t);
     }
   }, [callState, speak]);
-
-  // End call
-  const endCall = () => {
-    autoListenRef.current = false;
-    recognitionRef.current?.stop();
-    synthRef.current?.cancel();
-    setCallState("ended");
-    setIsListening(false);
-    setIsSpeaking(false);
-    setTimeout(() => onEnd(), 1200);
-  };
 
   // Toggle mute
   const toggleMute = () => {

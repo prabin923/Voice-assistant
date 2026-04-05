@@ -126,9 +126,12 @@ export default function VoiceAssistant() {
   const ui = useMemo(() => getUI(selectedLanguage.code), [selectedLanguage]);
 
   const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const langMenuRef = useRef<HTMLDivElement>(null);
+  const [useServerSTT, setUseServerSTT] = useState(false);
 
   // Load branding & language from config API
   useEffect(() => {
@@ -223,116 +226,144 @@ export default function VoiceAssistant() {
     synthRef.current.speak(utterance);
   }, [selectedLanguage]);
 
+  // Server-side STT logic using MediaRecorder
+  const startServerRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = recorder;
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        setIsProcessing(true);
+        
+        const formData = new FormData();
+        formData.append('audio', audioBlob);
+        formData.append('language', selectedLanguage.code);
+
+        try {
+          const res = await fetch('/api/stt', { method: 'POST', body: formData });
+          const data = await res.json();
+          if (data.text) {
+            handleUserAudioComplete(data.text);
+          } else {
+            console.error("STT Failed:", data.error);
+            setErrorMessage(ui.errorNoSpeech);
+          }
+        } catch (err) {
+          setErrorMessage(ui.errorConnection);
+        } finally {
+          setIsProcessing(false);
+          // Stop all tracks to release mic
+          stream.getTracks().forEach(t => t.stop());
+        }
+      };
+
+      recorder.start();
+      setIsListening(true);
+      setTranscript("");
+    } catch (err) {
+      setErrorMessage(ui.errorMicDenied);
+    }
+  };
+
+  const stopServerRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      setIsListening(false);
+    }
+  };
+
   const toggleListening = () => {
     if (isListening) {
-      if (recognitionRef.current) {
+      if (useServerSTT) {
+        stopServerRecording();
+      } else if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch (e) {}
         recognitionRef.current = null;
+        setIsListening(false);
       }
-      setIsListening(false);
     } else {
-      // 1. Cancel everything first
       synthRef.current?.cancel();
       setIsSpeaking(false);
       setErrorMessage(null);
 
+      // If we already know the browser is broken, use server STT directly
+      if (useServerSTT) {
+        startServerRecording();
+        return;
+      }
+
       const performStart = async (retryCount = 0) => {
-        // 1. Force Microphone "Warming" (fixes macOS permission/network race)
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          // If we got here, mic is definitely open. Close temporarily if not needed or reuse.
           stream.getTracks().forEach(t => t.stop());
         } catch (e) {
-          console.error("[Voice Assistant] No Microphone Access:", e);
-          setErrorMessage(getUI(selectedLanguage.code).errorMicDenied);
+          setErrorMessage(ui.errorMicDenied);
           setIsListening(false);
           return;
         }
 
-        if (recognitionRef.current) {
-          try { recognitionRef.current.stop(); } catch (e) {}
-          recognitionRef.current = null;
-        }
-
-        const SpeechRecognition =
-          (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
         if (!SpeechRecognition) {
-          setIsSupported(false);
-          setErrorMessage(ui.errorUnsupported);
+          setUseServerSTT(true);
+          startServerRecording();
           return;
         }
 
         const recognition = new SpeechRecognition();
-        
-        // Use standard settings for maximum compatibility
-        recognition.continuous = true; 
+        recognition.continuous = true;
         recognition.interimResults = true;
         recognition.lang = retryCount > 0 ? "en-US" : selectedLanguage.code;
-        recognition.maxAlternatives = 1;
 
         let hasEnded = false;
 
         recognition.onstart = () => {
           setIsListening(true);
           setTranscript("");
-          console.log(`[Voice Assistant] Capture session started (${recognition.lang})`);
         };
 
         recognition.onresult = (event: any) => {
-          let finalTranscript = "";
-          let interimTranscript = "";
-
+          let final = "";
+          let interim = "";
           for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
-            else interimTranscript += event.results[i][0].transcript;
+            if (event.results[i].isFinal) final += event.results[i][0].transcript;
+            else interim += event.results[i][0].transcript;
           }
-
-          setTranscript(finalTranscript || interimTranscript);
-          
-          if (finalTranscript && !hasEnded) {
+          setTranscript(final || interim);
+          if (final && !hasEnded) {
             hasEnded = true;
             try { recognition.stop(); } catch(e) {}
-            handleUserAudioComplete(finalTranscript);
+            handleUserAudioComplete(final);
           }
         };
 
         recognition.onerror = (event: any) => {
-          const errorType = event.error as string;
-          console.error(`[Voice Assistant] Recognition Error (${errorType}) | Retry: ${retryCount}`);
-
-          if (errorType === "network") {
-            if (retryCount < 2) { // 2 Retries now
-              console.log("[Voice Assistant] Attempting auto-recovery...");
-              setTimeout(() => performStart(retryCount + 1), 500);
-            } else {
-              setErrorMessage(getUI(selectedLanguage.code).errorNetwork);
-              setIsListening(false);
-              setIsProcessing(false);
-            }
-          } else if (errorType === "not-allowed") {
-            setErrorMessage(getUI(selectedLanguage.code).errorMicDenied);
+          const err = event.error;
+          console.error("Native STT Error:", err);
+          
+          if (err === "network") {
+            // Auto-switch to Server STT on network error
+            console.log("Switching to Server-Side STT...");
+            setUseServerSTT(true);
             setIsListening(false);
-          } else if (errorType !== "no-speech" && errorType !== "aborted") {
-            setErrorMessage(`${getUI(selectedLanguage.code).errorGeneric}: ${errorType}`);
+            setTimeout(() => startServerRecording(), 100);
+          } else {
+            setErrorMessage(`${ui.errorGeneric}: ${err}`);
             setIsListening(false);
           }
         };
 
-        recognition.onend = () => {
-          if (!hasEnded) setIsListening(false);
-          console.log("[Voice Assistant] Capture session closed.");
-        };
-
-        // Extra delay per Chrome's security model
         setTimeout(() => {
           try {
             recognition.start();
             recognitionRef.current = recognition;
-          } catch (e) {
-            console.error("[Voice Assistant] Start failure:", e);
-            setIsListening(false);
-          }
+          } catch (e) { setIsListening(false); }
         }, 150);
       };
 
