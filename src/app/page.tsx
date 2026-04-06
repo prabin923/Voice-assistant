@@ -259,14 +259,14 @@ export default function VoiceAssistant() {
           if (data.text) {
             handleUserAudioComplete(data.text);
           } else {
-            console.error("STT Failed:", data.error);
-            setErrorMessage(ui.errorNoSpeech);
+            setErrorMessage(data.details || data.error || ui.errorNoSpeech);
+            setIsListening(false);
           }
         } catch (err) {
           setErrorMessage(ui.errorConnection);
+          setIsListening(false);
         } finally {
           setIsProcessing(false);
-          // Stop all tracks to release mic
           stream.getTracks().forEach(t => t.stop());
         }
       };

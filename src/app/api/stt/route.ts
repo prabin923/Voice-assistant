@@ -11,12 +11,11 @@ export async function POST(req: Request) {
     const audioBlob = formData.get('audio') as Blob;
     const language = formData.get('language') as string;
 
-    if (!audioBlob) {
-      return NextResponse.json({ error: 'No audio provided.' }, { status: 400 });
-    }
-
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: 'OpenAI API Key not configured.' }, { status: 501 });
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your_openai_api_key_here') {
+      return NextResponse.json({ 
+        error: 'OpenAI API Key not configured.',
+        details: 'Please add your OPENAI_API_KEY to the .env.local file. STT (Whisper) cannot run without it.'
+      }, { status: 501 });
     }
 
     // Convert Blob to File object for OpenAI
