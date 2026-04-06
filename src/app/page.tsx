@@ -352,15 +352,21 @@ export default function VoiceAssistant() {
 
         recognition.onerror = (event: any) => {
           const err = event.error;
-          console.error("Native STT Error:", err);
           
           if (err === "network") {
-            // Auto-switch to Server STT on network error
-            console.log("Switching to Server-Side STT...");
+            // Silently switch to Server STT on network error to avoid dev overlays
+            console.warn("[Voice Assistant] Native STT Network Error. Switching to robust AI Mode...");
             setUseServerSTT(true);
-            setIsListening(false);
-            setTimeout(() => startServerRecording(), 100);
-          } else {
+            // Seamless handoff: stop native and start upload mode immediately
+            setTimeout(() => {
+              if (recognitionRef.current) {
+                try { recognitionRef.current.stop(); } catch(e) {}
+                recognitionRef.current = null;
+              }
+              startServerRecording();
+            }, 10);
+          } else if (err !== "aborted" && err !== "no-speech") {
+            console.error("Native STT Error:", err);
             setErrorMessage(`${ui.errorGeneric}: ${err}`);
             setIsListening(false);
           }
