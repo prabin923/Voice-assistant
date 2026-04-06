@@ -58,6 +58,11 @@ export interface BrandingConfig {
 export interface HotelConfig {
   branding: BrandingConfig;
   contact: ContactInfo;
+  tingting?: {
+    apiKey: string;
+    enabled: boolean;
+    useRiriVoice: boolean;
+  };
   policies: HotelPolicy;
   rooms: RoomType[];
   dining: DiningVenue[];
@@ -79,6 +84,11 @@ export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
     accentColor: "#f43f5e",    // rose-500
     welcomeMessage: "Welcome! How may I assist you with your stay today?",
     farewellMessage: "Thank you for choosing our hotel. Have a wonderful day!",
+  },
+  tingting: {
+    apiKey: "",      // Add your TingTing API Key here
+    enabled: false,
+    useRiriVoice: true,
   },
   contact: {
     phone: "+1-555-0000",

@@ -188,6 +188,13 @@ export default function VoiceAssistant() {
       });
 
       const data = await response.json();
+      
+      if (data.error) {
+        setErrorMessage(data.details || data.error);
+        setIsProcessing(false);
+        return;
+      }
+      
       const reply = data.reply;
 
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
@@ -392,6 +399,29 @@ export default function VoiceAssistant() {
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans selection:bg-rose-500/30" dir={isRTL ? "rtl" : "ltr"}>
+      {/* Diagnostics / Error Bar */}
+      {errorMessage && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg px-4 animate-in slide-in-from-top-4">
+          <div className="bg-red-500/10 border border-red-500/20 backdrop-blur-xl rounded-2xl p-4 flex items-start gap-4 text-red-200 text-sm shadow-xl shadow-red-500/10">
+            <div className="bg-red-500/20 p-2 rounded-xl">
+              <Loader2 className="w-5 h-5 text-red-400" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-red-400">Assistant not responding?</p>
+              <p className="opacity-80 mt-1 leading-relaxed">
+                {errorMessage}
+              </p>
+              <button 
+                onClick={() => setErrorMessage(null)}
+                className="mt-3 text-xs font-medium bg-red-500/20 hover:bg-red-500/30 px-3 py-1.5 rounded-lg transition-colors border border-red-500/20"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Background */}
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-neutral-900 via-neutral-950 to-neutral-950 -z-10" />
 
@@ -407,9 +437,14 @@ export default function VoiceAssistant() {
           >
             <Phone className="w-5 h-5 text-white" />
           </div>
-          <div>
-            <h1 className="text-lg sm:text-xl font-semibold tracking-tight">{branding.hotelName}</h1>
-            <p className="text-xs text-neutral-400">{branding.tagline}</p>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-full py-1 px-3 flex items-center gap-2">
+            <span className={`w-1.5 h-1.5 rounded-full ${useServerSTT ? "bg-cyan-400 shadow-[0_0_8px_cyan]" : "bg-green-400 opacity-40"}`} />
+            <span className="text-[10px] font-medium tracking-tighter text-neutral-400 uppercase">
+              {useServerSTT ? "AI Mode" : "Native Mode"}
+            </span>
+            {branding.hotelName.includes("Ting") && (
+              <span className="text-[10px] font-bold text-cyan-400 ml-1 border-l border-white/5 pl-2">TINGTING</span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3">

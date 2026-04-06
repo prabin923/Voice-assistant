@@ -14,8 +14,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'A valid message string is required.' }, { status: 400 });
     }
 
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: 'OpenAI API Key not configured. Please check your .env.local file.' }, { status: 501 });
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your_openai_api_key_here') {
+      return NextResponse.json({ 
+        error: 'OpenAI API Key not configured.',
+        details: 'Please add your OPENAI_API_KEY to the .env.local file. If you haven\'t yet, rename the template I created earlier.'
+      }, { status: 501 });
     }
 
     const config = getHotelConfig();
