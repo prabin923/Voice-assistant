@@ -58,10 +58,10 @@ export interface BrandingConfig {
 export interface HotelConfig {
   branding: BrandingConfig;
   contact: ContactInfo;
-  tingting?: {
-    apiKey: string;
+  telephony?: {
+    webhookUrl: string;
     enabled: boolean;
-    useRiriVoice: boolean;
+    provider: 'generic' | 'twilio';
   };
   policies: HotelPolicy;
   rooms: RoomType[];
@@ -85,10 +85,10 @@ export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
     welcomeMessage: "Welcome! How may I assist you with your stay today?",
     farewellMessage: "Thank you for choosing our hotel. Have a wonderful day!",
   },
-  tingting: {
-    apiKey: "",      // Add your TingTing API Key here
-    enabled: false,
-    useRiriVoice: true,
+  telephony: {
+    webhookUrl: "/api/telephony/webhook",
+    enabled: true,
+    provider: 'generic',
   },
   contact: {
     phone: "+1-555-0000",
