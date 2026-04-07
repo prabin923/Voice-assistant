@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
-});
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "");
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 export async function POST(req: Request) {
   try {
@@ -11,29 +10,40 @@ export async function POST(req: Request) {
     const audioBlob = formData.get('audio') as Blob;
     const language = formData.get('language') as string;
 
-    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your_openai_api_key_here') {
+    if (!audioBlob) {
+      return NextResponse.json({ error: 'No audio provided.' }, { status: 400 });
+    }
+
+    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY === 'your_gemini_api_key_here') {
       return NextResponse.json({ 
-        error: 'OpenAI API Key not configured.',
-        details: 'Please add your OPENAI_API_KEY to the .env.local file. STT (Whisper) cannot run without it.'
+        error: 'Gemini API Key not configured.',
+        details: 'Please add your GOOGLE_GENERATIVE_AI_API_KEY to the .env.local file to activate STT.'
       }, { status: 501 });
     }
 
-    // Convert Blob to File object for OpenAI
-    const file = new File([audioBlob], 'audio.webm', { type: 'audio/webm' });
+    // Convert Blob to Base64 for Gemini
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const base64Audio = Buffer.from(arrayBuffer).toString('base64');
 
-    // Send to Whisper
-    const transcription = await openai.audio.transcriptions.create({
-      file,
-      model: "whisper-1",
-      language: language.split('-')[0], // Whisper prefers 'en' over 'en-US'
-    });
+    const prompt = `Transcribe this audio strictly. Language is ${language}. Only return the transcribed text, nothing else.`;
 
-    return NextResponse.json({ text: transcription.text });
+    const result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          mimeType: audioBlob.type || 'audio/webm',
+          data: base64Audio
+        }
+      }
+    ]);
+
+    const transcription = result.response.text().trim();
+    return NextResponse.json({ text: transcription });
 
   } catch (error: any) {
-    console.error('STT API Error:', error);
+    console.error('Gemini STT API Error:', error);
     return NextResponse.json(
-      { error: 'Failed to transcribe audio.', details: error.message },
+      { error: 'Failed to transcribe audio with Gemini.', details: error.message },
       { status: 500 }
     );
   }
