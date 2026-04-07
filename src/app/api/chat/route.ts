@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getHotelConfig } from '@/lib/hotelConfig';
-
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+import { getAssistantResponse } from '@/lib/responseEngine';
 
 export async function POST(req: Request) {
   try {
@@ -23,29 +20,7 @@ export async function POST(req: Request) {
     const config = getHotelConfig();
     const langCode = language || config.language || 'en-US';
 
-    const systemPrompt = `
-      You are the AI Receptionist for ${config.branding.hotelName}. 
-      Your Persona: ${config.receptionistPersona}.
-      Hotel Policies: ${config.policies}.
-      Amenities: ${config.amenities.map(a => a.name).join(', ')}.
-      Language: Respond strictly in the language requested (${langCode}).
-      Tone: Professional, helpful, and hospitable.
-    `;
-
-    const chat = model.startChat({
-      history: [
-        { role: "user", parts: [{ text: systemPrompt }] },
-        { role: "model", parts: [{ text: "Acknowledged. I am the receptionist for " + config.branding.hotelName + ". How can I help you today?" }] },
-      ],
-      generationConfig: {
-        maxOutputTokens: 500,
-        temperature: 0.7,
-      },
-    });
-
-    const result = await chat.sendMessage(message);
-    const response = await result.response;
-    const reply = response.text() || "I apologize, but I am unable to process that right now.";
+    const reply = await getAssistantResponse(message, langCode);
 
     return NextResponse.json({
       reply,
