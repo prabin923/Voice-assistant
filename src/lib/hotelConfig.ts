@@ -79,11 +79,11 @@ export interface HotelConfig {
 // ============================================================
 export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
   branding: {
-    hotelName: "Your Hotel",
-    tagline: "Virtual Receptionist AI",
+    hotelName: "Willow Hotel",
+    tagline: "Your 24/7 Virtual AI Receptionist",
     accentColor: "#f43f5e",    // rose-500
-    welcomeMessage: "Welcome! How may I assist you with your stay today?",
-    farewellMessage: "Thank you for choosing our hotel. Have a wonderful day!",
+    welcomeMessage: "Welcome to Willow Hotel! How can I assist you with your stay today?",
+    farewellMessage: "Thank you for choosing Willow Hotel. Have a wonderful day!",
   },
   telephony: {
     webhookUrl: "/api/telephony/webhook",
@@ -91,12 +91,12 @@ export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
     provider: 'generic',
   },
   contact: {
-    phone: "+1-555-0000",
-    email: "frontdesk@yourhotel.com",
-    website: "https://yourhotel.com",
-    address: "123 Hotel Street",
-    city: "Your City",
-    country: "Your Country",
+    phone: "+977-9811002233", // Customizable phone number
+    email: "frontdesk@willowhotel.com",
+    website: "https://willowhotel.com.np",
+    address: "Lakeside Street, Ward 6",
+    city: "Pokhara",
+    country: "Nepal",
   },
   policies: {
     checkInTime: "3:00 PM",
