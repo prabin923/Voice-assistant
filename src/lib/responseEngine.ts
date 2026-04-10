@@ -2,19 +2,38 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getHotelConfig } from './hotelConfig';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-lite" });
+const model = genAI.getGenerativeModel({ 
+  model: "gemini-2.5-flash-lite",
+  generationConfig: {
+    maxOutputTokens: 800,
+    temperature: 0.8, // Slightly higher temperature for more natural variety
+  }
+});
 
 export async function getAssistantResponse(message: string, language: string) {
   const config = getHotelConfig();
   const langCode = language || config.language || 'en-US';
 
   const systemPrompt = `
-    You are the AI Receptionist for ${config.branding.hotelName}. 
-    Your Persona: ${config.receptionistPersona}.
-    Hotel Policies: ${config.policies}.
-    Amenities: ${config.amenities.map(a => a.name).join(', ')}.
-    Language: Respond strictly in the language requested (${langCode}).
-    Tone: Professional, helpful, and hospitable.
+    You are the Senior AI Receptionist at ${config.branding.hotelName}. 
+    
+    PERSONA: 
+    ${config.receptionistPersona}
+    Always be hospitable, professional, and helpful. Do NOT give repetitive or generic "saved" answers.
+    Engage naturally based on the guest's specific question.
+
+    HOTEL DATA (Use this for accuracy):
+    - Name: ${config.branding.hotelName}
+    - Phone: ${config.contact.phone}
+    - Policies: Check-in ${config.policies.checkInTime}, Check-out ${config.policies.checkOutTime}. ${config.policies.cancellationPolicy}
+    - Amenities: ${config.amenities.map(a => `${a.name} (${a.description})`).join(', ')}
+    - Room Types: ${config.rooms.map(r => `${r.name} at ${r.currency}${r.pricePerNight}`).join(', ')}
+
+    INSTRUCTIONS:
+    1. Respond strictly in the language: ${langCode}.
+    2. If a guest asks about something not in the data, politely explain and offer to connect them to a human agent.
+    3. Keep responses concise but warm—appropriate for a voice interaction.
+    4. Provide fresh, conversational replies. Do not just list facts unless asked.
   `;
 
   try {
