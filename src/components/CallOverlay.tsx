@@ -32,6 +32,9 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
   const autoListenRef = useRef(true);
   const logEndRef = useRef<HTMLDivElement>(null);
   const [useServerMode, setUseServerMode] = useState(false);
+  const useServerModeRef = useRef(false);
+  const startListeningRef = useRef<() => void>(() => {});
+  useServerModeRef.current = useServerMode;
 
   // Scroll call log
   useEffect(() => {
@@ -56,7 +59,9 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
   const speak = useCallback((text: string) => {
     if (!synthRef.current || isSpeakerOff) {
       // If speaker off, skip TTS but still auto-listen after
-      setTimeout(() => { if (autoListenRef.current) startListening(); }, 500);
+      setTimeout(() => {
+        if (autoListenRef.current) startListeningRef.current();
+      }, 500);
       return;
     }
     synthRef.current.cancel();
@@ -70,7 +75,7 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
     utt.onend = () => {
       setIsSpeaking(false);
       // Auto-listen after speaking (continuous call)
-      if (autoListenRef.current) setTimeout(() => startListening(), 400);
+      if (autoListenRef.current) setTimeout(() => startListeningRef.current(), 400);
     };
     utt.onerror = () => setIsSpeaking(false);
     synthRef.current.speak(utt);
@@ -87,8 +92,14 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
         body: JSON.stringify({ message: text, language: languageCode }),
       });
       const data = await res.json();
-      setCallLog((prev) => [...prev, { role: "assistant", text: data.reply }]);
-      speak(data.reply);
+      const reply =
+        typeof data.reply === "string" && data.reply.trim()
+          ? data.reply.trim()
+          : typeof data.error === "string" && data.error.trim()
+            ? data.error.trim()
+            : "I'm sorry, I'm having trouble right now.";
+      setCallLog((prev) => [...prev, { role: "assistant", text: reply }]);
+      speak(reply);
     } catch {
       const err = "I'm sorry, I'm having trouble right now.";
       setCallLog((prev) => [...prev, { role: "assistant", text: err }]);
@@ -118,30 +129,44 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
     setTimeout(() => onEnd(), 1200);
   }, [onEnd, stopServerListening]);
 
+  const pickCallRecorderMimeType = (): string | undefined => {
+    if (typeof MediaRecorder === "undefined") return undefined;
+    const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+    for (const t of candidates) {
+      if (MediaRecorder.isTypeSupported(t)) return t;
+    }
+    return undefined;
+  };
+
   // Server-side recording for Calls
   const startServerListening = useCallback(async () => {
     if (isMuted || !autoListenRef.current) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const mimeType = pickCallRecorderMimeType();
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
+      const blobType = recorder.mimeType || mimeType || "audio/webm";
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const blob = new Blob(chunksRef.current, { type: blobType });
         const fd = new FormData();
         fd.append('audio', blob);
         fd.append('language', languageCode);
         try {
           const res = await fetch('/api/stt', { method: 'POST', body: fd });
           const data = await res.json();
-          if (data.text) sendMessage(data.text);
-          else if (autoListenRef.current) startServerListening();
+          const transcribed = typeof data.text === "string" ? data.text.trim() : "";
+          if (transcribed) sendMessage(transcribed);
+          else if (autoListenRef.current) setTimeout(() => startListeningRef.current(), 400);
         } catch {
-          if (autoListenRef.current) setTimeout(startServerListening, 1000);
+          if (autoListenRef.current) setTimeout(() => startListeningRef.current(), 1000);
         } finally { stream.getTracks().forEach(t => t.stop()); }
       };
-      recorder.start();
+      recorder.start(250);
       setIsListening(true);
       setLiveTranscript("Listening (AI Mode)...");
     } catch { setIsListening(false); }
@@ -149,13 +174,18 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
 
   const startListening = useCallback(() => {
     if (isMuted || !autoListenRef.current) return;
-    if (useServerMode) {
+    if (useServerModeRef.current) {
       startServerListening();
       return;
     }
 
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) { setUseServerMode(true); startServerListening(); return; }
+    if (!SR) {
+      useServerModeRef.current = true;
+      setUseServerMode(true);
+      startServerListening();
+      return;
+    }
 
     const rec = new SR();
     rec.continuous = false;
@@ -176,10 +206,11 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
     rec.onerror = (e: any) => {
       setIsListening(false);
       if (e.error === "network") {
+        useServerModeRef.current = true;
         setUseServerMode(true);
-        setTimeout(startServerListening, 100);
+        setTimeout(() => startServerListening(), 100);
       } else if (e.error === "no-speech" && autoListenRef.current) {
-        setTimeout(startListening, 500);
+        setTimeout(() => startListeningRef.current(), 500);
       }
     };
 
@@ -190,7 +221,9 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
       recognitionRef.current = rec;
       setIsListening(true);
     } catch { /* already started */ }
-  }, [languageCode, isMuted, sendMessage]);
+  }, [languageCode, isMuted, sendMessage, startServerListening]);
+
+  startListeningRef.current = startListening;
 
   // Ringing → auto-answer after 2s
   useEffect(() => {

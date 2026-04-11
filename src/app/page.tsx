@@ -72,6 +72,14 @@ function getUI(langCode: string): UIStrings {
   return UI_TRANSLATIONS[primary] || UI_TRANSLATIONS["en"];
 }
 
+function pickRecorderMimeType(): string | undefined {
+  if (typeof MediaRecorder === "undefined") return undefined;
+  for (const t of ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"]) {
+    if (MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return undefined;
+}
+
 export default function VoiceAssistant() {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -154,40 +162,62 @@ export default function VoiceAssistant() {
         body: JSON.stringify({ message: text, language: selectedLanguage.code }),
       });
       const data = await response.json();
-      if (data.reply) {
-        setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
-        speakText(data.reply);
-      }
-    } catch (error) {
+      const reply =
+        typeof data.reply === "string" && data.reply.trim()
+          ? data.reply.trim()
+          : typeof data.error === "string" && data.error.trim()
+            ? data.error.trim()
+            : !response.ok
+              ? ui.errorConnection
+              : ui.errorGeneric;
+      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+      speakText(reply);
+    } catch {
       setMessages((prev) => [...prev, { role: "assistant", content: ui.errorConnection }]);
     } finally {
       setIsProcessing(false);
     }
-  }, [selectedLanguage, speakText, ui.errorConnection]);
+  }, [selectedLanguage, speakText, ui.errorConnection, ui.errorGeneric]);
 
   const startServerRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const mimeType = pickRecorderMimeType();
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
+      const blobType = recorder.mimeType || mimeType || "audio/webm";
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.onstop = async () => {
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const audioBlob = new Blob(chunksRef.current, { type: blobType });
         const formData = new FormData();
         formData.append('audio', audioBlob);
         formData.append('language', selectedLanguage.code);
         try {
           const res = await fetch('/api/stt', { method: 'POST', body: formData });
           const data = await res.json();
-          if (data.text) handleUserAudioComplete(data.text);
-          else setIsListening(false);
-        } catch { setIsListening(false); }
-        finally { stream.getTracks().forEach(t => t.stop()); }
+          const transcribed = typeof data.text === "string" ? data.text.trim() : "";
+          if (transcribed) handleUserAudioComplete(transcribed);
+          else {
+            setErrorMessage(
+              typeof data.error === "string" && data.error.trim() ? data.error.trim() : ui.errorNoSpeech
+            );
+            setIsListening(false);
+          }
+        } catch {
+          setErrorMessage(ui.errorNetwork);
+          setIsListening(false);
+        } finally {
+          stream.getTracks().forEach((t) => t.stop());
+        }
       };
-      recorder.start();
+      recorder.start(250);
       setIsListening(true);
-    } catch { setErrorMessage(ui.errorMicDenied); }
+    } catch {
+      setErrorMessage(ui.errorMicDenied);
+    }
   };
 
   const toggleListening = () => {
@@ -196,6 +226,7 @@ export default function VoiceAssistant() {
       if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; }
       setIsListening(false);
     } else {
+      setErrorMessage(null);
       synthRef.current?.cancel();
       setIsSpeaking(false);
       
@@ -403,6 +434,15 @@ export default function VoiceAssistant() {
                 )}
               </div>
             </div>
+
+            {errorMessage && (
+              <div
+                role="alert"
+                className="absolute -bottom-36 left-1/2 -translate-x-1/2 max-w-sm px-4 py-2 rounded-2xl text-center text-xs font-medium text-amber-200/90 bg-amber-950/40 border border-amber-500/20"
+              >
+                {errorMessage}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col items-center gap-6 mt-8">
