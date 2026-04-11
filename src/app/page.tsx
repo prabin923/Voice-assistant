@@ -369,56 +369,73 @@ export default function VoiceAssistant() {
       <main className="flex-1 flex flex-col items-center justify-center px-6 py-12 max-w-5xl w-full mx-auto relative overflow-y-auto scrollbar-hide">
         <div className="w-full flex flex-col items-center gap-16">
           <div className="relative group cursor-pointer" onClick={toggleListening}>
+            {/* Outer glass ring */}
+            <div className={`absolute -inset-4 rounded-full transition-all duration-700 ${isListening ? 'opacity-100' : 'opacity-40 group-hover:opacity-60'}`}
+              style={{
+                background: isListening
+                  ? `conic-gradient(from 0deg, ${branding.accentColor}40, #f43f5e40, #fb923c40, ${branding.accentColor}40)`
+                  : 'conic-gradient(from 0deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02), rgba(255,255,255,0.06))',
+                filter: 'blur(1px)',
+              }}
+            />
+
             {isListening && (
               <div className="absolute -inset-20">
                 <div className="ripple-ring scale-150" style={{ animationDelay: '0s', borderColor: branding.accentColor, opacity: 0.4 }} />
                 <div className="ripple-ring scale-150" style={{ animationDelay: '0.8s', borderColor: branding.accentColor, opacity: 0.2 }} />
               </div>
             )}
-            
+
             <div className={`
-              relative z-10 w-56 h-56 sm:w-64 sm:h-64 rounded-full
+              glass-circle relative z-10 w-56 h-56 sm:w-64 sm:h-64 rounded-full
               flex flex-col items-center justify-center overflow-hidden
-              hover:scale-105 active:scale-95 transition-all duration-700 ease-out animate-morph
-              ${isListening ? 'scale-110 shadow-[0_0_100px_-10px_rgba(244,63,94,0.5)] border-white/40' : 'shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)] border-white/10'}
+              hover:scale-105 active:scale-95 transition-all duration-700 ease-out
+              ${isListening ? 'scale-110 border-white/30' : 'border-white/[0.08] group-hover:border-white/20'}
               ${isProcessing ? 'animate-pulse' : ''}
-              ${isSpeaking ? 'scale-105 glow-accent' : ''}
+              ${isSpeaking ? 'scale-105 border-white/20' : ''}
             `}
-            style={{ 
-              background: isListening 
-                ? `radial-gradient(circle at center, ${branding.accentColor}, #f43f5e, #fb923c)` 
-                : isSpeaking 
-                ? `linear-gradient(225deg, ${branding.accentColor}, #fb923c)` 
-                : `linear-gradient(135deg, #1a1a1a, #0a0a0a)`,
-              borderWidth: 1
+            style={{
+              background: isListening
+                ? `radial-gradient(circle at 30% 30%, ${branding.accentColor}30, rgba(244,63,94,0.15), rgba(0,0,0,0.2))`
+                : isSpeaking
+                ? `radial-gradient(circle at 30% 30%, ${branding.accentColor}20, rgba(251,146,60,0.1), rgba(0,0,0,0.2))`
+                : undefined,
+              borderWidth: 1,
+              boxShadow: isListening
+                ? `0 0 80px -10px ${branding.accentColor}40, inset 0 1px 0 0 rgba(255,255,255,0.1)`
+                : isSpeaking
+                ? `0 0 60px -10px ${branding.accentColor}30, inset 0 1px 0 0 rgba(255,255,255,0.1)`
+                : undefined,
             }}>
               {isProcessing ? (
                 <div className="flex flex-col items-center gap-4">
-                  <Loader2 className="w-16 h-16 text-white animate-spin opacity-80" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-white/40 animate-pulse">Processing</span>
+                  <Loader2 className="w-16 h-16 text-white/80 animate-spin" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white/30 animate-pulse">Processing</span>
                 </div>
               ) : isListening ? (
-                <Mic className="w-20 h-20 text-white animate-pulse" />
+                <Mic className="w-20 h-20 text-white/90 animate-pulse" />
               ) : isSpeaking ? (
-                <Volume2 className="w-20 h-20 text-white animate-pulse-soft" />
+                <Volume2 className="w-20 h-20 text-white/90 animate-pulse-soft" />
               ) : (
                 <div className="flex flex-col items-center gap-4">
-                  <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center border border-white/5 group-hover:bg-white/10 transition-all duration-500">
-                    <Mic className="w-10 h-10 text-neutral-400 group-hover:text-white transition-colors" />
+                  <div className="glass-inner-circle w-20 h-20 rounded-full bg-white/[0.04] flex items-center justify-center border border-white/[0.08] group-hover:bg-white/[0.08] group-hover:border-white/15 transition-all duration-500">
+                    <Mic className="w-10 h-10 text-neutral-400 group-hover:text-white/90 transition-colors duration-500" />
                   </div>
                   <div className="flex flex-col items-center gap-1">
-                    <span className="text-[11px] font-black uppercase tracking-[0.4em] text-neutral-500 group-hover:text-neutral-300">
+                    <span className="text-[11px] font-black uppercase tracking-[0.4em] text-neutral-500 group-hover:text-neutral-300 transition-colors duration-500">
                       {ui.tapToSpeak.split(' ')[0]}
                     </span>
-                    <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-neutral-600 group-hover:text-neutral-500">
+                    <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-neutral-600 group-hover:text-neutral-400 transition-colors duration-500">
                       {ui.tapToSpeak.split(' ').slice(1).join(' ')}
                     </span>
                   </div>
                 </div>
               )}
 
-              {/* Internal Glow Effect */}
-              <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none" />
+              {/* Glass highlight - top edge light refraction */}
+              <div className="absolute inset-0 rounded-full bg-gradient-to-b from-white/[0.08] via-transparent to-transparent pointer-events-none" />
+              {/* Glass highlight - side light */}
+              <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-transparent via-white/[0.03] to-transparent pointer-events-none" />
             </div>
             
             {/* Status Label */}
