@@ -1,61 +1,50 @@
-# 🎙️ Global AI Hotel Receptionist (Gemini Edition)
+# 🎙️ Willow Hotel AI — Premium Voice Receptionist
 
-> **Production-grade, AI-powered hotel receptionist built to handle guest inquiries via Web and Phone.**
+> **A world-class, AI-driven hospitality interface built with Next.js 16 and Google Gemini 2.5 Flash Lite.**
 
-This is a universal, multi-language voice assistant powered by **Google Gemini 2.5 Flash Lite**. It handles real-time natural language conversations, supports **34 languages**, and includes a robust **Standard Telephony** integration for real phone calls.
+![Willow Hotel Hero](public/screenshots/hero-orb.png)
+
+This is a **flagship-level AI voice assistant** designed for luxury hospitality. It features a stunning glassmorphic interface, a focal "Morphing Orb" interaction point, and a shared intelligence engine that powers both the Web and Phone (Telephony) interfaces.
 
 ---
 
-## ✨ Key Features (New!)
+## ✨ Flagship UI/UX
 
 | Feature | Description |
 |---------|-------------|
-| 🧠 **Gemini 2.5 Brain** | Powered by high-speed **Google Gemini 2.5 Flash Lite** for intelligent, context-aware hotel responses. |
-| 🛡️ **STT Failover** | Automatically switches to **Server-Side Transcription** if browser-native recognition fails (Network Error resilience). |
-| 📞 **Telephony Integration** | Built-in **Webhook API** for real phone calls (compatible with Twilio, TingTing, and SIP providers). |
-| 🌍 **34 Native Languages** | Seamlessly switches between languages like English, Nepali, Hindi, Spanish, Japanese, and more. |
-| 🎨 **Dynamic Branding** | Instantly customize Hotel Name, Tagline, Logo, and **Receptionist Persona** via the admin panel. |
-| 📱 **Call Overlay UI** | Immersive "Call Desk" experience with ringing animations and full-screen interaction. |
+| 🔮 **Morphing Interaction Orb** | A fluid, animated central centerpiece that morphs and ripples organically based on AI states (Listening, Processing, Speaking). |
+| 💎 **Glassmorphism System** | A sophisticated design system in Tailwind v4 featuring backdrop blurs, ambient glows, and a deep dark-mode palette. |
+| 🌍 **Universal Language Desk** | Support for 34 languages with a premium, flag-integrated selection interface. |
+| 📞 **Telephony Bridge** | Dedicated "Concierge Call" mode for transitioning digital guests to live voice lines seamlessly. |
 
 ---
 
-## 🚀 Technical Upgrades
+## 🧠 Core Intelligence
 
-- **AI Engine:** Google Gemini 2.5 Flash Lite (`/api/chat`)
-- **Voice System:** Dual-mode Speech-to-Text (Browser Native + Gemini STT fallback)
-- **Telephony:** Standard Webhook implementation (`/api/telephony/webhook`)
-- **Shared Intelligence:** Unique `responseEngine.ts` shared across Web and Phone interfaces.
+- **Engine:** Google Gemini 2.5 Flash Lite (`/api/chat`).
+- **Dynamic Persona:** The assistant relies on a shared `responseEngine.ts`, ensuring it never gives repetitive "saved" answers.
+- **Failover STT:** Multi-layered transcription that switches from browser-native to server-side Gemini STT if connectivity is unstable.
 
 ---
 
-## 🛠️ Getting Started
+## 🚀 Getting Started
 
-### 1. Environment Variables
-Rename `.env.example` to `.env.local` and add your keys:
+### 1. Environment Setup
+Add your API key to `.env.local`:
 ```bash
-# Required for Assistant Intelligence & Voice Transcription
 GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_key_here
-
-# Required for Telephony Webhooks
-TELEPHONY_WEBHOOK_URL=/api/telephony/webhook
 ```
 
-### 2. Configuration & Customization
-To customize your hotel's details (like the **Telephone Number**), edit `src/lib/hotelConfig.ts` or use the Admin Panel:
+### 2. Branding (Single Source of Truth)
+All hotel details, policies, and receptionist personality are managed in:
+`src/lib/hotelConfig.ts`
 
 ```typescript
-// Example: Customizing your Hotel's Phone Number
 export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
   branding: {
-    hotelName: "Willow Hotel", // 🏨 Change your Hotel Name here
-    tagline: "Virtual Receptionist AI",
-    ...
-  },
-  contact: {
-    phone: "+977-9800000000", // 📞 Customize your phone number here!
-    email: "frontdesk@willowhotel.com",
-    address: "Kathmandu, Nepal",
-    ...
+    hotelName: "Willow Hotel",
+    accentColor: "#f43f5e",
+    tagline: "Premium AI Concierge",
   },
   ...
 };
@@ -63,23 +52,23 @@ export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
 
 ---
 
-## 📁 New API Routes
+## 📸 Interface Preview
 
-| Route | Purpose |
-|-------|---------|
-| `/api/chat` | Main AI response engine (Gemini-powered). |
-| `/api/stt` | Fallback Speech-To-Text API (Gemini-powered). |
-| `/api/telephony/webhook` | Receives real phone calls from your telephony provider. |
-| `/api/config` | Manages global hotel settings and persona. |
+<p align="center">
+  <img src="public/screenshots/hero-orb.png" width="45%" alt="Morphing Orb" />
+  <img src="public/screenshots/languages.png" width="45%" alt="Language Selector" />
+</p>
 
 ---
 
-## 🤝 Telephony Integration Guide
+## 📁 Project Architecture
 
-1. **Deploy** your project to a public URL (e.g., Vercel).
-2. **Setup your Provider**: Sign up for Twilio or a similar SIP provider.
-3. **Configure Webhook**: Point your phone number's "Voice Webhook" to `https://your-domain.com/api/telephony/webhook`.
-4. **Call It**: The assistant will automatically greet callers and answer questions as the **Willow Hotel Receptionist**.
+| Route | Purpose |
+|-------|---------|
+| `src/lib/responseEngine.ts` | The shared brain for Web, Phone, and STT. |
+| `src/app/api/chat` | Main interaction endpoint. |
+| `src/app/api/telephony` | Real-time webhook for phone calls. |
+| `src/app/globals.css` | Premium design system & animations. |
 
 ---
 
