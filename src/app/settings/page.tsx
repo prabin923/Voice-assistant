@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Settings, Hotel, Phone, Clock, Utensils, Dumbbell,
   Save, RotateCcw, Plus, Trash2, ChevronLeft, CheckCircle2,
-  AlertCircle, MessageSquare
+  AlertCircle, MessageSquare, LogOut, User
 } from "lucide-react";
 
 interface RoomType { name: string; pricePerNight: number; currency: string; description: string; maxOccupancy: number; }
@@ -32,10 +32,19 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("branding");
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
+  const [hotelUser, setHotelUser] = useState<{ name: string; email: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/config").then(r => r.json()).then(setConfig);
+    fetch("/api/auth/me").then(r => r.json()).then(data => {
+      if (data.name) setHotelUser(data);
+    }).catch(() => {});
   }, []);
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/admin/login";
+  };
 
   const save = async () => {
     if (!config) return;
@@ -104,6 +113,12 @@ export default function SettingsPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {hotelUser && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/[0.08] text-sm text-neutral-400">
+                <User className="w-3.5 h-3.5" />
+                <span>{hotelUser.name}</span>
+              </div>
+            )}
             {saveStatus === "success" && (
               <span className="flex items-center gap-1.5 text-emerald-400 text-sm animate-in fade-in">
                 <CheckCircle2 className="w-4 h-4" /> Saved
@@ -119,6 +134,9 @@ export default function SettingsPage() {
             </button>
             <button onClick={save} disabled={saving} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-rose-500 hover:bg-rose-600 text-white transition-all disabled:opacity-50 shadow-lg shadow-rose-500/20">
               <Save className="w-4 h-4" /> {saving ? "Saving..." : "Save Changes"}
+            </button>
+            <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-neutral-500 hover:text-red-400 border border-neutral-800 hover:border-red-500/30 transition-all">
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
         </div>

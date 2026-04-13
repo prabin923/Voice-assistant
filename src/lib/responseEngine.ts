@@ -1,23 +1,16 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from 'openai';
 import { getHotelConfig } from './hotelConfig';
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "");
-const model = genAI.getGenerativeModel({ 
-  model: "gemini-2.5-flash-lite",
-  generationConfig: {
-    maxOutputTokens: 800,
-    temperature: 0.8, // Slightly higher temperature for more natural variety
-  }
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
 
 export async function getAssistantResponse(message: string, language: string) {
   const config = getHotelConfig();
   const langCode = language || config.language || 'en-US';
 
   const systemPrompt = `
-    You are the Senior AI Receptionist at ${config.branding.hotelName}. 
-    
-    PERSONA: 
+    You are the Senior AI Receptionist at ${config.branding.hotelName}.
+
+    PERSONA:
     ${config.receptionistPersona}
     Always be hospitable, professional, and helpful. Do NOT give repetitive or generic "saved" answers.
     Engage naturally based on the guest's specific question.
@@ -37,22 +30,19 @@ export async function getAssistantResponse(message: string, language: string) {
   `;
 
   try {
-    const chat = model.startChat({
-      history: [
-        { role: "user", parts: [{ text: systemPrompt }] },
-        { role: "model", parts: [{ text: "Acknowledged. I am the receptionist for " + config.branding.hotelName + ". How can I help you today?" }] },
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: message },
       ],
-      generationConfig: {
-        maxOutputTokens: 500,
-        temperature: 0.7,
-      },
+      max_tokens: 500,
+      temperature: 0.7,
     });
 
-    const result = await chat.sendMessage(message);
-    const response = await result.response;
-    return response.text().trim();
+    return response.choices[0]?.message?.content?.trim() || "I apologize, could you please repeat that?";
   } catch (error) {
     console.error("Response Engine Error:", error);
-    return "I apologize, but I am having trouble connecting to my brain right now. How can I help you otherwise?";
+    return "I apologize, but I am having trouble connecting right now. How can I help you otherwise?";
   }
 }

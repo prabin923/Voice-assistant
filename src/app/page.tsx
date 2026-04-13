@@ -92,6 +92,7 @@ export default function VoiceAssistant() {
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [languageSearch, setLanguageSearch] = useState("");
   const [inCall, setInCall] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [branding, setBranding] = useState<BrandingConfig>({
     hotelName: "Willow Hotel",
     tagline: "Premium AI Concierge",
@@ -107,6 +108,8 @@ export default function VoiceAssistant() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const langMenuRef = useRef<HTMLDivElement>(null);
   const [useServerSTT, setUseServerSTT] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     fetch("/api/config")
@@ -368,16 +371,9 @@ export default function VoiceAssistant() {
 
       <main className="flex-1 flex flex-col items-center justify-center px-6 py-12 max-w-5xl w-full mx-auto relative overflow-y-auto scrollbar-hide">
         <div className="w-full flex flex-col items-center gap-16">
+          {mounted ? (
           <div className="relative group cursor-pointer" onClick={toggleListening}>
-            {/* Outer glass ring */}
-            <div className={`absolute -inset-4 rounded-full transition-all duration-700 ${isListening ? 'opacity-100' : 'opacity-40 group-hover:opacity-60'}`}
-              style={{
-                background: isListening
-                  ? `conic-gradient(from 0deg, ${branding.accentColor}40, #f43f5e40, #fb923c40, ${branding.accentColor}40)`
-                  : 'conic-gradient(from 0deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02), rgba(255,255,255,0.06))',
-                filter: 'blur(1px)',
-              }}
-            />
+            <div className="glass-outer-ring absolute -inset-4 rounded-full" />
 
             {isListening && (
               <div className="absolute -inset-20">
@@ -386,27 +382,7 @@ export default function VoiceAssistant() {
               </div>
             )}
 
-            <div className={`
-              glass-circle relative z-10 w-56 h-56 sm:w-64 sm:h-64 rounded-full
-              flex flex-col items-center justify-center overflow-hidden
-              hover:scale-105 active:scale-95 transition-all duration-700 ease-out
-              ${isListening ? 'scale-110 border-white/30' : 'border-white/[0.08] group-hover:border-white/20'}
-              ${isProcessing ? 'animate-pulse' : ''}
-              ${isSpeaking ? 'scale-105 border-white/20' : ''}
-            `}
-            style={{
-              background: isListening
-                ? `radial-gradient(circle at 30% 30%, ${branding.accentColor}30, rgba(244,63,94,0.15), rgba(0,0,0,0.2))`
-                : isSpeaking
-                ? `radial-gradient(circle at 30% 30%, ${branding.accentColor}20, rgba(251,146,60,0.1), rgba(0,0,0,0.2))`
-                : undefined,
-              borderWidth: 1,
-              boxShadow: isListening
-                ? `0 0 80px -10px ${branding.accentColor}40, inset 0 1px 0 0 rgba(255,255,255,0.1)`
-                : isSpeaking
-                ? `0 0 60px -10px ${branding.accentColor}30, inset 0 1px 0 0 rgba(255,255,255,0.1)`
-                : undefined,
-            }}>
+            <div className={`glass-circle relative z-10 w-56 h-56 sm:w-64 sm:h-64 rounded-full flex flex-col items-center justify-center overflow-hidden border hover:scale-105 active:scale-95 transition-all duration-700 ease-out ${isListening ? 'scale-110 glass-circle-listening' : 'border-white/[0.08] group-hover:border-white/20'} ${isProcessing ? 'animate-pulse' : ''} ${isSpeaking ? 'scale-105 glass-circle-speaking' : ''}`}>
               {isProcessing ? (
                 <div className="flex flex-col items-center gap-4">
                   <Loader2 className="w-16 h-16 text-white/80 animate-spin" />
@@ -432,13 +408,10 @@ export default function VoiceAssistant() {
                 </div>
               )}
 
-              {/* Glass highlight - top edge light refraction */}
               <div className="absolute inset-0 rounded-full bg-gradient-to-b from-white/[0.08] via-transparent to-transparent pointer-events-none" />
-              {/* Glass highlight - side light */}
               <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-transparent via-white/[0.03] to-transparent pointer-events-none" />
             </div>
-            
-            {/* Status Label */}
+
             <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 whitespace-nowrap">
               <div className="flex flex-col items-center gap-2">
                 <span className={`text-[12px] font-black uppercase tracking-[0.5em] transition-all duration-700 ${isListening ? 'text-rose-400' : 'text-neutral-600'}`}>
@@ -453,14 +426,18 @@ export default function VoiceAssistant() {
             </div>
 
             {errorMessage && (
-              <div
-                role="alert"
-                className="absolute -bottom-36 left-1/2 -translate-x-1/2 max-w-sm px-4 py-2 rounded-2xl text-center text-xs font-medium text-amber-200/90 bg-amber-950/40 border border-amber-500/20"
-              >
+              <div role="alert" className="absolute -bottom-36 left-1/2 -translate-x-1/2 max-w-sm px-4 py-2 rounded-2xl text-center text-xs font-medium text-amber-200/90 bg-amber-950/40 border border-amber-500/20">
                 {errorMessage}
               </div>
             )}
           </div>
+          ) : (
+          <div className="relative w-56 h-56 sm:w-64 sm:h-64 rounded-full glass-circle flex flex-col items-center justify-center border border-white/[0.08]">
+            <div className="w-20 h-20 rounded-full bg-white/[0.04] flex items-center justify-center border border-white/[0.08]">
+              <Mic className="w-10 h-10 text-neutral-400" />
+            </div>
+          </div>
+          )}
 
           <div className="flex flex-col items-center gap-6 mt-8">
             <button
