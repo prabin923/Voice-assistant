@@ -42,25 +42,43 @@ interface UIStrings {
   languagesSupported: string;
 }
 
-// All supported languages
+// 34 languages supported by Gemini
 const ALL_LANGUAGES: LanguageOption[] = [
   { code: "en-US",  name: "English (US)",       nativeName: "English",       flag: "🇺🇸", ttsLang: "en-US" },
-  { code: "en-GB",  name: "English (UK)",       nativeName: "English",       flag: "🇬🇧", ttsLang: "en-GB" },
-  { code: "es-ES",  name: "Spanish",            nativeName: "Español",       flag: "🇪🇸", ttsLang: "es-ES" },
+  { code: "en-GB",  name: "English (UK)",       nativeName: "English (UK)",  flag: "🇬🇧", ttsLang: "en-GB" },
+  { code: "ar-SA",  name: "Arabic",             nativeName: "العربية",       flag: "🇸🇦", ttsLang: "ar-SA" },
+  { code: "bn-BD",  name: "Bengali",            nativeName: "বাংলা",          flag: "🇧🇩", ttsLang: "bn-BD" },
+  { code: "bg-BG",  name: "Bulgarian",          nativeName: "Български",     flag: "🇧🇬", ttsLang: "bg-BG" },
+  { code: "zh-CN",  name: "Chinese (Mandarin)", nativeName: "中文",           flag: "🇨🇳", ttsLang: "zh-CN" },
+  { code: "hr-HR",  name: "Croatian",           nativeName: "Hrvatski",      flag: "🇭🇷", ttsLang: "hr-HR" },
+  { code: "cs-CZ",  name: "Czech",              nativeName: "Čeština",       flag: "🇨🇿", ttsLang: "cs-CZ" },
+  { code: "da-DK",  name: "Danish",             nativeName: "Dansk",         flag: "🇩🇰", ttsLang: "da-DK" },
+  { code: "nl-NL",  name: "Dutch",              nativeName: "Nederlands",    flag: "🇳🇱", ttsLang: "nl-NL" },
+  { code: "et-EE",  name: "Estonian",           nativeName: "Eesti",         flag: "🇪🇪", ttsLang: "et-EE" },
+  { code: "fi-FI",  name: "Finnish",            nativeName: "Suomi",         flag: "🇫🇮", ttsLang: "fi-FI" },
   { code: "fr-FR",  name: "French",             nativeName: "Français",      flag: "🇫🇷", ttsLang: "fr-FR" },
   { code: "de-DE",  name: "German",             nativeName: "Deutsch",       flag: "🇩🇪", ttsLang: "de-DE" },
+  { code: "el-GR",  name: "Greek",              nativeName: "Ελληνικά",      flag: "🇬🇷", ttsLang: "el-GR" },
+  { code: "he-IL",  name: "Hebrew",             nativeName: "עברית",         flag: "🇮🇱", ttsLang: "he-IL" },
+  { code: "hi-IN",  name: "Hindi",              nativeName: "हिन्दी",          flag: "🇮🇳", ttsLang: "hi-IN" },
+  { code: "hu-HU",  name: "Hungarian",          nativeName: "Magyar",        flag: "🇭🇺", ttsLang: "hu-HU" },
+  { code: "id-ID",  name: "Indonesian",         nativeName: "Bahasa Indonesia", flag: "🇮🇩", ttsLang: "id-ID" },
   { code: "it-IT",  name: "Italian",            nativeName: "Italiano",      flag: "🇮🇹", ttsLang: "it-IT" },
-  { code: "pt-BR",  name: "Portuguese (BR)",    nativeName: "Português",     flag: "🇧🇷", ttsLang: "pt-BR" },
   { code: "ja-JP",  name: "Japanese",           nativeName: "日本語",          flag: "🇯🇵", ttsLang: "ja-JP" },
   { code: "ko-KR",  name: "Korean",             nativeName: "한국어",          flag: "🇰🇷", ttsLang: "ko-KR" },
-  { code: "zh-CN",  name: "Chinese (Mandarin)", nativeName: "中文",           flag: "🇨🇳", ttsLang: "zh-CN" },
-  { code: "zh-TW",  name: "Chinese (Taiwan)",   nativeName: "繁體中文",        flag: "🇹🇼", ttsLang: "zh-TW" },
-  { code: "ar-SA",  name: "Arabic",             nativeName: "العربية",       flag: "🇸🇦", ttsLang: "ar-SA" },
-  { code: "hi-IN",  name: "Hindi",              nativeName: "हिन्दी",          flag: "🇮🇳", ttsLang: "hi-IN" },
+  { code: "lt-LT",  name: "Lithuanian",         nativeName: "Lietuvių",      flag: "🇱🇹", ttsLang: "lt-LT" },
   { code: "ne-NP",  name: "Nepali",             nativeName: "नेपाली",         flag: "🇳🇵", ttsLang: "ne-NP" },
+  { code: "no-NO",  name: "Norwegian",          nativeName: "Norsk",         flag: "🇳🇴", ttsLang: "no-NO" },
+  { code: "pl-PL",  name: "Polish",             nativeName: "Polski",        flag: "🇵🇱", ttsLang: "pl-PL" },
+  { code: "pt-BR",  name: "Portuguese (BR)",    nativeName: "Português",     flag: "🇧🇷", ttsLang: "pt-BR" },
+  { code: "ro-RO",  name: "Romanian",           nativeName: "Română",        flag: "🇷🇴", ttsLang: "ro-RO" },
   { code: "ru-RU",  name: "Russian",            nativeName: "Русский",       flag: "🇷🇺", ttsLang: "ru-RU" },
+  { code: "es-ES",  name: "Spanish",            nativeName: "Español",       flag: "🇪🇸", ttsLang: "es-ES" },
+  { code: "sw-KE",  name: "Swahili",            nativeName: "Kiswahili",     flag: "🇰🇪", ttsLang: "sw-KE" },
+  { code: "th-TH",  name: "Thai",               nativeName: "ไทย",           flag: "🇹🇭", ttsLang: "th-TH" },
   { code: "tr-TR",  name: "Turkish",            nativeName: "Türkçe",        flag: "🇹🇷", ttsLang: "tr-TR" },
-].sort((a, b) => a.nativeName.localeCompare(b.nativeName));
+  { code: "vi-VN",  name: "Vietnamese",         nativeName: "Tiếng Việt",    flag: "🇻🇳", ttsLang: "vi-VN" },
+].sort((a, b) => a.name.localeCompare(b.name));
 
 // UI translations
 const UI_TRANSLATIONS: Record<string, UIStrings> = {

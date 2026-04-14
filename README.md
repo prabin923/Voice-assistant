@@ -1,78 +1,144 @@
-# 🎙️ Willow Hotel AI — Premium Voice Receptionist
+# StayNep AI Voice Receptionist
 
-> **A world-class, AI-driven hospitality interface built with Next.js 16 and Google Gemini 2.5 Flash Lite.**
+> **An intelligent, multilingual voice assistant for hotel guest services — powered by Next.js 16 and Google Gemini 2.5 Flash Lite.**
 
-![Willow Hotel Hero](public/screenshots/hero-orb.png)
-
-This is a **flagship-level AI voice assistant** designed for luxury hospitality. It features a stunning glassmorphic interface, a focal "Morphing Orb" interaction point, and a shared intelligence engine that powers both the Web and Phone (Telephony) interfaces.
+A production-ready AI voice receptionist that provides 24/7 multilingual guest support for hotels. Guests speak in any of 34 supported languages and receive instant, spoken responses with hotel-specific knowledge. Built as the foundation for **StayNep** — a comprehensive hotel management platform for Nepal's hospitality industry.
 
 ---
 
-## ✨ Flagship UI/UX
+## Features
 
 | Feature | Description |
 |---------|-------------|
-| 🔮 **Morphing Interaction Orb** | A fluid, animated central centerpiece that morphs and ripples organically based on AI states (Listening, Processing, Speaking). |
-| 💎 **Glassmorphism System** | A sophisticated design system in Tailwind v4 featuring backdrop blurs, ambient glows, and a deep dark-mode palette. |
-| 🌍 **Universal Language Desk** | Support for 34 languages with a premium, flag-integrated selection interface. |
-| 📞 **Telephony Bridge** | Dedicated "Concierge Call" mode for transitioning digital guests to live voice lines seamlessly. |
+| **Voice-to-Voice Chat** | Tap to speak, get spoken AI responses in real-time |
+| **34 Languages** | Full multilingual support via Gemini — Arabic, Bengali, Chinese, French, Hindi, Japanese, Korean, Nepali, Spanish, and 25 more |
+| **Hotel Admin Auth** | Secure registration and login system for hotel administrators (JWT + bcrypt) |
+| **Admin Dashboard** | 8-tab configuration panel — Branding, Contact, Policies, Rooms, Dining, Amenities, FAQ, AI Persona |
+| **Route Protection** | Next.js 16 proxy-based middleware protecting admin routes |
+| **Telephony Integration** | Phone call support via TingTing/Twilio webhook |
+| **Glassmorphic UI** | Premium dark-themed interface with frosted glass effects and animations |
+| **Concierge Call Mode** | In-app telephony interface for direct voice calls |
 
 ---
 
-## 🧠 Core Intelligence
+## Tech Stack
 
-- **Engine:** Google Gemini 2.5 Flash Lite (`/api/chat`).
-- **Dynamic Persona:** The assistant relies on a shared `responseEngine.ts`, ensuring it never gives repetitive "saved" answers.
-- **Failover STT:** Multi-layered transcription that switches from browser-native to server-side Gemini STT if connectivity is unstable.
+| Category | Technology |
+|----------|-----------|
+| Frontend | Next.js 16, React 19, TypeScript |
+| Styling | Tailwind CSS v4, Glassmorphism |
+| AI Engine | Google Gemini 2.5 Flash Lite |
+| STT | Gemini multimodal (audio transcription) |
+| TTS | Web Speech Synthesis API |
+| Auth | jose (JWT), bcryptjs, HTTP-only cookies |
+| Database | SQLite (better-sqlite3) |
+| Telephony | TingTing/Twilio webhooks |
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
-### 1. Environment Setup
-Add your API key to `.env.local`:
+### 1. Clone and install
+
 ```bash
-GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_key_here
+git clone https://github.com/prabin923/Voice-assistant.git
+cd Voice-assistant
+npm install
 ```
 
-### 2. Branding (Single Source of Truth)
-All hotel details, policies, and receptionist personality are managed in:
-`src/lib/hotelConfig.ts`
+### 2. Environment setup
 
-```typescript
-export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
-  branding: {
-    hotelName: "Willow Hotel",
-    accentColor: "#f43f5e",
-    tagline: "Premium AI Concierge",
-  },
-  ...
-};
+Create a `.env.local` file:
+
+```bash
+# Get your key from https://aistudio.google.com/apikey
+GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
+
+# Database
+DATABASE_URL="file:./dev.db"
+
+# JWT Secret (generate your own)
+JWT_SECRET=your_random_secret_here
+```
+
+### 3. Run the dev server
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) — the voice assistant is ready.
+
+---
+
+## Project Structure
+
+```
+src/
+├── app/
+│   ├── page.tsx                    # Main voice assistant UI
+│   ├── settings/page.tsx           # Admin configuration dashboard
+│   ├── admin/
+│   │   ├── login/page.tsx          # Hotel admin login
+│   │   └── register/page.tsx       # Hotel admin registration
+│   ├── api/
+│   │   ├── chat/route.ts           # Gemini chat endpoint
+│   │   ├── stt/route.ts            # Gemini speech-to-text
+│   │   ├── config/route.ts         # Hotel config CRUD
+│   │   ├── auth/                   # Auth endpoints (register/login/logout/me)
+│   │   └── telephony/webhook/      # Phone call webhook
+│   ├── globals.css                 # Design system & animations
+│   └── layout.tsx                  # Root layout
+├── lib/
+│   ├── responseEngine.ts           # Shared Gemini AI brain
+│   ├── hotelConfig.ts              # Hotel configuration schema
+│   ├── auth.ts                     # JWT + password utilities
+│   └── db.ts                       # SQLite database
+├── components/
+│   └── CallOverlay.tsx             # Telephony call UI
+└── proxy.ts                        # Route protection (Next.js 16 middleware)
 ```
 
 ---
 
-## 📸 Interface Preview
+## Supported Languages (34)
 
-<p align="center">
-  <img src="public/screenshots/hero-orb.png" width="45%" alt="Morphing Orb" />
-  <img src="public/screenshots/languages.png" width="45%" alt="Language Selector" />
-</p>
+Arabic, Bengali, Bulgarian, Chinese (Mandarin), Croatian, Czech, Danish, Dutch, English (US), English (UK), Estonian, Finnish, French, German, Greek, Hebrew, Hindi, Hungarian, Indonesian, Italian, Japanese, Korean, Lithuanian, Nepali, Norwegian, Polish, Portuguese (BR), Romanian, Russian, Spanish, Swahili, Thai, Turkish, Vietnamese
 
 ---
 
-## 📁 Project Architecture
+## Auth Flow
 
-| Route | Purpose |
-|-------|---------|
-| `src/lib/responseEngine.ts` | The shared brain for Web, Phone, and STT. |
-| `src/app/api/chat` | Main interaction endpoint. |
-| `src/app/api/telephony` | Real-time webhook for phone calls. |
-| `src/app/globals.css` | Premium design system & animations. |
+1. Hotel admin registers at `/admin/register` (hotel name, email, password)
+2. Login at `/admin/login`
+3. Authenticated users access `/settings` to configure their hotel
+4. `/settings` and `/api/config` are protected — unauthenticated users are redirected
+5. Sessions stored as HTTP-only JWT cookies (7-day expiry)
 
 ---
 
-## 📜 License & Credits
+## Admin Dashboard
 
-Built with ❤️ by **Prabin Sharma** ([@prabin923](https://github.com/prabin923)).  
+The settings panel at `/settings` provides 8 configuration tabs:
+
+- **Branding** — Hotel name, tagline, accent color, welcome/farewell messages
+- **Contact** — Phone, email, website, address
+- **Policies** — Check-in/out times, cancellation, pet, smoking, child policies
+- **Rooms** — Room types with pricing, currency, capacity
+- **Dining** — Restaurant names, cuisine, hours
+- **Amenities** — Facilities with descriptions and hours
+- **Custom FAQ** — Trigger keywords mapped to custom responses
+- **AI Persona** — System prompt to shape the receptionist's personality
+
+---
+
+## About StayNep
+
+This voice assistant is a core module of **StayNep** — a hotel management system being built for Nepal's growing hospitality industry. Future integrations include booking management, housekeeping coordination, analytics, and multi-property support.
+
+---
+
+## License & Credits
+
+Built by **Prabin Sharma** ([@prabin923](https://github.com/prabin923)).
 Powered by Next.js 16, Tailwind CSS v4, and Google Gemini.

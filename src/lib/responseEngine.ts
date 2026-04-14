@@ -1,7 +1,14 @@
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getHotelConfig } from './hotelConfig';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "");
+const model = genAI.getGenerativeModel({
+  model: "gemini-2.5-flash-lite",
+  generationConfig: {
+    maxOutputTokens: 800,
+    temperature: 0.8,
+  }
+});
 
 export async function getAssistantResponse(message: string, language: string) {
   const config = getHotelConfig();
@@ -30,19 +37,22 @@ export async function getAssistantResponse(message: string, language: string) {
   `;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: message },
+    const chat = model.startChat({
+      history: [
+        { role: "user", parts: [{ text: systemPrompt }] },
+        { role: "model", parts: [{ text: "Acknowledged. I am the receptionist for " + config.branding.hotelName + ". How can I help you today?" }] },
       ],
-      max_tokens: 500,
-      temperature: 0.7,
+      generationConfig: {
+        maxOutputTokens: 500,
+        temperature: 0.7,
+      },
     });
 
-    return response.choices[0]?.message?.content?.trim() || "I apologize, could you please repeat that?";
+    const result = await chat.sendMessage(message);
+    const response = await result.response;
+    return response.text().trim();
   } catch (error) {
     console.error("Response Engine Error:", error);
-    return "I apologize, but I am having trouble connecting right now. How can I help you otherwise?";
+    return "I apologize, but I am having trouble connecting to my brain right now. How can I help you otherwise?";
   }
 }
