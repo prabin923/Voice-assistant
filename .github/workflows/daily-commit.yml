@@ -1,0 +1,45 @@
+name: Daily Commit
+
+on:
+  schedule:
+    # Runs every day at 2:15 PM UTC (~8 PM Nepal Time)
+    - cron: '15 14 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  daily-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure Git
+        run: |
+          git config user.name "prabin923"
+          git config user.email "prabin923@users.noreply.github.com"
+
+      - name: Update daily log
+        run: |
+          DATE=$(date -u +"%Y-%m-%d")
+          FILE="daily-log.md"
+
+          if [ ! -f "$FILE" ]; then
+            echo "# Daily Activity Log" > "$FILE"
+            echo "" >> "$FILE"
+            echo "Automated daily project activity tracker for voice-assistant." >> "$FILE"
+            echo "" >> "$FILE"
+          fi
+
+          echo "- **${DATE}** — Daily update: maintained project, reviewed codebase integrity" >> "$FILE"
+
+      - name: Commit and push
+        run: |
+          DATE=$(date -u +"%Y-%m-%d")
+          git add daily-log.md
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: daily project activity update - ${DATE}"
+          git push
