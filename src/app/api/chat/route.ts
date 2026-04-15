@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getHotelConfig } from '@/lib/hotelConfig';
 import { getAssistantResponse } from '@/lib/responseEngine';
+import { interactions } from '@/lib/db';
 
 export async function POST(req: Request) {
   try {
@@ -21,6 +22,13 @@ export async function POST(req: Request) {
     const langCode = language || config.language || 'en-US';
 
     const reply = await getAssistantResponse(message, langCode);
+
+    // Log interaction for analytics
+    try {
+      interactions.log({ guestMessage: message, aiResponse: reply, language: langCode });
+    } catch (e) {
+      console.error("Failed to log interaction:", e);
+    }
 
     return NextResponse.json({
       reply,

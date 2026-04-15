@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Settings, Hotel, Phone, Clock, Utensils, Dumbbell,
   Save, RotateCcw, Plus, Trash2, ChevronLeft, CheckCircle2,
-  AlertCircle, MessageSquare, LogOut, User
+  AlertCircle, MessageSquare, LogOut, User, BarChart3
 } from "lucide-react";
 
 interface RoomType { name: string; pricePerNight: number; currency: string; description: string; maxOccupancy: number; }
@@ -119,6 +119,9 @@ export default function SettingsPage() {
                 <span>{hotelUser.name}</span>
               </div>
             )}
+            <Link href="/admin/analytics" className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-neutral-400 border border-neutral-800 hover:border-rose-500/30 hover:text-rose-400 transition-all">
+              <BarChart3 className="w-4 h-4" /> Analytics
+            </Link>
             {saveStatus === "success" && (
               <span className="flex items-center gap-1.5 text-emerald-400 text-sm animate-in fade-in">
                 <CheckCircle2 className="w-4 h-4" /> Saved
