@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     }
 
     // Get the response from our shared Gemini Brain
-    const aiReply = await getAssistantResponse(userInput, language);
+    const { reply: aiReply } = await getAssistantResponse(userInput, language);
 
     // Return the response in a format TingTing/Twilio can "speak"
     // TingTing expects a simple JSON with a 'speak' or 'response' key

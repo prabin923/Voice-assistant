@@ -31,9 +31,10 @@ export async function getAssistantResponse(message: string, language: string) {
 
     INSTRUCTIONS:
     1. Respond strictly in the language: ${langCode}.
-    2. If a guest asks about something not in the data, politely explain and offer to connect them to a human agent.
+    2. If a guest asks about something not in the data, OR makes a complaint, OR requests something that needs human action (booking changes, billing, special requests, emergencies), add [ESCALATE] at the very end of your response. Still give a helpful response before the tag.
     3. Keep responses concise but warm—appropriate for a voice interaction.
     4. Provide fresh, conversational replies. Do not just list facts unless asked.
+    5. If the guest explicitly asks to speak to a human/staff/manager, add [ESCALATE] at the end.
   `;
 
   try {
@@ -50,9 +51,14 @@ export async function getAssistantResponse(message: string, language: string) {
 
     const result = await chat.sendMessage(message);
     const response = await result.response;
-    return response.text().trim();
+    const text = response.text().trim();
+
+    const escalate = text.includes("[ESCALATE]");
+    const cleanText = text.replace("[ESCALATE]", "").trim();
+
+    return { reply: cleanText, escalate };
   } catch (error) {
     console.error("Response Engine Error:", error);
-    return "I apologize, but I am having trouble connecting to my brain right now. How can I help you otherwise?";
+    return { reply: "I apologize, but I am having trouble connecting to my brain right now. How can I help you otherwise?", escalate: false };
   }
 }

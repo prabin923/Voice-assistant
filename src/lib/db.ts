@@ -33,6 +33,19 @@ function getDb(): Database.Database {
     )
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS support_tickets (
+      id TEXT PRIMARY KEY,
+      guest_message TEXT NOT NULL,
+      ai_response TEXT NOT NULL,
+      language TEXT NOT NULL,
+      status TEXT DEFAULT 'open',
+      staff_reply TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      resolved_at TEXT
+    )
+  `);
+
   if (process.env.NODE_ENV !== "production") globalForDb.db = db;
   return db;
 }
@@ -124,6 +137,48 @@ export const interactions = {
       )
     `).get(`-${days} days`) as { avg: number };
     return Math.round(result.avg * 10) / 10;
+  },
+};
+
+export interface SupportTicket {
+  id: string;
+  guest_message: string;
+  ai_response: string;
+  language: string;
+  status: string;
+  staff_reply: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export const supportTickets = {
+  create(data: { guestMessage: string; aiResponse: string; language: string }): SupportTicket {
+    const id = generateId();
+    db.prepare(
+      "INSERT INTO support_tickets (id, guest_message, ai_response, language) VALUES (?, ?, ?, ?)"
+    ).run(id, data.guestMessage, data.aiResponse, data.language);
+    return db.prepare("SELECT * FROM support_tickets WHERE id = ?").get(id) as SupportTicket;
+  },
+
+  list(status?: string): SupportTicket[] {
+    if (status) {
+      return db.prepare("SELECT * FROM support_tickets WHERE status = ? ORDER BY created_at DESC").all(status) as SupportTicket[];
+    }
+    return db.prepare("SELECT * FROM support_tickets ORDER BY created_at DESC").all() as SupportTicket[];
+  },
+
+  getById(id: string): SupportTicket | undefined {
+    return db.prepare("SELECT * FROM support_tickets WHERE id = ?").get(id) as SupportTicket | undefined;
+  },
+
+  reply(id: string, staffReply: string) {
+    db.prepare(
+      "UPDATE support_tickets SET staff_reply = ?, status = 'resolved', resolved_at = datetime('now') WHERE id = ?"
+    ).run(staffReply, id);
+  },
+
+  openCount(): number {
+    return (db.prepare("SELECT COUNT(*) as count FROM support_tickets WHERE status = 'open'").get() as { count: number }).count;
   },
 };
 

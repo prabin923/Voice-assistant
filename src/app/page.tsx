@@ -192,6 +192,9 @@ export default function VoiceAssistant() {
               ? ui.errorConnection
               : ui.errorGeneric;
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+      if (data.escalated) {
+        setMessages((prev) => [...prev, { role: "assistant", content: "A hotel staff member has been notified and will follow up with you shortly." }]);
+      }
       speakText(reply);
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", content: ui.errorConnection }]);

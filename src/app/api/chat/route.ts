@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getHotelConfig } from '@/lib/hotelConfig';
 import { getAssistantResponse } from '@/lib/responseEngine';
-import { interactions } from '@/lib/db';
+import { interactions, supportTickets } from '@/lib/db';
 
 export async function POST(req: Request) {
   try {
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     const config = getHotelConfig();
     const langCode = language || config.language || 'en-US';
 
-    const reply = await getAssistantResponse(message, langCode);
+    const { reply, escalate } = await getAssistantResponse(message, langCode);
 
     // Log interaction for analytics
     try {
@@ -30,8 +30,21 @@ export async function POST(req: Request) {
       console.error("Failed to log interaction:", e);
     }
 
+    // Auto-create support ticket on escalation
+    let ticketId: string | undefined;
+    if (escalate) {
+      try {
+        const ticket = supportTickets.create({ guestMessage: message, aiResponse: reply, language: langCode });
+        ticketId = ticket.id;
+      } catch (e) {
+        console.error("Failed to create support ticket:", e);
+      }
+    }
+
     return NextResponse.json({
       reply,
+      escalated: escalate,
+      ticketId,
       hotelName: config.branding.hotelName,
       language: langCode,
       timestamp: new Date().toISOString(),

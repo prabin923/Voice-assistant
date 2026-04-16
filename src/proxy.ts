@@ -3,8 +3,8 @@ import { jwtVerify } from "jose";
 
 const secret = new TextEncoder().encode(process.env.JWT_SECRET || "fallback-dev-secret");
 
-const protectedRoutes = ["/settings", "/admin/analytics"];
-const protectedApiRoutes = ["/api/config", "/api/analytics"];
+const protectedRoutes = ["/settings", "/admin/analytics", "/admin/support"];
+const protectedApiRoutes = ["/api/config", "/api/analytics", "/api/support"];
 const authRoutes = ["/admin/login", "/admin/register"];
 
 async function verifySession(token: string) {
@@ -41,5 +41,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/settings/:path*", "/api/config/:path*", "/api/analytics/:path*", "/admin/:path*"],
+  matcher: ["/settings/:path*", "/api/config/:path*", "/api/analytics/:path*", "/api/support/:path*", "/admin/:path*"],
 };
