@@ -21,7 +21,9 @@ export async function POST(req: Request) {
     const config = getHotelConfig();
     const langCode = language || config.language || 'en-US';
 
+    const startTime = Date.now();
     const { reply, escalate } = await getAssistantResponse(message, langCode);
+    const responseTimeMs = Date.now() - startTime;
 
     // Log interaction for analytics
     try {
@@ -36,6 +38,7 @@ export async function POST(req: Request) {
       try {
         const ticket = supportTickets.create({ guestMessage: message, aiResponse: reply, language: langCode });
         ticketId = ticket.id;
+        console.log(`[ESCALATION] Ticket ${ticket.id} created for: "${message.slice(0, 80)}..."`);
       } catch (e) {
         console.error("Failed to create support ticket:", e);
       }
@@ -47,6 +50,7 @@ export async function POST(req: Request) {
       ticketId,
       hotelName: config.branding.hotelName,
       language: langCode,
+      responseTimeMs,
       timestamp: new Date().toISOString(),
     });
 
