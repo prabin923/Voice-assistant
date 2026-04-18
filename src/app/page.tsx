@@ -403,7 +403,7 @@ export default function VoiceAssistant() {
               </div>
             )}
 
-            <div className={`glass-circle relative z-10 w-56 h-56 sm:w-64 sm:h-64 rounded-full flex flex-col items-center justify-center overflow-hidden border hover:scale-105 active:scale-95 transition-all duration-700 ease-out ${isListening ? 'scale-110 glass-circle-listening' : 'border-white/[0.08] group-hover:border-white/20'} ${isProcessing ? 'animate-pulse' : ''} ${isSpeaking ? 'scale-105 glass-circle-speaking' : ''}`}>
+            <div className={`glass-circle relative z-10 w-56 h-56 sm:w-64 sm:h-64 rounded-full flex flex-col items-center justify-center overflow-hidden border hover:scale-105 active:scale-95 transition-all duration-700 ease-out animate-morph ${isListening ? 'scale-110 glass-circle-listening' : 'border-white/[0.08] group-hover:border-white/20'} ${isProcessing ? 'animate-pulse' : ''} ${isSpeaking ? 'scale-105 glass-circle-speaking' : ''}`}>
               {isProcessing ? (
                 <div className="flex flex-col items-center gap-4">
                   <Loader2 className="w-16 h-16 text-white/80 animate-spin" />
