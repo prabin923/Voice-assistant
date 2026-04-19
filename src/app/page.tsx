@@ -301,15 +301,15 @@ export default function VoiceAssistant() {
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans selection:bg-rose-500/30 overflow-hidden" dir={isRTL ? "rtl" : "ltr"}>
-      {/* Premium Background */}
+      {/* Premium Background — static radial gradients (no runtime blur) */}
       <div className="fixed inset-0 -z-10 bg-[#050505]">
         <div 
-          className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full blur-[120px] opacity-20 animate-float"
-          style={{ backgroundColor: branding.accentColor }}
+          className="absolute top-[-5%] left-[-5%] w-[45%] h-[45%] rounded-full opacity-15"
+          style={{ background: `radial-gradient(circle, ${branding.accentColor}40 0%, transparent 70%)` }}
         />
         <div 
-          className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full blur-[140px] opacity-10 animate-float"
-          style={{ backgroundColor: branding.accentColor, animationDelay: '2s' }}
+          className="absolute bottom-[-5%] right-[-5%] w-[50%] h-[50%] rounded-full opacity-10"
+          style={{ background: `radial-gradient(circle, ${branding.accentColor}30 0%, transparent 70%)` }}
         />
       </div>
 
@@ -415,22 +415,21 @@ export default function VoiceAssistant() {
                 <Volume2 className="w-20 h-20 text-white/90 animate-pulse-soft" />
               ) : (
                 <div className="flex flex-col items-center gap-4">
-                  <div className="glass-inner-circle w-20 h-20 rounded-full bg-white/[0.04] flex items-center justify-center border border-white/[0.08] group-hover:bg-white/[0.08] group-hover:border-white/15 transition-all duration-500">
-                    <Mic className="w-10 h-10 text-neutral-400 group-hover:text-white/90 transition-colors duration-500" />
+                  <div className="w-20 h-20 rounded-full bg-white/[0.04] flex items-center justify-center border border-white/[0.08] group-hover:bg-white/[0.08] group-hover:border-white/15 transition-colors duration-300">
+                    <Mic className="w-10 h-10 text-neutral-400 group-hover:text-white/90 transition-colors duration-300" />
                   </div>
                   <div className="flex flex-col items-center gap-1">
-                    <span className="text-[11px] font-black uppercase tracking-[0.4em] text-neutral-500 group-hover:text-neutral-300 transition-colors duration-500">
+                    <span className="text-[11px] font-black uppercase tracking-[0.4em] text-neutral-500 group-hover:text-neutral-300 transition-colors duration-300">
                       {ui.tapToSpeak.split(' ')[0]}
                     </span>
-                    <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-neutral-600 group-hover:text-neutral-400 transition-colors duration-500">
+                    <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-neutral-600 group-hover:text-neutral-400 transition-colors duration-300">
                       {ui.tapToSpeak.split(' ').slice(1).join(' ')}
                     </span>
                   </div>
                 </div>
               )}
 
-              <div className="absolute inset-0 rounded-full bg-gradient-to-b from-white/[0.08] via-transparent to-transparent pointer-events-none" />
-              <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-transparent via-white/[0.03] to-transparent pointer-events-none" />
+              <div className="absolute inset-0 rounded-full bg-gradient-to-b from-white/[0.06] to-transparent pointer-events-none" />
             </div>
 
             <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 whitespace-nowrap">

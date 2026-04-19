@@ -2,10 +2,11 @@
 
 /* ============================================
    PREMIUM DESIGN SYSTEM — WILLOW HOTEL AI
+   Performance-Optimized Edition
    ============================================ */
 
 :root {
-  --primary: #f43f5e; /* Rose 500 */
+  --primary: #f43f5e;
   --primary-glow: rgba(244, 63, 94, 0.3);
   --bg-dark: #050505;
   --glass-bg: rgba(255, 255, 255, 0.03);
@@ -19,48 +20,65 @@
   }
 }
 
-/* Glassmorphism Utilities */
+/* ── Glassmorphism (lightweight) ── */
 .glass {
   background: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--glass-border);
 }
 
 .glass-morphic {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 100%);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.3);
 }
 
-/* Premium Scrollbar */
-.scrollbar-premium::-webkit-scrollbar {
-  width: 5px;
-}
-.scrollbar-premium::-webkit-scrollbar-track {
-  background: transparent;
-}
+/* ── Scrollbar ── */
+.scrollbar-premium::-webkit-scrollbar { width: 4px; }
+.scrollbar-premium::-webkit-scrollbar-track { background: transparent; }
 .scrollbar-premium::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, transparent, rgba(244, 63, 94, 0.2), transparent);
+  background: rgba(244, 63, 94, 0.15);
   border-radius: 99px;
 }
 
-/* Animations */
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+/* ── Orb: uses solid gradients instead of backdrop-filter ── */
+.glass-circle {
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.06), rgba(255,255,255,0.02), rgba(10,10,10,0.95));
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 0 rgba(255,255,255,0.05);
+  will-change: transform;
 }
-.animate-float {
-  animation: float 6s ease-in-out infinite;
+.glass-circle-listening {
+  background: radial-gradient(circle at 30% 30%, rgba(244,63,94,0.18), rgba(244,63,94,0.1), rgba(10,10,10,0.9));
+  border-color: rgba(255,255,255,0.3);
+  box-shadow: 0 0 60px -10px rgba(244,63,94,0.2), inset 0 1px 0 0 rgba(255,255,255,0.08);
+}
+.glass-circle-speaking {
+  background: radial-gradient(circle at 30% 30%, rgba(251,146,60,0.12), rgba(251,146,60,0.08), rgba(10,10,10,0.9));
+  border-color: rgba(255,255,255,0.2);
+  box-shadow: 0 0 50px -10px rgba(251,146,60,0.15), inset 0 1px 0 0 rgba(255,255,255,0.08);
 }
 
-@keyframes slow-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+.glass-outer-ring {
+  background: conic-gradient(from 0deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01), rgba(255,255,255,0.04));
+  opacity: 0.3;
 }
-.animate-slow-spin {
-  animation: slow-spin 12s linear infinite;
+
+.glass-inner-circle {
+  /* Solid bg only — no backdrop-filter for performance */
+  background: rgba(255,255,255,0.03);
+}
+
+/* ── Animations (GPU-accelerated, transform/opacity only) ── */
+@keyframes float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -8px, 0); }
+}
+.animate-float {
+  animation: float 8s ease-in-out infinite;
+  will-change: transform;
 }
 
 @keyframes morph {
@@ -68,73 +86,54 @@
   50% { border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; }
 }
 .animate-morph {
-  animation: morph 8s ease-in-out infinite;
-}
-
-/* Glassmorphism circle */
-.glass-circle {
-  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.08), rgba(255,255,255,0.02), rgba(0,0,0,0.1));
-  backdrop-filter: blur(40px) saturate(150%);
-  -webkit-backdrop-filter: blur(40px) saturate(150%);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 0 rgba(255,255,255,0.06);
-}
-.glass-circle-listening {
-  background: radial-gradient(circle at 30% 30%, rgba(244,63,94,0.19), rgba(244,63,94,0.15), rgba(0,0,0,0.2));
-  border-color: rgba(255,255,255,0.3);
-  box-shadow: 0 0 80px -10px rgba(244,63,94,0.25), inset 0 1px 0 0 rgba(255,255,255,0.1);
-}
-.glass-circle-speaking {
-  background: radial-gradient(circle at 30% 30%, rgba(251,146,60,0.13), rgba(251,146,60,0.1), rgba(0,0,0,0.2));
-  border-color: rgba(255,255,255,0.2);
-  box-shadow: 0 0 60px -10px rgba(251,146,60,0.19), inset 0 1px 0 0 rgba(255,255,255,0.1);
-}
-
-.glass-outer-ring {
-  background: conic-gradient(from 0deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02), rgba(255,255,255,0.06));
-  filter: blur(1px);
-  opacity: 0.4;
-}
-
-.glass-inner-circle {
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  animation: morph 10s ease-in-out infinite;
+  will-change: border-radius;
 }
 
 @keyframes pulse-soft {
-  0%, 100% { transform: scale(1); opacity: 0.8; }
-  50% { transform: scale(1.05); opacity: 1; }
+  0%, 100% { opacity: 0.8; transform: scale3d(1,1,1); }
+  50% { opacity: 1; transform: scale3d(1.04,1.04,1); }
 }
 .animate-pulse-soft {
   animation: pulse-soft 3s ease-in-out infinite;
+  will-change: transform, opacity;
 }
 
 @keyframes ripple {
-  0% { transform: scale(0.8); opacity: 1; }
-  100% { transform: scale(1.8); opacity: 0; }
+  0% { transform: scale3d(0.8,0.8,1); opacity: 0.8; }
+  100% { transform: scale3d(1.6,1.6,1); opacity: 0; }
 }
 .ripple-ring {
   position: absolute;
   border: 1px solid var(--primary);
   border-radius: 50%;
   animation: ripple 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  will-change: transform, opacity;
 }
 
-/* Shimmer Effect */
-.shimmer {
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
-  background-size: 200% 100%;
-  animation: shimmer 2s infinite;
-}
+/* Shimmer — lightweight */
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.animate-shimmer {
+  animation: shimmer 2.5s ease-in-out infinite;
+  will-change: transform;
 }
 
-/* Typography Enhancements */
-.text-balance {
-  text-wrap: balance;
-}
-
+/* ── Typography ── */
+.text-balance { text-wrap: balance; }
 .text-gradient {
   @apply bg-clip-text text-transparent bg-gradient-to-br from-white via-white to-white/50;
+}
+
+/* ── Reduce motion for users who prefer it ── */
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-morph,
+  .animate-pulse-soft,
+  .ripple-ring,
+  .animate-shimmer {
+    animation: none !important;
+  }
 }
