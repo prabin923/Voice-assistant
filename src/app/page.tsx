@@ -126,6 +126,10 @@ export default function VoiceAssistant() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const langMenuRef = useRef<HTMLDivElement>(null);
   const [useServerSTT, setUseServerSTT] = useState(false);
+  const autoListenAfterSpeakRef = useRef(false);
+  const cachedVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  const selectedLanguageRef = useRef(selectedLanguage);
+  selectedLanguageRef.current = selectedLanguage;
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -146,30 +150,133 @@ export default function VoiceAssistant() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Preload voices — some browsers lazy-load them
   useEffect(() => {
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      synthRef.current = window.speechSynthesis;
-    }
+    if (typeof window === "undefined") return;
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    synthRef.current = synth;
+    // Force voice loading
+    synth.getVoices();
+    const handleVoicesChanged = () => { cachedVoiceRef.current = null; };
+    synth.addEventListener("voiceschanged", handleVoicesChanged);
+    return () => synth.removeEventListener("voiceschanged", handleVoicesChanged);
   }, []);
+
+  // Pick the most natural/premium voice for the selected language
+  const pickBestVoice = useCallback((langCode: string): SpeechSynthesisVoice | null => {
+    if (!synthRef.current) return null;
+    const voices = synthRef.current.getVoices();
+    if (!voices.length) return null;
+
+    const langPrimary = langCode.split("-")[0];
+    const candidates = voices.filter(v =>
+      v.lang === langCode || v.lang.startsWith(langPrimary)
+    );
+    if (!candidates.length) return null;
+
+    // Prefer premium/natural voices — these names indicate high-quality engines
+    const premiumKeywords = ["premium", "enhanced", "natural", "neural", "wavenet", "google", "samantha", "daniel", "karen", "moira", "tessa", "fiona"];
+    const roboticKeywords = ["compact", "espeak", "mbrola"];
+
+    // Score each candidate
+    const scored = candidates.map(v => {
+      const nameL = v.name.toLowerCase();
+      let score = 0;
+      // Premium indicators
+      if (premiumKeywords.some(k => nameL.includes(k))) score += 10;
+      // Robotic indicators (penalize)
+      if (roboticKeywords.some(k => nameL.includes(k))) score -= 20;
+      // Prefer non-local (cloud) voices
+      if (!v.localService) score += 5;
+      // Exact lang match bonus
+      if (v.lang === langCode) score += 3;
+      return { voice: v, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored[0].voice;
+  }, []);
+
+  // Start listening (extracted so it can be called from auto-listen)
+  const startListeningInternal = useCallback(() => {
+    setErrorMessage(null);
+    synthRef.current?.cancel();
+    setIsSpeaking(false);
+
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR || useServerSTT) {
+      startServerRecordingRef.current();
+      return;
+    }
+
+    const recognition = new SR();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = selectedLanguageRef.current.code;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onresult = (event: any) => {
+      let final = "";
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) final += event.results[i][0].transcript;
+      }
+      if (final) {
+        recognition.stop();
+        handleUserAudioCompleteRef.current(final);
+      }
+    };
+    recognition.onerror = (e: any) => {
+      if (e.error === "network") setUseServerSTT(true);
+      setIsListening(false);
+      autoListenAfterSpeakRef.current = false;
+    };
+    recognition.onend = () => setIsListening(false);
+    recognition.start();
+    recognitionRef.current = recognition;
+  }, [useServerSTT]);
+
+  // Refs for callbacks used in auto-listen
+  const startListeningInternalRef = useRef(startListeningInternal);
+  startListeningInternalRef.current = startListeningInternal;
+  const startServerRecordingRef = useRef(() => {});
+  const handleUserAudioCompleteRef = useRef((_text: string) => {});
 
   const speakText = useCallback((text: string) => {
     if (!synthRef.current) return;
     synthRef.current.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = selectedLanguage.ttsLang;
+    const lang = selectedLanguageRef.current.ttsLang;
+    utterance.lang = lang;
 
-    const voices = synthRef.current.getVoices();
-    const matchingVoice = voices.find(v => v.lang === selectedLanguage.ttsLang) ||
-      voices.find(v => v.lang.startsWith(selectedLanguage.ttsLang.split("-")[0])) ||
-      null;
+    // Use cached voice or find the best one
+    if (!cachedVoiceRef.current || cachedVoiceRef.current.lang.split("-")[0] !== lang.split("-")[0]) {
+      cachedVoiceRef.current = pickBestVoice(lang);
+    }
+    if (cachedVoiceRef.current) utterance.voice = cachedVoiceRef.current;
 
-    if (matchingVoice) utterance.voice = matchingVoice;
+    // Natural speech tuning
+    utterance.rate = 0.93;  // Slightly slower than default for clarity
+    utterance.pitch = 1.0;  // Natural pitch
+    utterance.volume = 1.0;
+
     utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      // Auto-listen after AI finishes speaking — seamless conversation
+      if (autoListenAfterSpeakRef.current) {
+        setTimeout(() => {
+          startListeningInternalRef.current();
+        }, 400); // Small natural pause before listening
+      }
+    };
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      autoListenAfterSpeakRef.current = false;
+    };
     synthRef.current.speak(utterance);
-  }, [selectedLanguage]);
+  }, [pickBestVoice]);
 
   const handleUserAudioComplete = useCallback(async (text: string) => {
     setIsListening(false);
@@ -195,13 +302,19 @@ export default function VoiceAssistant() {
       if (data.escalated) {
         setMessages((prev) => [...prev, { role: "assistant", content: "A hotel staff member has been notified and will follow up with you shortly." }]);
       }
+      // Enable auto-listen so the conversation flows naturally
+      autoListenAfterSpeakRef.current = true;
       speakText(reply);
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", content: ui.errorConnection }]);
+      autoListenAfterSpeakRef.current = false;
     } finally {
       setIsProcessing(false);
     }
   }, [selectedLanguage, speakText, ui.errorConnection, ui.errorGeneric]);
+
+  // Keep refs up to date for use inside callbacks
+  handleUserAudioCompleteRef.current = handleUserAudioComplete;
 
   const startServerRecording = async () => {
     try {
@@ -244,45 +357,26 @@ export default function VoiceAssistant() {
     }
   };
 
+  // Keep server recording ref in sync
+  startServerRecordingRef.current = startServerRecording;
+
   const toggleListening = () => {
     if (isListening) {
+      // User manually stopped — break the auto-listen loop
+      autoListenAfterSpeakRef.current = false;
       if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
       if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; }
       setIsListening(false);
-    } else {
-      setErrorMessage(null);
+    } else if (isSpeaking) {
+      // User tapped while AI is speaking — stop speech and start listening
       synthRef.current?.cancel();
       setIsSpeaking(false);
-      
-      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SR || useServerSTT) {
-        startServerRecording();
-        return;
-      }
-
-      const recognition = new SR();
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.lang = selectedLanguage.code;
-
-      recognition.onstart = () => setIsListening(true);
-      recognition.onresult = (event: any) => {
-        let final = "";
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) final += event.results[i][0].transcript;
-        }
-        if (final) {
-          recognition.stop();
-          handleUserAudioComplete(final);
-        }
-      };
-      recognition.onerror = (e: any) => {
-        if (e.error === "network") setUseServerSTT(true);
-        setIsListening(false);
-      };
-      recognition.onend = () => setIsListening(false);
-      recognition.start();
-      recognitionRef.current = recognition;
+      autoListenAfterSpeakRef.current = true;
+      setTimeout(() => startListeningInternal(), 200);
+    } else {
+      // Fresh conversation start — enable auto-listen loop
+      autoListenAfterSpeakRef.current = true;
+      startListeningInternal();
     }
   };
 
