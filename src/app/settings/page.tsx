@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   Settings, Hotel, Phone, Clock, Utensils, Dumbbell,
   Save, RotateCcw, Plus, Trash2, ChevronLeft, CheckCircle2,
-  AlertCircle, MessageSquare, LogOut, User, BarChart3, Inbox
+  AlertCircle, MessageSquare, LogOut, User, BarChart3, Inbox, X
 } from "lucide-react";
 
 interface RoomType { name: string; pricePerNight: number; currency: string; description: string; maxOccupancy: number; }
@@ -33,6 +33,12 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
   const [hotelUser, setHotelUser] = useState<{ name: string; email: string } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "delete" | "info" } | null>(null);
+
+  const showToast = useCallback((message: string, type: "success" | "delete" | "info" = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  }, []);
 
   useEffect(() => {
     fetch("/api/config").then(r => r.json()).then(setConfig);
@@ -98,7 +104,26 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-neutral-950">
-      {/* Header */}
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed top-6 right-6 z-50 animate-in slide-in-from-top-2 fade-in">
+          <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl text-sm font-medium shadow-2xl backdrop-blur-xl border ${
+            toast.type === "success" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300" :
+            toast.type === "delete" ? "bg-rose-500/10 border-rose-500/20 text-rose-300" :
+            "bg-blue-500/10 border-blue-500/20 text-blue-300"
+          }`}>
+            {toast.type === "success" ? <CheckCircle2 className="w-4 h-4" /> :
+             toast.type === "delete" ? <Trash2 className="w-4 h-4" /> :
+             <AlertCircle className="w-4 h-4" />}
+            {toast.message}
+            <button onClick={() => setToast(null)} className="ml-2 opacity-50 hover:opacity-100">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Header */
       <header className="sticky top-0 z-20 bg-neutral-950/80 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -226,7 +251,7 @@ export default function SettingsPage() {
                   <h2 className="text-lg font-semibold flex items-center gap-2"><Hotel className="w-5 h-5 text-rose-400" /> Room Types</h2>
                   <p className="text-neutral-500 text-sm mt-1">Define the room categories and pricing for your hotel.</p>
                 </div>
-                <button onClick={() => setConfig({ ...config, rooms: [...config.rooms, { name: "", pricePerNight: 0, currency: "USD", description: "", maxOccupancy: 2 }] })} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-neutral-800 border border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white transition-all">
+                <button onClick={() => { setConfig({ ...config, rooms: [...config.rooms, { name: "", pricePerNight: 0, currency: "USD", description: "", maxOccupancy: 2 }] }); showToast("New room type added", "success"); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-neutral-800 border border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white transition-all">
                   <Plus className="w-4 h-4" /> Add Room
                 </button>
               </div>
@@ -234,7 +259,7 @@ export default function SettingsPage() {
                 <div key={i} className="bg-neutral-800/30 rounded-xl p-5 border border-neutral-800/50 space-y-4">
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium text-neutral-300">Room {i + 1}</span>
-                    <button onClick={() => setConfig({ ...config, rooms: config.rooms.filter((_, j) => j !== i) })} className="text-red-400/60 hover:text-red-400 transition-colors">
+                    <button onClick={() => { const name = config.rooms[i].name || `Room ${i + 1}`; setConfig({ ...config, rooms: config.rooms.filter((_, j) => j !== i) }); showToast(`"${name}" removed`, "delete"); }} className="text-red-400/60 hover:text-red-400 transition-colors">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -258,7 +283,7 @@ export default function SettingsPage() {
                   <h2 className="text-lg font-semibold flex items-center gap-2"><Utensils className="w-5 h-5 text-rose-400" /> Dining Venues</h2>
                   <p className="text-neutral-500 text-sm mt-1">Add restaurants and dining options at your hotel.</p>
                 </div>
-                <button onClick={() => setConfig({ ...config, dining: [...config.dining, { name: "", cuisine: "", hours: "", description: "" }] })} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-neutral-800 border border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white transition-all">
+                <button onClick={() => { setConfig({ ...config, dining: [...config.dining, { name: "", cuisine: "", hours: "", description: "" }] }); showToast("New dining venue added", "success"); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-neutral-800 border border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white transition-all">
                   <Plus className="w-4 h-4" /> Add Venue
                 </button>
               </div>
@@ -266,7 +291,7 @@ export default function SettingsPage() {
                 <div key={i} className="bg-neutral-800/30 rounded-xl p-5 border border-neutral-800/50 space-y-4">
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium text-neutral-300">Venue {i + 1}</span>
-                    <button onClick={() => setConfig({ ...config, dining: config.dining.filter((_, j) => j !== i) })} className="text-red-400/60 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => { const name = config.dining[i].name || `Venue ${i + 1}`; setConfig({ ...config, dining: config.dining.filter((_, j) => j !== i) }); showToast(`"${name}" removed`, "delete"); }} className="text-red-400/60 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div><label className={labelCls}>Name</label><input className={inputCls} value={venue.name} onChange={e => { const d = [...config.dining]; d[i] = { ...d[i], name: e.target.value }; setConfig({ ...config, dining: d }); }} /></div>
@@ -287,7 +312,7 @@ export default function SettingsPage() {
                   <h2 className="text-lg font-semibold flex items-center gap-2"><Dumbbell className="w-5 h-5 text-rose-400" /> Amenities</h2>
                   <p className="text-neutral-500 text-sm mt-1">List all facilities and services available at your hotel.</p>
                 </div>
-                <button onClick={() => setConfig({ ...config, amenities: [...config.amenities, { name: "", description: "", hours: "" }] })} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-neutral-800 border border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white transition-all">
+                <button onClick={() => { setConfig({ ...config, amenities: [...config.amenities, { name: "", description: "", hours: "" }] }); showToast("New amenity added", "success"); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-neutral-800 border border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white transition-all">
                   <Plus className="w-4 h-4" /> Add Amenity
                 </button>
               </div>
@@ -295,7 +320,7 @@ export default function SettingsPage() {
                 <div key={i} className="bg-neutral-800/30 rounded-xl p-5 border border-neutral-800/50 space-y-4">
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium text-neutral-300">{amenity.name || `Amenity ${i + 1}`}</span>
-                    <button onClick={() => setConfig({ ...config, amenities: config.amenities.filter((_, j) => j !== i) })} className="text-red-400/60 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => { const name = config.amenities[i].name || `Amenity ${i + 1}`; setConfig({ ...config, amenities: config.amenities.filter((_, j) => j !== i) }); showToast(`"${name}" removed`, "delete"); }} className="text-red-400/60 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
                   </div>
                   <div className="grid grid-cols-3 gap-4">
                     <div><label className={labelCls}>Name</label><input className={inputCls} value={amenity.name} onChange={e => { const a = [...config.amenities]; a[i] = { ...a[i], name: e.target.value }; setConfig({ ...config, amenities: a }); }} /></div>
@@ -315,7 +340,7 @@ export default function SettingsPage() {
                   <h2 className="text-lg font-semibold flex items-center gap-2"><MessageSquare className="w-5 h-5 text-rose-400" /> Custom FAQ</h2>
                   <p className="text-neutral-500 text-sm mt-1">Add custom questions and answers specific to your hotel. If a guest's message matches the keyword, the corresponding answer will be used.</p>
                 </div>
-                <button onClick={() => setConfig({ ...config, customFAQ: [...config.customFAQ, { question: "", answer: "" }] })} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-neutral-800 border border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white transition-all">
+                <button onClick={() => { setConfig({ ...config, customFAQ: [...config.customFAQ, { question: "", answer: "" }] }); showToast("New FAQ entry added", "success"); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-neutral-800 border border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white transition-all">
                   <Plus className="w-4 h-4" /> Add FAQ
                 </button>
               </div>
@@ -323,7 +348,7 @@ export default function SettingsPage() {
                 <div key={i} className="bg-neutral-800/30 rounded-xl p-5 border border-neutral-800/50 space-y-4">
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium text-neutral-300">FAQ {i + 1}</span>
-                    <button onClick={() => setConfig({ ...config, customFAQ: config.customFAQ.filter((_, j) => j !== i) })} className="text-red-400/60 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => { setConfig({ ...config, customFAQ: config.customFAQ.filter((_, j) => j !== i) }); showToast("FAQ entry removed", "delete"); }} className="text-red-400/60 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
                   </div>
                   <div><label className={labelCls}>Trigger Keyword(s)</label><input className={inputCls} placeholder="e.g. airport shuttle" value={faq.question} onChange={e => { const f = [...config.customFAQ]; f[i] = { ...f[i], question: e.target.value }; setConfig({ ...config, customFAQ: f }); }} /></div>
                   <div><label className={labelCls}>Response</label><textarea className={inputCls + " h-20 resize-none"} value={faq.answer} onChange={e => { const f = [...config.customFAQ]; f[i] = { ...f[i], answer: e.target.value }; setConfig({ ...config, customFAQ: f }); }} /></div>
