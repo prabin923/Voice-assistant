@@ -326,6 +326,7 @@ export default function VoiceAssistant() {
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
       const blobType = recorder.mimeType || mimeType || "audio/webm";
+
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.onstop = async () => {
         const audioBlob = new Blob(chunksRef.current, { type: blobType });
@@ -350,8 +351,73 @@ export default function VoiceAssistant() {
           stream.getTracks().forEach((t) => t.stop());
         }
       };
+
+      // ── Silence detection using Web Audio API ──
+      const audioCtx = new AudioContext();
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.3;
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const SILENCE_THRESHOLD = 15;      // Audio level below this = silence
+      const SILENCE_DURATION_MS = 1500;   // Stop after 1.5s of silence
+      const SPEECH_MIN_MS = 500;          // Must hear speech for at least 0.5s before silence can trigger stop
+      const MAX_RECORD_MS = 15000;        // Safety: max 15 seconds
+
+      let silenceStart: number | null = null;
+      let hasHeardSpeech = false;
+      const recordStart = Date.now();
+      let stopped = false;
+
+      const checkSilence = () => {
+        if (stopped) return;
+        if (recorder.state !== "recording") return;
+
+        analyser.getByteFrequencyData(dataArray);
+        const avg = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
+
+        if (avg > SILENCE_THRESHOLD) {
+          // Sound detected
+          hasHeardSpeech = true;
+          silenceStart = null;
+        } else {
+          // Silence
+          if (silenceStart === null) silenceStart = Date.now();
+        }
+
+        const elapsed = Date.now() - recordStart;
+
+        // Auto-stop: silence detected after speech was heard
+        if (hasHeardSpeech && silenceStart && (Date.now() - silenceStart > SILENCE_DURATION_MS)) {
+          stopped = true;
+          recorder.stop();
+          audioCtx.close();
+          return;
+        }
+
+        // Safety timeout
+        if (elapsed > MAX_RECORD_MS) {
+          stopped = true;
+          recorder.stop();
+          audioCtx.close();
+          return;
+        }
+
+        requestAnimationFrame(checkSilence);
+      };
+
       recorder.start(250);
       setIsListening(true);
+
+      // Wait a moment before starting silence detection to let mic warm up
+      setTimeout(() => {
+        if (!stopped && recorder.state === "recording") {
+          checkSilence();
+        }
+      }, 300);
+
     } catch {
       setErrorMessage(ui.errorMicDenied);
     }
