@@ -123,7 +123,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Header */
+      {/* Header */}
       <header className="sticky top-0 z-20 bg-neutral-950/80 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
