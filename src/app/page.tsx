@@ -106,6 +106,8 @@ export default function VoiceAssistant() {
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSupported, setIsSupported] = useState(true);
+  const [inConversation, setInConversation] = useState(false);
+  const inConversationRef = useRef(false);
   const [selectedLanguage, setSelectedLanguage] = useState<LanguageOption>(ALL_LANGUAGES.find(l => l.code === "en-US") || ALL_LANGUAGES[0]);
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [languageSearch, setLanguageSearch] = useState("");
@@ -264,16 +266,17 @@ export default function VoiceAssistant() {
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => {
       setIsSpeaking(false);
-      // Auto-listen after AI finishes speaking — seamless conversation
-      if (autoListenAfterSpeakRef.current) {
+      // Auto-listen after AI finishes — only if conversation is still active
+      if (inConversationRef.current) {
         setTimeout(() => {
-          startListeningInternalRef.current();
-        }, 400); // Small natural pause before listening
+          if (inConversationRef.current) {
+            startListeningInternalRef.current();
+          }
+        }, 400);
       }
     };
     utterance.onerror = () => {
       setIsSpeaking(false);
-      autoListenAfterSpeakRef.current = false;
     };
     synthRef.current.speak(utterance);
   }, [pickBestVoice]);
@@ -302,12 +305,10 @@ export default function VoiceAssistant() {
       if (data.escalated) {
         setMessages((prev) => [...prev, { role: "assistant", content: "A hotel staff member has been notified and will follow up with you shortly." }]);
       }
-      // Enable auto-listen so the conversation flows naturally
       autoListenAfterSpeakRef.current = true;
       speakText(reply);
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", content: ui.errorConnection }]);
-      autoListenAfterSpeakRef.current = false;
     } finally {
       setIsProcessing(false);
     }
@@ -426,21 +427,37 @@ export default function VoiceAssistant() {
   // Keep server recording ref in sync
   startServerRecordingRef.current = startServerRecording;
 
+  // ── Master stop: kills everything ──
+  const stopEverything = useCallback(() => {
+    inConversationRef.current = false;
+    setInConversation(false);
+    autoListenAfterSpeakRef.current = false;
+    // Stop recording
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      try { mediaRecorderRef.current.stop(); } catch {}
+    }
+    // Stop recognition
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+      recognitionRef.current = null;
+    }
+    // Stop speech
+    synthRef.current?.cancel();
+    setIsListening(false);
+    setIsSpeaking(false);
+    setIsProcessing(false);
+  }, []);
+
+  // ── Simple on/off toggle ──
   const toggleListening = () => {
-    if (isListening) {
-      // User manually stopped — break the auto-listen loop
-      autoListenAfterSpeakRef.current = false;
-      if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
-      if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; }
-      setIsListening(false);
-    } else if (isSpeaking) {
-      // User tapped while AI is speaking — stop speech and start listening
-      synthRef.current?.cancel();
-      setIsSpeaking(false);
-      autoListenAfterSpeakRef.current = true;
-      setTimeout(() => startListeningInternal(), 200);
+    if (inConversation || isListening || isSpeaking || isProcessing) {
+      // STOP everything
+      stopEverything();
     } else {
-      // Fresh conversation start — enable auto-listen loop
+      // START conversation
+      setErrorMessage(null);
+      inConversationRef.current = true;
+      setInConversation(true);
       autoListenAfterSpeakRef.current = true;
       startListeningInternal();
     }
@@ -594,8 +611,8 @@ export default function VoiceAssistant() {
 
             <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 whitespace-nowrap">
               <div className="flex flex-col items-center gap-2">
-                <span className={`text-[12px] font-black uppercase tracking-[0.5em] transition-all duration-700 ${isListening ? 'text-rose-400' : 'text-neutral-600'}`}>
-                  {isListening ? ui.listening : isSpeaking ? ui.speaking : ui.ready}
+                <span className={`text-[12px] font-black uppercase tracking-[0.5em] transition-all duration-700 ${isListening ? 'text-rose-400' : isSpeaking ? 'text-orange-400' : inConversation ? 'text-neutral-400' : 'text-neutral-600'}`}>
+                  {isListening ? ui.listening : isSpeaking ? ui.speaking : isProcessing ? 'Processing' : inConversation ? 'Tap to End' : ui.ready}
                 </span>
                 {!isListening && !isSpeaking && !isProcessing && (
                   <div className="w-12 h-0.5 rounded-full bg-white/5 overflow-hidden">
