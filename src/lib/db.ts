@@ -46,6 +46,16 @@ function getDb(): Database.Database {
     )
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS feedback (
+      id TEXT PRIMARY KEY,
+      message_content TEXT NOT NULL,
+      rating TEXT NOT NULL CHECK(rating IN ('up', 'down')),
+      comment TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
   if (process.env.NODE_ENV !== "production") globalForDb.db = db;
   return db;
 }
@@ -203,5 +213,28 @@ export const hotels = {
     db.prepare(
       "UPDATE hotels SET config = ?, updated_at = datetime('now') WHERE id = ?"
     ).run(config, id);
+  },
+};
+
+export const feedback = {
+  create(data: { messageContent: string; rating: "up" | "down"; comment?: string }) {
+    const id = generateId();
+    db.prepare(
+      "INSERT INTO feedback (id, message_content, rating, comment) VALUES (?, ?, ?, ?)"
+    ).run(id, data.messageContent, data.rating, data.comment || null);
+    return id;
+  },
+
+  stats(): { total: number; up: number; down: number; satisfaction: number } {
+    const total = (db.prepare("SELECT COUNT(*) as c FROM feedback").get() as { c: number }).c;
+    const up = (db.prepare("SELECT COUNT(*) as c FROM feedback WHERE rating = 'up'").get() as { c: number }).c;
+    const down = total - up;
+    return { total, up, down, satisfaction: total > 0 ? Math.round((up / total) * 100) : 100 };
+  },
+
+  recent(limit: number = 20) {
+    return db.prepare(
+      "SELECT * FROM feedback ORDER BY created_at DESC LIMIT ?"
+    ).all(limit);
   },
 };

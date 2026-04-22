@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Mic, Volume2, Loader2, Phone, PhoneCall, Settings, Globe, ChevronDown, Check } from "lucide-react";
+import { Mic, Volume2, Loader2, Phone, PhoneCall, Settings, Globe, ChevronDown, Check, ThumbsUp, ThumbsDown } from "lucide-react";
 import CallOverlay from "@/components/CallOverlay";
 
 interface BrandingConfig {
@@ -108,6 +108,7 @@ export default function VoiceAssistant() {
   const [isSupported, setIsSupported] = useState(true);
   const [inConversation, setInConversation] = useState(false);
   const inConversationRef = useRef(false);
+  const [feedbackGiven, setFeedbackGiven] = useState<Record<number, "up" | "down">>({});
   const [selectedLanguage, setSelectedLanguage] = useState<LanguageOption>(ALL_LANGUAGES.find(l => l.code === "en-US") || ALL_LANGUAGES[0]);
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [languageSearch, setLanguageSearch] = useState("");
@@ -290,7 +291,11 @@ export default function VoiceAssistant() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, language: selectedLanguage.code }),
+        body: JSON.stringify({
+          message: text,
+          language: selectedLanguage.code,
+          history: messages.slice(-10),
+        }),
       });
       const data = await response.json();
       const reply =
@@ -490,8 +495,8 @@ export default function VoiceAssistant() {
         />
       </div>
 
-      {/* Glass Header */}
-      <header className="px-6 py-6 flex justify-between items-center sticky top-0 z-20 glass-morphic border-b border-white/[0.03]">
+      {/* Glass Header — mobile responsive */}
+      <header className="px-4 sm:px-6 py-4 sm:py-6 flex justify-between items-center sticky top-0 z-20 glass-morphic border-b border-white/[0.03]">
         <div className="flex items-center gap-4 cursor-pointer" onClick={() => window.location.reload()}>
           <div
             className="h-11 w-11 rounded-2xl flex items-center justify-center shadow-2xl rotate-3 hover:rotate-0 transition-transform duration-500"
@@ -504,7 +509,7 @@ export default function VoiceAssistant() {
           </div>
           <div className="flex flex-col">
             <h1 className="text-sm font-bold tracking-tight text-white leading-tight">{branding.hotelName}</h1>
-            <div className="flex items-center gap-2 mt-0.5">
+            <div className="hidden sm:flex items-center gap-2 mt-0.5">
               <span className={`w-1.5 h-1.5 rounded-full ${useServerSTT ? "bg-cyan-400" : "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.6)]"}`} />
               <span className="text-[9px] font-black tracking-widest text-neutral-500 uppercase">
                 {useServerSTT ? "AI Mode" : "Native Mode"}
@@ -567,7 +572,7 @@ export default function VoiceAssistant() {
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col items-center justify-center px-6 py-12 max-w-5xl w-full mx-auto relative overflow-y-auto scrollbar-hide">
+      <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-8 sm:py-12 max-w-5xl w-full mx-auto relative overflow-y-auto scrollbar-hide">
         <div className="w-full flex flex-col items-center gap-16">
           {mounted ? (
           <div className="relative group cursor-pointer" onClick={toggleListening}>
@@ -667,16 +672,16 @@ export default function VoiceAssistant() {
               </p>
             </div>
           ) : (
-            <div className="space-y-6 pb-20">
+            <div className="space-y-4 sm:space-y-6 pb-20">
               {messages.map((msg, i) => (
                 <div
                   key={i}
-                  className={`flex flex-col gap-2 animate-in slide-in-from-bottom-2 ${
+                  className={`flex flex-col gap-1.5 animate-in slide-in-from-bottom-2 ${
                     msg.role === "user" ? "items-end" : "items-start"
                   }`}
                 >
                   <div className={`
-                    px-6 py-4 rounded-3xl max-w-[90%] sm:max-w-[80%] text-[15px] font-medium leading-relaxed
+                    px-4 sm:px-6 py-3 sm:py-4 rounded-3xl max-w-[95%] sm:max-w-[80%] text-[14px] sm:text-[15px] font-medium leading-relaxed
                     ${msg.role === "user" 
                       ? "bg-white/5 text-neutral-200 rounded-tr-none border border-white/10" 
                       : "glass text-white rounded-tl-none border-rose-500/20 shadow-xl shadow-rose-950/20"}
@@ -687,6 +692,38 @@ export default function VoiceAssistant() {
                     <span className="text-[10px] font-black uppercase tracking-widest text-neutral-600">
                       {msg.role === "user" ? ui.you : branding.hotelName}
                     </span>
+                    {msg.role === "assistant" && (
+                      <div className="flex items-center gap-1 ml-1">
+                        {feedbackGiven[i] ? (
+                          <span className={`text-[10px] font-bold ${feedbackGiven[i] === "up" ? "text-emerald-500" : "text-rose-400"}`}>
+                            {feedbackGiven[i] === "up" ? "👍 Thanks!" : "👎 Noted"}
+                          </span>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => {
+                                setFeedbackGiven(prev => ({ ...prev, [i]: "up" }));
+                                fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageContent: msg.content, rating: "up" }) });
+                              }}
+                              className="p-1 rounded-lg text-neutral-600 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all"
+                              title="Helpful"
+                            >
+                              <ThumbsUp className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setFeedbackGiven(prev => ({ ...prev, [i]: "down" }));
+                                fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageContent: msg.content, rating: "down" }) });
+                              }}
+                              className="p-1 rounded-lg text-neutral-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
+                              title="Not helpful"
+                            >
+                              <ThumbsDown className="w-3 h-3" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

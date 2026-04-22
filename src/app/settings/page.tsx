@@ -125,7 +125,7 @@ export default function SettingsPage() {
 
       {/* Header */}
       <header className="sticky top-0 z-20 bg-neutral-950/80 backdrop-blur-xl border-b border-white/5">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
           <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center gap-2 text-neutral-400 hover:text-white transition-colors">
               <ChevronLeft className="w-5 h-5" />
@@ -137,18 +137,18 @@ export default function SettingsPage() {
               <h1 className="text-lg font-semibold">Hotel Configuration</h1>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             {hotelUser && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/[0.08] text-sm text-neutral-400">
                 <User className="w-3.5 h-3.5" />
                 <span>{hotelUser.name}</span>
               </div>
             )}
-            <Link href="/admin/support" className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-neutral-400 border border-neutral-800 hover:border-amber-500/30 hover:text-amber-400 transition-all">
-              <Inbox className="w-4 h-4" /> Support
+            <Link href="/admin/support" className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-neutral-400 border border-neutral-800 hover:border-amber-500/30 hover:text-amber-400 transition-all">
+              <Inbox className="w-4 h-4" /><span className="hidden sm:inline">Support</span>
             </Link>
-            <Link href="/admin/analytics" className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-neutral-400 border border-neutral-800 hover:border-rose-500/30 hover:text-rose-400 transition-all">
-              <BarChart3 className="w-4 h-4" /> Analytics
+            <Link href="/admin/analytics" className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-neutral-400 border border-neutral-800 hover:border-rose-500/30 hover:text-rose-400 transition-all">
+              <BarChart3 className="w-4 h-4" /><span className="hidden sm:inline">Analytics</span>
             </Link>
             {saveStatus === "success" && (
               <span className="flex items-center gap-1.5 text-emerald-400 text-sm animate-in fade-in">
@@ -173,10 +173,10 @@ export default function SettingsPage() {
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-6 py-8 flex gap-8">
-        {/* Sidebar Tabs */}
-        <aside className="w-56 shrink-0">
-          <nav className="space-y-1 sticky top-24">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col sm:flex-row gap-6 sm:gap-8">
+        {/* Sidebar Tabs — horizontal scroll on mobile, vertical on desktop */}
+        <aside className="sm:w-56 shrink-0">
+          <nav className="flex sm:flex-col gap-1 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0 sm:sticky sm:top-24 scrollbar-premium">
             {tabs.map(tab => (
               <button
                 key={tab.id}

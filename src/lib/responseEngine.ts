@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, Content } from "@google/generative-ai";
 import { getHotelConfig } from "./hotelConfig";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "");
@@ -17,6 +17,7 @@ CRITICAL RULES:
 - NEVER repeat the guest's question back to them as if you asked it.
 - Read the guest's message carefully and respond DIRECTLY to what they said.
 - If the message is a greeting like "hello" or "hi", greet them back warmly and ask how you can help.
+- You REMEMBER the full conversation. Use context from earlier messages when relevant.
 
 HOTEL DATA:
 - Hotel Name: ${config.branding.hotelName}
@@ -38,7 +39,16 @@ RESPONSE RULES:
 6. Give fresh, natural replies. Do not just list facts unless the guest specifically asks for a list.`;
 }
 
-export async function getAssistantResponse(message: string, language: string): Promise<{ reply: string; escalate: boolean }> {
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export async function getAssistantResponse(
+  message: string,
+  language: string,
+  conversationHistory: ChatMessage[] = []
+): Promise<{ reply: string; escalate: boolean }> {
   const config = getHotelConfig();
   const langCode = language || config.language || "en-US";
 
@@ -52,9 +62,17 @@ export async function getAssistantResponse(message: string, language: string): P
       },
     });
 
-    const result = await model.generateContent(
-      `[Guest speaks in ${langCode}]: ${message}`
-    );
+    // Build chat history from previous messages
+    const history: Content[] = conversationHistory
+      .slice(-10) // Keep last 10 messages to avoid token overflow
+      .map((msg) => ({
+        role: msg.role === "user" ? "user" : "model",
+        parts: [{ text: msg.content }],
+      }));
+
+    const chat = model.startChat({ history });
+
+    const result = await chat.sendMessage(`[Guest speaks in ${langCode}]: ${message}`);
     const response = result.response;
     const text = response.text().trim();
 
