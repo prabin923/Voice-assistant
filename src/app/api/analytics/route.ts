@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { interactions, supportTickets } from "@/lib/db";
+import { interactions, supportTickets, feedback } from "@/lib/db";
 
 export async function GET() {
   try {
@@ -44,6 +44,8 @@ export async function GET() {
       escalationRate,
       resolutionRate,
       avgResolutionHours,
+      // Guest satisfaction
+      feedbackStats: feedback.stats(),
     });
   } catch (error: any) {
     console.error("Analytics API Error:", error);

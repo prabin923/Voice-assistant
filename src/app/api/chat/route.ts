@@ -3,9 +3,20 @@ import { getHotelConfig } from '@/lib/hotelConfig';
 import { getAssistantResponse } from '@/lib/responseEngine';
 import { interactions, supportTickets } from '@/lib/db';
 import { sendEscalationEmail } from '@/lib/email';
+import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 
 export async function POST(req: Request) {
   try {
+    // Rate limit: 30 chat requests per minute per IP
+    const ip = getClientIP(req);
+    const limit = checkRateLimit(`chat:${ip}`, { maxRequests: 30, windowMs: 60000 });
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait a moment." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(limit.retryAfterMs / 1000)) } }
+      );
+    }
+
     const { message, language, history } = await req.json();
 
     if (!message || typeof message !== 'string') {

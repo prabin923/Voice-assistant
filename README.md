@@ -11,13 +11,23 @@ A production-ready AI voice receptionist that provides 24/7 multilingual guest s
 | Feature | Description |
 |---------|-------------|
 | **Voice-to-Voice Chat** | Tap to speak, get spoken AI responses in real-time |
-| **34 Languages** | Full multilingual support via Gemini — Arabic, Bengali, Chinese, French, Hindi, Japanese, Korean, Nepali, Spanish, and 25 more |
-| **Hotel Admin Auth** | Secure registration and login system for hotel administrators (JWT + bcrypt) |
+| **Conversation Memory** | Multi-turn context — the AI remembers what you said earlier in the session |
+| **34 Languages** | Full multilingual support via Gemini — Arabic to Vietnamese |
+| **Natural TTS** | Smart voice selection prefers premium voices, 0.93x speech rate for human-like pacing |
+| **Silence Detection** | Auto-stops recording when the user stops talking (Web Audio API) |
+| **Seamless Conversation** | Tap once to start, auto-listen loop after each response, tap again to stop |
+| **Guest Feedback** | Thumbs up/down on every AI response, stored and tracked |
+| **Hotel Admin Auth** | Secure registration and login system (JWT + bcrypt) |
 | **Admin Dashboard** | 8-tab configuration panel — Branding, Contact, Policies, Rooms, Dining, Amenities, FAQ, AI Persona |
-| **Route Protection** | Next.js 16 proxy-based middleware protecting admin routes |
+| **Analytics Dashboard** | 7 KPI cards, daily trends, peak hours, language distribution, activity heatmap, guest satisfaction |
+| **Support Inbox** | Priority-sorted escalation tickets with auto-refresh and email alerts |
+| **Email Alerts** | Staff notified via email when AI escalates a guest issue |
+| **Toast Notifications** | Visual feedback on add/delete actions in settings |
 | **Telephony Integration** | Phone call support via TingTing/Twilio webhook |
-| **Glassmorphic UI** | Premium dark-themed interface with frosted glass effects and animations |
-| **Concierge Call Mode** | In-app telephony interface for direct voice calls |
+| **Concierge Call Mode** | In-app telephony interface |
+| **Rate Limiting** | Protects API from abuse (60 req/min per IP) |
+| **Mobile Responsive** | Fully responsive across all pages |
+| **Performance Optimized** | GPU-friendly CSS, no stacked backdrop-filter blurs |
 
 ---
 
@@ -29,9 +39,10 @@ A production-ready AI voice receptionist that provides 24/7 multilingual guest s
 | Styling | Tailwind CSS v4, Glassmorphism |
 | AI Engine | Google Gemini 2.5 Flash Lite |
 | STT | Gemini multimodal (audio transcription) |
-| TTS | Web Speech Synthesis API |
+| TTS | Web Speech Synthesis API (premium voice selection) |
 | Auth | jose (JWT), bcryptjs, HTTP-only cookies |
 | Database | SQLite (better-sqlite3) |
+| Email | Nodemailer (SMTP) |
 | Telephony | TingTing/Twilio webhooks |
 
 ---
@@ -51,14 +62,21 @@ npm install
 Create a `.env.local` file:
 
 ```bash
-# Get your key from https://aistudio.google.com/apikey
-GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
+# Required: Gemini API Key
+GOOGLE_GENERATIVE_AI_API_KEY=your_key_from_aistudio.google.com
 
 # Database
 DATABASE_URL="file:./dev.db"
 
 # JWT Secret (generate your own)
 JWT_SECRET=your_random_secret_here
+
+# Optional: Email notifications on escalation
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+SMTP_FROM=ai-receptionist@yourhotel.com
 ```
 
 ### 3. Run the dev server
@@ -80,23 +98,52 @@ src/
 │   ├── settings/page.tsx           # Admin configuration dashboard
 │   ├── admin/
 │   │   ├── login/page.tsx          # Hotel admin login
-│   │   └── register/page.tsx       # Hotel admin registration
+│   │   ├── register/page.tsx       # Hotel admin registration
+│   │   ├── analytics/page.tsx      # Analytics dashboard (KPIs, charts, heatmap)
+│   │   └── support/page.tsx        # Support inbox (escalation tickets)
 │   ├── api/
-│   │   ├── chat/route.ts           # Gemini chat endpoint
+│   │   ├── chat/route.ts           # Gemini chat with conversation memory
 │   │   ├── stt/route.ts            # Gemini speech-to-text
 │   │   ├── config/route.ts         # Hotel config CRUD
+│   │   ├── analytics/route.ts      # Analytics data aggregation
+│   │   ├── support/route.ts        # Support ticket management
+│   │   ├── feedback/route.ts       # Guest feedback (thumbs up/down)
 │   │   ├── auth/                   # Auth endpoints (register/login/logout/me)
 │   │   └── telephony/webhook/      # Phone call webhook
 │   ├── globals.css                 # Design system & animations
 │   └── layout.tsx                  # Root layout
 ├── lib/
-│   ├── responseEngine.ts           # Shared Gemini AI brain
+│   ├── responseEngine.ts           # Gemini AI with conversation memory + retry
 │   ├── hotelConfig.ts              # Hotel configuration schema
 │   ├── auth.ts                     # JWT + password utilities
-│   └── db.ts                       # SQLite database
+│   ├── db.ts                       # SQLite (interactions, tickets, feedback)
+│   ├── email.ts                    # Nodemailer escalation alerts
+│   └── rateLimit.ts                # In-memory rate limiter
 ├── components/
 │   └── CallOverlay.tsx             # Telephony call UI
 └── proxy.ts                        # Route protection (Next.js 16 middleware)
+```
+
+---
+
+## Voice Assistant Flow
+
+```
+Guest taps orb → Microphone activates
+     ↓
+Guest speaks → Silence detected → Auto-stops recording
+     ↓
+Audio sent to Gemini STT → Transcribed text
+     ↓
+Text + conversation history sent to Gemini Chat
+     ↓
+AI responds (with hotel context + memory)
+     ↓
+Response spoken via premium TTS voice
+     ↓
+400ms pause → Auto-listens for next message
+     ↓
+Guest taps orb again → Everything stops
 ```
 
 ---
@@ -107,34 +154,60 @@ Arabic, Bengali, Bulgarian, Chinese (Mandarin), Croatian, Czech, Danish, Dutch, 
 
 ---
 
-## Auth Flow
+## Admin Features
 
-1. Hotel admin registers at `/admin/register` (hotel name, email, password)
-2. Login at `/admin/login`
-3. Authenticated users access `/settings` to configure their hotel
-4. `/settings` and `/api/config` are protected — unauthenticated users are redirected
-5. Sessions stored as HTTP-only JWT cookies (7-day expiry)
-
----
-
-## Admin Dashboard
-
-The settings panel at `/settings` provides 8 configuration tabs:
-
+### Settings (`/settings`)
+8-tab configuration panel with toast notifications on add/delete:
 - **Branding** — Hotel name, tagline, accent color, welcome/farewell messages
 - **Contact** — Phone, email, website, address
-- **Policies** — Check-in/out times, cancellation, pet, smoking, child policies
+- **Policies** — Check-in/out, cancellation, pet, smoking, child policies
 - **Rooms** — Room types with pricing, currency, capacity
-- **Dining** — Restaurant names, cuisine, hours
+- **Dining** — Restaurants with cuisine and hours
 - **Amenities** — Facilities with descriptions and hours
 - **Custom FAQ** — Trigger keywords mapped to custom responses
 - **AI Persona** — System prompt to shape the receptionist's personality
+
+### Analytics (`/admin/analytics`)
+Real-time dashboard with auto-refresh (30s):
+- 7 KPI cards: Total interactions, Today, Daily avg, Escalation rate, AI handled %, Avg resolution time, Guest satisfaction
+- Daily interaction trend (30-day bar chart)
+- Peak hours heatmap
+- Language distribution
+- Escalation summary strip
+
+### Support Inbox (`/admin/support`)
+Priority-sorted escalation tickets with auto-refresh (15s):
+- Urgent/High/Medium/Normal priority detection
+- Color-coded borders and ticket age display
+- Staff resolution with toast feedback
+- Email alert to staff on new escalations
+
+---
+
+## Email Alerts
+
+When the AI detects a guest issue requiring human help (complaint, booking change, emergency), it:
+1. Adds `[ESCALATE]` to the response
+2. Creates a support ticket in the database
+3. Sends a styled HTML email to the hotel's configured email address
+
+To enable email alerts, add SMTP credentials to `.env.local` (see Setup section). Without SMTP config, escalations are logged to console.
+
+---
+
+## Auth Flow
+
+1. Hotel admin registers at `/admin/register`
+2. Login at `/admin/login`
+3. Authenticated users access `/settings`, analytics, and support
+4. Protected routes redirect unauthenticated users
+5. Sessions stored as HTTP-only JWT cookies (7-day expiry)
 
 ---
 
 ## About StayNep
 
-This voice assistant is a core module of **StayNep** — a hotel management system being built for Nepal's growing hospitality industry. Future integrations include booking management, housekeeping coordination, analytics, and multi-property support.
+This voice assistant is a core module of **StayNep** — a hotel management system being built for Nepal's growing hospitality industry. Future integrations include booking management, housekeeping coordination, and multi-property support.
 
 ---
 

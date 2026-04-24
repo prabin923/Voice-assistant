@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   BarChart3, TrendingUp, Globe, Clock, MessageSquare,
   ChevronLeft, Settings, LogOut, User, Loader2, Activity,
-  AlertTriangle, CheckCircle2, Timer, Inbox, RefreshCw, Zap
+  AlertTriangle, CheckCircle2, Timer, Inbox, RefreshCw, Zap, ThumbsUp
 } from "lucide-react";
 
 interface AnalyticsData {
@@ -23,6 +23,7 @@ interface AnalyticsData {
   escalationRate: number;
   resolutionRate: number;
   avgResolutionHours: number;
+  feedbackStats: { total: number; up: number; down: number; satisfaction: number };
 }
 
 const LANG_NAMES: Record<string, string> = {
@@ -151,6 +152,7 @@ export default function AnalyticsPage() {
           <StatCard icon={<AlertTriangle className="w-5 h-5" />} label="Escalation Rate" value={`${data.escalationRate}%`} color="amber" />
           <StatCard icon={<Zap className="w-5 h-5" />} label="AI Handled" value={`${aiHandledRate}%`} color="purple" />
           <StatCard icon={<Timer className="w-5 h-5" />} label="Avg Resolution" value={data.avgResolutionHours > 0 ? `${data.avgResolutionHours}h` : "—"} color="cyan" />
+          <StatCard icon={<ThumbsUp className="w-5 h-5" />} label="Satisfaction" value={`${data.feedbackStats.satisfaction}%`} color="emerald" />
         </div>
 
         {/* Escalation Summary Strip */}
@@ -188,6 +190,39 @@ export default function AnalyticsPage() {
             </div>
           </div>
         </div>
+
+        {/* Guest Feedback Strip */}
+        {data.feedbackStats.total > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-2xl p-4 flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <ThumbsUp className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-emerald-400">{data.feedbackStats.up}</p>
+                <p className="text-xs text-neutral-500 uppercase tracking-wider">Helpful Responses</p>
+              </div>
+            </div>
+            <div className="bg-rose-500/5 border border-rose-500/10 rounded-2xl p-4 flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-rose-400">{data.feedbackStats.down}</p>
+                <p className="text-xs text-neutral-500 uppercase tracking-wider">Needs Improvement</p>
+              </div>
+            </div>
+            <div className="bg-blue-500/5 border border-blue-500/10 rounded-2xl p-4 flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                <MessageSquare className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-blue-400">{data.feedbackStats.total}</p>
+                <p className="text-xs text-neutral-500 uppercase tracking-wider">Total Ratings</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Charts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

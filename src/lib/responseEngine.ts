@@ -52,39 +52,55 @@ export async function getAssistantResponse(
   const config = getHotelConfig();
   const langCode = language || config.language || "en-US";
 
-  try {
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash-lite",
-      systemInstruction: buildSystemInstruction(),
-      generationConfig: {
-        maxOutputTokens: 400,
-        temperature: 0.5,
-      },
-    });
+  const MAX_RETRIES = 1;
 
-    // Build chat history from previous messages
-    const history: Content[] = conversationHistory
-      .slice(-10) // Keep last 10 messages to avoid token overflow
-      .map((msg) => ({
-        role: msg.role === "user" ? "user" : "model",
-        parts: [{ text: msg.content }],
-      }));
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash-lite",
+        systemInstruction: buildSystemInstruction(),
+        generationConfig: {
+          maxOutputTokens: 400,
+          temperature: 0.5,
+        },
+      });
 
-    const chat = model.startChat({ history });
+      // Build chat history from previous messages
+      const history: Content[] = conversationHistory
+        .slice(-10) // Keep last 10 messages to avoid token overflow
+        .map((msg) => ({
+          role: msg.role === "user" ? "user" : "model",
+          parts: [{ text: msg.content }],
+        }));
 
-    const result = await chat.sendMessage(`[Guest speaks in ${langCode}]: ${message}`);
-    const response = result.response;
-    const text = response.text().trim();
+      const chat = model.startChat({ history });
 
-    const escalate = text.includes("[ESCALATE]");
-    const cleanText = text.replace(/\[ESCALATE\]/g, "").trim();
+      const result = await chat.sendMessage(`[Guest speaks in ${langCode}]: ${message}`);
+      const response = result.response;
+      const text = response.text().trim();
 
-    return { reply: cleanText, escalate };
-  } catch (error) {
-    console.error("Response Engine Error:", error);
-    return {
-      reply: "I apologize, but I am having trouble right now. Please try again in a moment.",
-      escalate: false,
-    };
+      const escalate = text.includes("[ESCALATE]");
+      const cleanText = text.replace(/\[ESCALATE\]/g, "").trim();
+
+      return { reply: cleanText, escalate };
+    } catch (error: any) {
+      const isRetryable =
+        !error?.status || error.status >= 500 || error.message?.includes("fetch");
+
+      if (attempt < MAX_RETRIES && isRetryable) {
+        console.warn(`[Response Engine] Attempt ${attempt + 1} failed, retrying in 1s...`, error.message);
+        await new Promise((r) => setTimeout(r, 1000));
+        continue;
+      }
+
+      console.error("Response Engine Error:", error);
+      return {
+        reply: "I apologize, but I am having trouble right now. Please try again in a moment.",
+        escalate: false,
+      };
+    }
   }
+
+  // Fallback (unreachable in practice)
+  return { reply: "Something went wrong. Please try again.", escalate: false };
 }
