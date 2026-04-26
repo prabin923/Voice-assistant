@@ -82,7 +82,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error('Gemini Chat API Error:', error);
     return NextResponse.json(
-      { error: 'An error occurred while processing your request.', details: error.message },
+      { error: 'An error occurred while processing your request.' },
       { status: 500 }
     );
   }

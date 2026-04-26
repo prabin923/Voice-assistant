@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { interactions, supportTickets, feedback } from "@/lib/db";
+import { requireAuth } from "@/lib/auth";
 
+// SECURITY: Analytics contain private guest data — require authentication
 export async function GET() {
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   try {
     const total = interactions.totalCount();
     const today = interactions.todayCount();
@@ -37,18 +42,19 @@ export async function GET() {
       languageDistribution,
       peakHours,
       recent,
-      // New escalation metrics
       openTickets,
       totalTickets,
       resolvedTickets,
       escalationRate,
       resolutionRate,
       avgResolutionHours,
-      // Guest satisfaction
       feedbackStats: feedback.stats(),
     });
   } catch (error: any) {
     console.error("Analytics API Error:", error);
-    return NextResponse.json({ error: "Failed to load analytics", details: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to load analytics" },
+      { status: 500 }
+    );
   }
 }

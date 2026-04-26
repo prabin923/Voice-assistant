@@ -1,19 +1,49 @@
 import { NextResponse } from 'next/server';
 import { getAssistantResponse } from '@/lib/responseEngine';
+import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
+
+// SECURITY: Verify webhook requests via shared secret
+function verifyWebhookAuth(req: Request): boolean {
+  const webhookSecret = process.env.WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    // If no secret is configured, log warning but allow (dev mode)
+    console.warn("[Telephony Webhook] WEBHOOK_SECRET not set — accepting all requests (insecure)");
+    return true;
+  }
+
+  const authHeader = req.headers.get("x-webhook-secret") || req.headers.get("authorization");
+  if (!authHeader) return false;
+
+  // Support both "Bearer <secret>" and raw secret
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
+  return token === webhookSecret;
+}
 
 export async function POST(req: Request) {
+  // SECURITY: Verify the request comes from a trusted source
+  if (!verifyWebhookAuth(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Rate limit webhook requests
+  const ip = getClientIP(req);
+  const limit = checkRateLimit(`webhook:${ip}`, { maxRequests: 60, windowMs: 60000 });
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { action: 'speak', text: 'Please hold, our system is busy.' },
+      { status: 429 }
+    );
+  }
+
   try {
     const data = await req.json();
-    console.log('[Telephony Webhook] Received Event:', data);
+    console.log('[Telephony Webhook] Received Event:', data.event || 'message');
 
-    // Standard fields for most conversational AI telephony (TingTing/Twilio-like)
-    // TingTing usually sends 'text' or 'transcript'
     const userInput = data.transcript || data.text || data.message;
     const callId = data.call_id || data.CallSid;
     const language = data.language || 'en-US';
 
     if (!userInput) {
-      // If we get an empty event (e.g. call started), send a greeting
       if (data.event === 'call_started' || data.event === 'welcome') {
          return NextResponse.json({
            action: 'speak',
@@ -23,11 +53,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'ok', message: 'No input to process' });
     }
 
-    // Get the response from our shared Gemini Brain
-    const { reply: aiReply } = await getAssistantResponse(userInput, language);
+    // Limit input length
+    const sanitizedInput = typeof userInput === 'string' ? userInput.slice(0, 500) : '';
+    if (!sanitizedInput) {
+      return NextResponse.json({ action: 'speak', text: 'I didn\'t catch that. Could you repeat?' });
+    }
 
-    // Return the response in a format TingTing/Twilio can "speak"
-    // TingTing expects a simple JSON with a 'speak' or 'response' key
+    const { reply: aiReply } = await getAssistantResponse(sanitizedInput, language);
+
     return NextResponse.json({
       action: 'speak',
       text: aiReply,
@@ -35,10 +68,10 @@ export async function POST(req: Request) {
     });
 
   } catch (error: any) {
-    console.error('[Telephony Webhook] Error:', error);
+    console.error('[Telephony Webhook] Error:', error.message);
     return NextResponse.json({
       action: 'speak',
-      text: "I am sorry, I am experiencing a temporary connection issue. Please hold while I transfer you."
-    }, { status: 200 }); // Always return 200 to keep the call alive if possible
+      text: "I am sorry, I am experiencing a temporary issue. Please hold while I transfer you."
+    }, { status: 200 });
   }
 }

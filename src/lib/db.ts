@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import path from "path";
+import { randomUUID } from "crypto";
 
 const dbPath = path.join(process.cwd(), "hotel.db");
 
@@ -63,7 +64,7 @@ function getDb(): Database.Database {
 export const db = getDb();
 
 function generateId(): string {
-  return Math.random().toString(36).substring(2) + Date.now().toString(36);
+  return randomUUID();
 }
 
 export interface Hotel {

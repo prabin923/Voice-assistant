@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import { supportTickets } from "@/lib/db";
+import { requireAuth } from "@/lib/auth";
+
+// SECURITY: Support tickets contain guest conversations — require auth
 
 // GET - List all tickets (optionally filter by status)
 export async function GET(req: Request) {
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") || undefined;
 
@@ -14,11 +20,18 @@ export async function GET(req: Request) {
 
 // PUT - Staff reply to a ticket
 export async function PUT(req: Request) {
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   try {
     const { ticketId, staffReply } = await req.json();
 
     if (!ticketId || !staffReply) {
       return NextResponse.json({ error: "ticketId and staffReply are required" }, { status: 400 });
+    }
+
+    if (typeof ticketId !== "string" || typeof staffReply !== "string") {
+      return NextResponse.json({ error: "Invalid input types" }, { status: 400 });
     }
 
     const ticket = supportTickets.getById(ticketId);
@@ -29,7 +42,7 @@ export async function PUT(req: Request) {
     supportTickets.reply(ticketId, staffReply);
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: "Failed to update ticket", details: error.message }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Failed to update ticket" }, { status: 500 });
   }
 }
