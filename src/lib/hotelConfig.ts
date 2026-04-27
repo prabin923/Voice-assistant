@@ -133,22 +133,63 @@ export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
   supportedLanguages: ["en-US", "es-ES", "fr-FR", "de-DE", "ja-JP", "zh-CN", "hi-IN", "ne-NP", "ko-KR", "ar-SA", "pt-BR", "ru-RU", "it-IT", "tr-TR", "th-TH", "vi-VN", "id-ID", "nl-NL", "pl-PL", "sv-SE"],
 };
 
+import { hotels } from "./db";
+
 // ============================================================
 // CONFIG STORE — In-memory store for the current session.
-// In production, this would be backed by a database.
+// Persisted to the SQLite database.
 // ============================================================
-let currentConfig: HotelConfig = { ...DEFAULT_HOTEL_CONFIG };
+let currentConfig: HotelConfig | null = null;
 
 export function getHotelConfig(): HotelConfig {
+  if (currentConfig) return currentConfig;
+
+  // Initial load from DB
+  try {
+    const hotel = hotels.getFirst();
+    if (hotel && hotel.config && hotel.config !== '{}') {
+      currentConfig = JSON.parse(hotel.config);
+      return currentConfig as HotelConfig;
+    }
+  } catch (e) {
+    console.error("Failed to load config from DB:", e);
+  }
+
+  // Fallback to defaults
+  currentConfig = { ...DEFAULT_HOTEL_CONFIG };
   return currentConfig;
 }
 
 export function updateHotelConfig(updates: Partial<HotelConfig>): HotelConfig {
-  currentConfig = { ...currentConfig, ...updates };
-  return currentConfig;
+  const config = getHotelConfig();
+  const updated = { ...config, ...updates };
+  currentConfig = updated;
+
+  // Persist to DB (for the first hotel found)
+  try {
+    const hotel = hotels.getFirst();
+    if (hotel) {
+      hotels.updateConfig(hotel.id, JSON.stringify(updated));
+    }
+  } catch (e) {
+    console.error("Failed to persist config to DB:", e);
+  }
+
+  return updated;
 }
 
 export function resetHotelConfig(): HotelConfig {
   currentConfig = { ...DEFAULT_HOTEL_CONFIG };
+  
+  // Persist reset to DB
+  try {
+    const hotel = hotels.getFirst();
+    if (hotel) {
+      hotels.updateConfig(hotel.id, JSON.stringify(currentConfig));
+    }
+  } catch (e) {
+    console.error("Failed to reset config in DB:", e);
+  }
+
   return currentConfig;
 }

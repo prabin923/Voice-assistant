@@ -5,12 +5,12 @@ import { NextResponse } from "next/server";
 
 const SESSION_COOKIE = "session";
 
-// SECURITY: Never fall back to a hardcoded secret
-if (!process.env.JWT_SECRET) {
-  console.error("FATAL: JWT_SECRET environment variable is not set. Auth will not function.");
+// SECURITY: Never fall back to a hardcoded secret in production
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
+  throw new Error("FATAL: JWT_SECRET environment variable is not set. Auth cannot function safely in production.");
 }
 const secret = new TextEncoder().encode(
-  process.env.JWT_SECRET || "MISSING_JWT_SECRET_DO_NOT_USE_IN_PRODUCTION"
+  process.env.JWT_SECRET || "dev-only-local-secret-do-not-use-in-prod"
 );
 
 export async function hashPassword(password: string): Promise<string> {

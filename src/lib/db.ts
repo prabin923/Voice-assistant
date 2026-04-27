@@ -215,6 +215,10 @@ export const hotels = {
       "UPDATE hotels SET config = ?, updated_at = datetime('now') WHERE id = ?"
     ).run(config, id);
   },
+
+  getFirst(): Hotel | undefined {
+    return db.prepare("SELECT * FROM hotels LIMIT 1").get() as Hotel | undefined;
+  },
 };
 
 export const feedback = {

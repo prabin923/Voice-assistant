@@ -6,8 +6,11 @@ import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 function verifyWebhookAuth(req: Request): boolean {
   const webhookSecret = process.env.WEBHOOK_SECRET;
   if (!webhookSecret) {
-    // If no secret is configured, log warning but allow (dev mode)
-    console.warn("[Telephony Webhook] WEBHOOK_SECRET not set — accepting all requests (insecure)");
+    if (process.env.NODE_ENV === "production") {
+      console.error("[Telephony Webhook] CRITICAL: WEBHOOK_SECRET not set in production!");
+      return false;
+    }
+    console.warn("[Telephony Webhook] WARNING: WEBHOOK_SECRET not set — accepting all requests for local development.");
     return true;
   }
 
