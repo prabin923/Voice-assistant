@@ -40,9 +40,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // SECURITY: Validate MIME type
+    // SECURITY: Validate MIME type (strip codec params like ";codecs=opus")
     const mimeType = audioBlob.type || "audio/webm";
-    if (!ALLOWED_AUDIO_TYPES.has(mimeType)) {
+    const baseMime = mimeType.split(";")[0].trim();
+    if (!ALLOWED_AUDIO_TYPES.has(baseMime)) {
       return NextResponse.json(
         { error: `Unsupported audio format: ${mimeType}` },
         { status: 400 }
