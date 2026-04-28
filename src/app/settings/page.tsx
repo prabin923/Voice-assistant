@@ -5,7 +5,8 @@ import Link from "next/link";
 import {
   Settings, Hotel, Phone, Clock, Utensils, Dumbbell,
   Save, RotateCcw, Plus, Trash2, ChevronLeft, CheckCircle2,
-  AlertCircle, MessageSquare, LogOut, User, BarChart3, Inbox, X
+  AlertCircle, MessageSquare, LogOut, User, BarChart3, Inbox, X,
+  Crown, Sparkles
 } from "lucide-react";
 
 interface RoomType { name: string; pricePerNight: number; currency: string; description: string; maxOccupancy: number; }
@@ -195,18 +196,177 @@ export default function SettingsPage() {
 
         {/* Main Content */}
         <main className="flex-1 min-w-0">
-          {/* BRANDING */}
+          {/* BRANDING — PREMIUM */}
           {activeTab === "branding" && (
-            <div className={cardCls}>
-              <h2 className="text-lg font-semibold flex items-center gap-2"><Hotel className="w-5 h-5 text-rose-400" /> Hotel Branding</h2>
-              <p className="text-neutral-500 text-sm">Configure the hotel name and branding that guests will see.</p>
-              <div className="grid grid-cols-2 gap-5">
-                <div><label className={labelCls}>Hotel Name</label><input className={inputCls} value={config.branding.hotelName} onChange={e => updateBranding("hotelName", e.target.value)} /></div>
-                <div><label className={labelCls}>Tagline</label><input className={inputCls} value={config.branding.tagline} onChange={e => updateBranding("tagline", e.target.value)} /></div>
-                <div><label className={labelCls}>Accent Color (Hex)</label><div className="flex gap-2"><input className={inputCls} value={config.branding.accentColor} onChange={e => updateBranding("accentColor", e.target.value)} /><div className="w-12 h-12 rounded-xl border border-neutral-700" style={{ backgroundColor: config.branding.accentColor }} /></div></div>
+            <div className="space-y-6">
+              {/* Hotel Identity Card */}
+              <div className={cardCls}>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold flex items-center gap-2"><Hotel className="w-5 h-5 text-rose-400" /> Hotel Identity</h2>
+                  <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/20 text-amber-400">
+                    <Crown className="w-3 h-3" /> Premium
+                  </span>
+                </div>
+                <p className="text-neutral-500 text-sm">Configure how your hotel appears to guests across all touchpoints.</p>
+                <div className="grid grid-cols-2 gap-5">
+                  <div><label className={labelCls}>Hotel Name</label><input className={inputCls} value={config.branding.hotelName} onChange={e => updateBranding("hotelName", e.target.value)} /></div>
+                  <div><label className={labelCls}>Tagline</label><input className={inputCls} value={config.branding.tagline} onChange={e => updateBranding("tagline", e.target.value)} /></div>
+                </div>
               </div>
-              <div><label className={labelCls}>Welcome Message</label><textarea className={inputCls + " h-20 resize-none"} value={config.branding.welcomeMessage} onChange={e => updateBranding("welcomeMessage", e.target.value)} /></div>
-              <div><label className={labelCls}>Farewell Message</label><textarea className={inputCls + " h-20 resize-none"} value={config.branding.farewellMessage} onChange={e => updateBranding("farewellMessage", e.target.value)} /></div>
+
+              {/* Accent Color — Premium Selector */}
+              <div className={cardCls}>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold flex items-center gap-2"><Sparkles className="w-5 h-5 text-amber-400" /> Brand Color</h2>
+                </div>
+                <p className="text-neutral-500 text-sm">Choose a signature color that defines your hotel&apos;s visual identity.</p>
+
+                {/* Active Color Display */}
+                <div className="relative rounded-2xl overflow-hidden border border-neutral-800/60 bg-neutral-800/20 p-5">
+                  {/* Glow behind swatch */}
+                  <div className="absolute -top-10 -left-10 w-40 h-40 rounded-full blur-3xl opacity-20 pointer-events-none" style={{ backgroundColor: config.branding.accentColor }} />
+                  <div className="relative flex items-center gap-5">
+                    <div className="relative group shrink-0">
+                      <input
+                        type="color"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        value={config.branding.accentColor}
+                        onChange={e => updateBranding("accentColor", e.target.value)}
+                      />
+                      <div
+                        className="w-16 h-16 rounded-2xl border-2 border-white/10 shadow-2xl transition-all duration-300 group-hover:scale-105 group-hover:shadow-[0_0_30px_rgba(255,255,255,0.1)] group-active:scale-95"
+                        style={{ backgroundColor: config.branding.accentColor }}
+                      />
+                      <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-neutral-900 border border-neutral-700 flex items-center justify-center">
+                        <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+                      </div>
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center gap-3">
+                        <input
+                          className={inputCls + " font-mono uppercase tracking-wider"}
+                          value={config.branding.accentColor}
+                          onChange={e => updateBranding("accentColor", e.target.value)}
+                          placeholder="#000000"
+                        />
+                      </div>
+                      <p className="text-[11px] text-neutral-500">Click the color swatch or type a hex code. Pick from curated palettes below.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Curated Palettes */}
+                {[
+                  {
+                    label: "Warm",
+                    colors: [
+                      { name: "Rose", hex: "#f43f5e" },
+                      { name: "Pink", hex: "#ec4899" },
+                      { name: "Orange", hex: "#f97316" },
+                      { name: "Amber", hex: "#f59e0b" },
+                      { name: "Coral", hex: "#ff6b6b" },
+                    ],
+                  },
+                  {
+                    label: "Cool",
+                    colors: [
+                      { name: "Blue", hex: "#3b82f6" },
+                      { name: "Cyan", hex: "#06b6d4" },
+                      { name: "Teal", hex: "#14b8a6" },
+                      { name: "Emerald", hex: "#10b981" },
+                      { name: "Sky", hex: "#0ea5e9" },
+                    ],
+                  },
+                  {
+                    label: "Bold",
+                    colors: [
+                      { name: "Indigo", hex: "#6366f1" },
+                      { name: "Violet", hex: "#8b5cf6" },
+                      { name: "Purple", hex: "#a855f7" },
+                      { name: "Fuchsia", hex: "#d946ef" },
+                      { name: "Crimson", hex: "#dc2626" },
+                    ],
+                  },
+                  {
+                    label: "Luxe",
+                    colors: [
+                      { name: "Gold", hex: "#d4a017" },
+                      { name: "Champagne", hex: "#c9a96e" },
+                      { name: "Bronze", hex: "#cd7f32" },
+                      { name: "Slate", hex: "#64748b" },
+                      { name: "Obsidian", hex: "#1e1e2e" },
+                    ],
+                  },
+                ].map(palette => (
+                  <div key={palette.label} className="space-y-2.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-widest text-neutral-500">{palette.label}</span>
+                    <div className="flex items-center gap-2">
+                      {palette.colors.map(color => {
+                        const isActive = config.branding.accentColor.toLowerCase() === color.hex.toLowerCase();
+                        return (
+                          <button
+                            key={color.hex}
+                            type="button"
+                            onClick={() => updateBranding("accentColor", color.hex)}
+                            className="group relative flex flex-col items-center gap-1.5"
+                          >
+                            <div
+                              className={`w-10 h-10 rounded-xl border transition-all duration-200 ${
+                                isActive
+                                  ? "border-white/30 scale-110 shadow-lg ring-2 ring-white/20 ring-offset-2 ring-offset-neutral-900"
+                                  : "border-white/5 opacity-60 hover:opacity-100 hover:scale-105 hover:border-white/10"
+                              }`}
+                              style={{ backgroundColor: color.hex, boxShadow: isActive ? `0 4px 20px ${color.hex}40` : undefined }}
+                            >
+                              {isActive && (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <CheckCircle2 className="w-4 h-4 text-white drop-shadow-lg" />
+                                </div>
+                              )}
+                            </div>
+                            <span className={`text-[9px] font-medium transition-colors ${isActive ? "text-neutral-200" : "text-neutral-600 group-hover:text-neutral-400"}`}>
+                              {color.name}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Live Preview */}
+                <div className="space-y-2.5 pt-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-widest text-neutral-500">Live Preview</span>
+                  <div className="rounded-2xl border border-neutral-800/60 bg-neutral-900/80 p-5 space-y-3 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl" style={{ backgroundColor: config.branding.accentColor }} />
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: config.branding.accentColor }}>
+                        {config.branding.hotelName?.charAt(0) || "H"}
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-white">{config.branding.hotelName || "Your Hotel"}</div>
+                        <div className="text-[11px] text-neutral-500">{config.branding.tagline || "Your tagline here"}</div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="px-3 py-1.5 rounded-lg text-[11px] font-medium text-white" style={{ backgroundColor: config.branding.accentColor }}>
+                        Book Now
+                      </div>
+                      <div className="px-3 py-1.5 rounded-lg text-[11px] font-medium border" style={{ borderColor: config.branding.accentColor, color: config.branding.accentColor }}>
+                        Learn More
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Messages Card */}
+              <div className={cardCls}>
+                <h2 className="text-lg font-semibold flex items-center gap-2"><MessageSquare className="w-5 h-5 text-rose-400" /> Guest Messages</h2>
+                <p className="text-neutral-500 text-sm">Customize the messages guests see when interacting with your AI receptionist.</p>
+                <div><label className={labelCls}>Welcome Message</label><textarea className={inputCls + " h-20 resize-none"} value={config.branding.welcomeMessage} onChange={e => updateBranding("welcomeMessage", e.target.value)} /></div>
+                <div><label className={labelCls}>Farewell Message</label><textarea className={inputCls + " h-20 resize-none"} value={config.branding.farewellMessage} onChange={e => updateBranding("farewellMessage", e.target.value)} /></div>
+              </div>
             </div>
           )}
 
