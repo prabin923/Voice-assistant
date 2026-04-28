@@ -18,14 +18,15 @@ A production-ready AI voice receptionist that provides 24/7 multilingual guest s
 | **Seamless Conversation** | Tap once to start, auto-listen loop after each response, tap again to stop |
 | **Guest Feedback** | Thumbs up/down on every AI response, stored and tracked |
 | **Hotel Admin Auth** | Secure registration and login system (JWT + bcrypt) |
-| **Admin Dashboard** | 8-tab configuration panel — Branding, Contact, Policies, Rooms, Dining, Amenities, FAQ, AI Persona |
+| **Admin Dashboard** | 8-tab configuration panel (Persisted to SQLite) — Branding, Contact, Policies, Rooms, Dining, Amenities, FAQ, AI Persona |
 | **Analytics Dashboard** | 7 KPI cards, daily trends, peak hours, language distribution, activity heatmap, guest satisfaction |
 | **Support Inbox** | Priority-sorted escalation tickets with auto-refresh and email alerts |
-| **Email Alerts** | Staff notified via email when AI escalates a guest issue |
+| **Email Alerts** | Staff notified via sanitized HTML email when AI escalates a guest issue |
 | **Toast Notifications** | Visual feedback on add/delete actions in settings |
-| **Telephony Integration** | Phone call support via TingTing/Twilio webhook |
+| **Telephony Integration** | Phone call support via TingTing/Twilio webhook (Secured with WEBHOOK_SECRET) |
 | **Concierge Call Mode** | In-app telephony interface |
-| **Rate Limiting** | Protects API from abuse (60 req/min per IP) |
+| **Rate Limiting** | Brute-force protection (5/min for login, 3/hr for register, 60/min for chat) |
+| **Security Hardened** | Masked error messages, crypto IDs, SSL/SameSite strict cookies, path-traversal protection |
 | **Mobile Responsive** | Fully responsive across all pages |
 | **Performance Optimized** | GPU-friendly CSS, no stacked backdrop-filter blurs |
 
@@ -68,8 +69,11 @@ GOOGLE_GENERATIVE_AI_API_KEY=your_key_from_aistudio.google.com
 # Database
 DATABASE_URL="file:./dev.db"
 
-# JWT Secret (generate your own)
+# JWT Secret for Auth sessions
 JWT_SECRET=your_random_secret_here
+
+# Required for telephony webhook authentication
+WEBHOOK_SECRET=your_webhook_shared_secret
 
 # Optional: Email notifications on escalation
 SMTP_HOST=smtp.gmail.com
@@ -201,7 +205,8 @@ To enable email alerts, add SMTP credentials to `.env.local` (see Setup section)
 2. Login at `/admin/login`
 3. Authenticated users access `/settings`, analytics, and support
 4. Protected routes redirect unauthenticated users
-5. Sessions stored as HTTP-only JWT cookies (7-day expiry)
+5. Sessions stored as HTTP-only JWT cookies (24-hour expiry, SameSite: Strict)
+6. Brute-force protection on auth endpoints and expensive AI routes (STT/Chat)
 
 ---
 
