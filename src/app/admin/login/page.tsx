@@ -32,9 +32,9 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/settings");
-    } catch {
-      setError("Something went wrong. Please try again.");
+      window.location.href = "/settings";
+    } catch (err: any) {
+      setError(err?.message || "Network error. Please try again.");
       setLoading(false);
     }
   }

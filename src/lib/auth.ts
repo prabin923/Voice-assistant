@@ -14,16 +14,16 @@ const secret = new TextEncoder().encode(
 );
 
 export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 12);
+  return bcrypt.hashSync(password, 10);
 }
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(password, hash);
+  return bcrypt.compareSync(password, hash);
 }
 
 export async function createToken(payload: { hotelId: string; email: string }): Promise<string> {
-  if (!process.env.JWT_SECRET) {
-    throw new Error("JWT_SECRET is not configured. Cannot create tokens.");
+  if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
+    throw new Error("JWT_SECRET is not configured. Cannot create tokens in production.");
   }
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
@@ -34,7 +34,7 @@ export async function createToken(payload: { hotelId: string; email: string }): 
 
 export async function verifyToken(token: string): Promise<{ hotelId: string; email: string } | null> {
   try {
-    if (!process.env.JWT_SECRET) return null;
+    if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") return null;
     const { payload } = await jwtVerify(token, secret);
     return payload as unknown as { hotelId: string; email: string };
   } catch {

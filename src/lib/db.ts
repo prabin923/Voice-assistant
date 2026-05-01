@@ -58,6 +58,19 @@ function getDb(): Database.Database {
   `);
 
   if (process.env.NODE_ENV !== "production") globalForDb.db = db;
+  
+  // Seed default admin user if none exist
+  const countResult = db.prepare("SELECT COUNT(*) as count FROM hotels").get() as { count: number };
+  if (countResult.count === 0) {
+    const bcrypt = require("bcryptjs");
+    const hash = bcrypt.hashSync("password123", 10);
+    const id = randomUUID();
+    db.prepare(
+      "INSERT INTO hotels (id, name, email, password) VALUES (?, ?, ?, ?)"
+    ).run(id, "Gokarna Admin", "admin@hotel.com", hash);
+    console.log("Seeded default admin user: admin@hotel.com / password123");
+  }
+
   return db;
 }
 
