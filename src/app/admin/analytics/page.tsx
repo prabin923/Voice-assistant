@@ -57,7 +57,7 @@ export default function AnalyticsPage() {
         fetchJsonWithAuth<{ name?: string }>("/api/auth/me"),
       ]);
       setData(analytics);
-      if (user.name) setHotelUser(user);
+      if (user.name) setHotelUser({ name: user.name });
       setLastRefresh(new Date());
     } catch {
       router.push("/admin/login");
