@@ -9,7 +9,7 @@ import {
   AlertCircle, MessageSquare, LogOut, User, BarChart3, Inbox, X,
   Crown, Sparkles
 } from "lucide-react";
-import { fetchJsonWithAuth } from "@/lib/clientAuth";
+import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
 
 interface RoomType { name: string; pricePerNight: number; currency: string; description: string; maxOccupancy: number; }
 interface DiningVenue { name: string; cuisine: string; hours: string; description: string; }
@@ -38,16 +38,22 @@ export default function SettingsPage() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
   const [hotelUser, setHotelUser] = useState<{ name: string; email: string } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "delete" | "info" } | null>(null);
+  const [loadError, setLoadError] = useState("");
 
   const showToast = useCallback((message: string, type: "success" | "delete" | "info" = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   }, []);
 
-  useEffect(() => {
+  const loadProtectedData = useCallback(() => {
+    setLoadError("");
     fetchJsonWithAuth<HotelConfig>("/api/config")
       .then(setConfig)
-      .catch(() => {});
+      .catch((err: unknown) => {
+        if (!isUnauthorizedError(err)) {
+          setLoadError("Failed to load settings. Please try again.");
+        }
+      });
 
     fetchJsonWithAuth<{ name?: string; email?: string }>("/api/auth/me")
       .then((data) => {
@@ -55,6 +61,10 @@ export default function SettingsPage() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    loadProtectedData();
+  }, [loadProtectedData]);
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -93,7 +103,19 @@ export default function SettingsPage() {
   if (!config) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral-950">
-        <div className="w-8 h-8 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
+        {loadError ? (
+          <div className="text-center space-y-4 px-4">
+            <p className="text-sm text-red-400">{loadError}</p>
+            <button
+              onClick={loadProtectedData}
+              className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="w-8 h-8 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
+        )}
       </div>
     );
   }

@@ -7,7 +7,7 @@ import {
   Inbox, CheckCircle2, Clock, Send, MessageSquare, AlertCircle,
   RefreshCw, BarChart3, Bell, ExternalLink, X
 } from "lucide-react";
-import { fetchJsonWithAuth } from "@/lib/clientAuth";
+import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
 
 interface Ticket {
   id: string;
@@ -68,24 +68,35 @@ export default function SupportInbox() {
   const [replying, setReplying] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState("");
 
   const fetchTickets = useCallback(async (showSpinner = false) => {
     if (showSpinner) setRefreshing(true);
+    if (!showSpinner) setLoadError("");
     const statusParam = filter === "all" ? "" : `?status=${filter}`;
     try {
       const data = await fetchJsonWithAuth<{ tickets: Ticket[]; openCount: number }>(`/api/support${statusParam}`);
       setTickets(data.tickets);
       setOpenCount(data.openCount);
-    } catch { /* Redirect handled on 401 by shared helper */ }
+    } catch (err: unknown) {
+      if (!isUnauthorizedError(err)) {
+        setLoadError("Failed to load support inbox. Please try again.");
+      }
+    }
     finally { setRefreshing(false); }
   }, [filter]);
 
   useEffect(() => {
+    setLoadError("");
     fetchJsonWithAuth<{ name?: string }>("/api/auth/me")
       .then((user) => {
         if (user.name) setHotelUser(user as { name: string });
       })
-      .catch(() => {})
+      .catch((err: unknown) => {
+        if (!isUnauthorizedError(err)) {
+          setLoadError("Failed to load support inbox. Please try again.");
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -132,10 +143,22 @@ export default function SupportInbox() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral-950">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 text-rose-500 animate-spin" />
-          <p className="text-sm text-neutral-600">Loading support inbox...</p>
-        </div>
+        {loadError ? (
+          <div className="text-center space-y-4 px-4">
+            <p className="text-sm text-red-400">{loadError}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="w-8 h-8 text-rose-500 animate-spin" />
+            <p className="text-sm text-neutral-600">Loading support inbox...</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -150,6 +173,13 @@ export default function SupportInbox() {
 
   return (
     <div className="min-h-screen bg-neutral-950">
+      {loadError && (
+        <div className="max-w-7xl mx-auto px-6 pt-4">
+          <div className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
+            {loadError}
+          </div>
+        </div>
+      )}
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-6 right-6 z-50 animate-in slide-in-from-top-2 fade-in">

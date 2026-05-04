@@ -2,13 +2,12 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   BarChart3, TrendingUp, Globe, Clock, MessageSquare,
   ChevronLeft, Settings, LogOut, User, Loader2, Activity,
   AlertTriangle, CheckCircle2, Timer, Inbox, RefreshCw, Zap, ThumbsUp
 } from "lucide-react";
-import { fetchJsonWithAuth } from "@/lib/clientAuth";
+import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
 
 interface AnalyticsData {
   total: number;
@@ -42,15 +41,16 @@ const LANG_NAMES: Record<string, string> = {
 const COLORS = ["#f43f5e", "#3b82f6", "#22c55e", "#a855f7", "#fb923c", "#14b8a6", "#eab308", "#ec4899"];
 
 export default function AnalyticsPage() {
-  const router = useRouter();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [hotelUser, setHotelUser] = useState<{ name: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [loadError, setLoadError] = useState("");
 
   const fetchData = async (showSpinner = false) => {
     if (showSpinner) setRefreshing(true);
+    if (!showSpinner) setLoadError("");
     try {
       const [analytics, user] = await Promise.all([
         fetchJsonWithAuth<AnalyticsData>("/api/analytics"),
@@ -59,15 +59,17 @@ export default function AnalyticsPage() {
       setData(analytics);
       if (user.name) setHotelUser({ name: user.name });
       setLastRefresh(new Date());
-    } catch {
-      router.push("/admin/login");
+    } catch (err: unknown) {
+      if (!isUnauthorizedError(err)) {
+        setLoadError("Failed to load analytics. Please try again.");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  useEffect(() => { fetchData(); }, [router]);
+  useEffect(() => { fetchData(); }, []);
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -83,10 +85,22 @@ export default function AnalyticsPage() {
   if (loading || !data) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral-950">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 text-rose-500 animate-spin" />
-          <p className="text-sm text-neutral-600">Loading analytics...</p>
-        </div>
+        {loadError ? (
+          <div className="text-center space-y-4 px-4">
+            <p className="text-sm text-red-400">{loadError}</p>
+            <button
+              onClick={() => fetchData()}
+              className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="w-8 h-8 text-rose-500 animate-spin" />
+            <p className="text-sm text-neutral-600">Loading analytics...</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -98,6 +112,13 @@ export default function AnalyticsPage() {
 
   return (
     <div className="min-h-screen bg-neutral-950">
+      {loadError && (
+        <div className="max-w-7xl mx-auto px-6 pt-4">
+          <div className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
+            {loadError}
+          </div>
+        </div>
+      )}
       {/* Header */}
       <header className="sticky top-0 z-20 bg-neutral-950/80 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
