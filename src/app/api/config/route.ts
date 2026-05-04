@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server';
 import { getHotelConfig, updateHotelConfig, resetHotelConfig } from '@/lib/hotelConfig';
 import { requireAuth } from '@/lib/auth';
+import { validateCsrf } from "@/lib/csrf";
 
 // Public: frontend needs branding/config to render
 export async function GET() {
@@ -20,6 +21,8 @@ export async function GET() {
 export async function PUT(req: Request) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
+  const csrfError = await validateCsrf(req);
+  if (csrfError) return csrfError;
 
   try {
     const updates = await req.json();
@@ -34,9 +37,11 @@ export async function PUT(req: Request) {
 }
 
 // Protected: only authenticated hotel admins can reset config
-export async function DELETE() {
+export async function DELETE(req: Request) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
+  const csrfError = await validateCsrf(req);
+  if (csrfError) return csrfError;
 
   const config = resetHotelConfig();
   return NextResponse.json({ success: true, config, message: 'Configuration reset to defaults.' });

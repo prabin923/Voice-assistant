@@ -136,7 +136,7 @@ export default function SupportInbox() {
   };
 
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await fetchJsonWithAuth<{ success: boolean }>("/api/auth/logout", { method: "POST" });
     window.location.href = "/admin/login";
   };
 

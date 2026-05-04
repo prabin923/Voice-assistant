@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 const SESSION_COOKIE = "session";
+const CSRF_COOKIE = "csrf-token";
 
 // SECURITY: Never fall back to a hardcoded secret in production
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
@@ -51,6 +52,15 @@ export async function setSessionCookie(token: string) {
     path: "/",
     maxAge: 60 * 60 * 24, // 24 hours (reduced from 7 days)
   });
+
+  const csrfToken = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
+  cookieStore.set(CSRF_COOKIE, csrfToken, {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    path: "/",
+    maxAge: 60 * 60 * 24,
+  });
 }
 
 export async function getSession(): Promise<{ hotelId: string; email: string } | null> {
@@ -63,6 +73,7 @@ export async function getSession(): Promise<{ hotelId: string; email: string } |
 export async function clearSession() {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE);
+  cookieStore.delete(CSRF_COOKIE);
 }
 
 /**

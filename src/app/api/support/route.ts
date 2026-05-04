@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supportTickets } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
+import { validateCsrf } from "@/lib/csrf";
 
 // SECURITY: Support tickets contain guest conversations — require auth
 
@@ -22,6 +23,8 @@ export async function GET(req: Request) {
 export async function PUT(req: Request) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
+  const csrfError = await validateCsrf(req);
+  if (csrfError) return csrfError;
 
   try {
     const { ticketId, staffReply } = await req.json();

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   Settings, Hotel, Phone, Clock, Utensils, Dumbbell,
   Save, RotateCcw, Plus, Trash2, ChevronLeft, CheckCircle2,
@@ -31,7 +30,6 @@ interface HotelConfig {
 type Tab = "branding" | "contact" | "policies" | "rooms" | "dining" | "amenities" | "faq" | "persona";
 
 export default function SettingsPage() {
-  const router = useRouter();
   const [config, setConfig] = useState<HotelConfig | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("branding");
   const [saving, setSaving] = useState(false);
@@ -67,7 +65,7 @@ export default function SettingsPage() {
   }, [loadProtectedData]);
 
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await fetchJsonWithAuth<{ success: boolean }>("/api/auth/logout", { method: "POST" });
     window.location.href = "/admin/login";
   };
 
@@ -76,17 +74,12 @@ export default function SettingsPage() {
     setSaving(true);
     setSaveStatus("idle");
     try {
-      const res = await fetch("/api/config", {
+      await fetchJsonWithAuth<{ success: boolean; config: HotelConfig }>("/api/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
       });
-      if (res.status === 401) {
-        router.push("/admin/login");
-        return;
-      }
-      if (res.ok) setSaveStatus("success");
-      else setSaveStatus("error");
+      setSaveStatus("success");
     } catch { setSaveStatus("error"); }
     finally { setSaving(false); setTimeout(() => setSaveStatus("idle"), 3000); }
   };
