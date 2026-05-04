@@ -8,6 +8,7 @@ import {
   ChevronLeft, Settings, LogOut, User, Loader2, Activity,
   AlertTriangle, CheckCircle2, Timer, Inbox, RefreshCw, Zap, ThumbsUp
 } from "lucide-react";
+import { fetchJsonWithAuth } from "@/lib/clientAuth";
 
 interface AnalyticsData {
   total: number;
@@ -52,10 +53,9 @@ export default function AnalyticsPage() {
     if (showSpinner) setRefreshing(true);
     try {
       const [analytics, user] = await Promise.all([
-        fetch("/api/analytics").then(r => r.json()),
-        fetch("/api/auth/me").then(r => r.json()),
+        fetchJsonWithAuth<AnalyticsData>("/api/analytics"),
+        fetchJsonWithAuth<{ name?: string }>("/api/auth/me"),
       ]);
-      if (analytics.error) { router.push("/admin/login"); return; }
       setData(analytics);
       if (user.name) setHotelUser(user);
       setLastRefresh(new Date());

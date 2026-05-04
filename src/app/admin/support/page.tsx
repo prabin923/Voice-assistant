@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   ChevronLeft, Settings, LogOut, User, Loader2,
   Inbox, CheckCircle2, Clock, Send, MessageSquare, AlertCircle,
   RefreshCw, BarChart3, Bell, ExternalLink, X
 } from "lucide-react";
+import { fetchJsonWithAuth } from "@/lib/clientAuth";
 
 interface Ticket {
   id: string;
@@ -58,7 +58,6 @@ function getPriorityLevel(ticket: Ticket): { label: string; color: string; urgen
 }
 
 export default function SupportInbox() {
-  const router = useRouter();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [openCount, setOpenCount] = useState(0);
   const [filter, setFilter] = useState<"all" | "open" | "resolved">("open");
@@ -74,23 +73,21 @@ export default function SupportInbox() {
     if (showSpinner) setRefreshing(true);
     const statusParam = filter === "all" ? "" : `?status=${filter}`;
     try {
-      const res = await fetch(`/api/support${statusParam}`);
-      const data = await res.json();
-      if (data.error) { router.push("/admin/login"); return; }
+      const data = await fetchJsonWithAuth<{ tickets: Ticket[]; openCount: number }>(`/api/support${statusParam}`);
       setTickets(data.tickets);
       setOpenCount(data.openCount);
-    } catch { /* ignore */ }
+    } catch { /* Redirect handled on 401 by shared helper */ }
     finally { setRefreshing(false); }
-  }, [filter, router]);
+  }, [filter]);
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/auth/me").then(r => r.json()),
-    ]).then(([user]) => {
-      if (user.name) setHotelUser(user);
-      setLoading(false);
-    }).catch(() => router.push("/admin/login"));
-  }, [router]);
+    fetchJsonWithAuth<{ name?: string }>("/api/auth/me")
+      .then((user) => {
+        if (user.name) setHotelUser(user as { name: string });
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
   useEffect(() => {
     if (!loading) fetchTickets();
@@ -111,7 +108,7 @@ export default function SupportInbox() {
     if (!selectedTicket || !replyText.trim()) return;
     setReplying(true);
     try {
-      await fetch("/api/support", {
+      await fetchJsonWithAuth("/api/support", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticketId: selectedTicket.id, staffReply: replyText }),

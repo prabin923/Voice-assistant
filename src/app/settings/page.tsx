@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Settings, Hotel, Phone, Clock, Utensils, Dumbbell,
   Save, RotateCcw, Plus, Trash2, ChevronLeft, CheckCircle2,
   AlertCircle, MessageSquare, LogOut, User, BarChart3, Inbox, X,
   Crown, Sparkles
 } from "lucide-react";
+import { fetchJsonWithAuth } from "@/lib/clientAuth";
 
 interface RoomType { name: string; pricePerNight: number; currency: string; description: string; maxOccupancy: number; }
 interface DiningVenue { name: string; cuisine: string; hours: string; description: string; }
@@ -29,6 +31,7 @@ interface HotelConfig {
 type Tab = "branding" | "contact" | "policies" | "rooms" | "dining" | "amenities" | "faq" | "persona";
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [config, setConfig] = useState<HotelConfig | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("branding");
   const [saving, setSaving] = useState(false);
@@ -42,10 +45,15 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/config").then(r => r.json()).then(setConfig);
-    fetch("/api/auth/me").then(r => r.json()).then(data => {
-      if (data.name) setHotelUser(data);
-    }).catch(() => {});
+    fetchJsonWithAuth<HotelConfig>("/api/config")
+      .then(setConfig)
+      .catch(() => {});
+
+    fetchJsonWithAuth<{ name?: string; email?: string }>("/api/auth/me")
+      .then((data) => {
+        if (data.name && data.email) setHotelUser({ name: data.name, email: data.email });
+      })
+      .catch(() => {});
   }, []);
 
   const handleLogout = async () => {
@@ -63,6 +71,10 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
       });
+      if (res.status === 401) {
+        router.push("/admin/login");
+        return;
+      }
       if (res.ok) setSaveStatus("success");
       else setSaveStatus("error");
     } catch { setSaveStatus("error"); }
@@ -70,9 +82,12 @@ export default function SettingsPage() {
   };
 
   const reset = async () => {
-    const res = await fetch("/api/config", { method: "DELETE" });
-    const data = await res.json();
-    if (data.config) setConfig(data.config);
+    try {
+      const data = await fetchJsonWithAuth<{ config?: HotelConfig }>("/api/config", { method: "DELETE" });
+      if (data.config) setConfig(data.config);
+    } catch {
+      // Redirect is handled by shared auth helper on 401.
+    }
   };
 
   if (!config) {

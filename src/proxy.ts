@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 
-const secret = new TextEncoder().encode(process.env.JWT_SECRET || "fallback-dev-secret");
+const jwtSecret =
+  process.env.JWT_SECRET ||
+  (process.env.NODE_ENV === "production" ? undefined : "dev-only-local-secret-do-not-use-in-prod");
+const secret = jwtSecret ? new TextEncoder().encode(jwtSecret) : null;
 
 const protectedRoutes = ["/settings", "/admin/analytics", "/admin/support"];
 const protectedApiRoutes = ["/api/config", "/api/analytics", "/api/support"];
 const authRoutes = ["/admin/login", "/admin/register"];
 
+function matchesRoute(path: string, route: string): boolean {
+  return path === route || path.startsWith(`${route}/`);
+}
+
 async function verifySession(token: string) {
   try {
+    if (!secret) return null;
     const { payload } = await jwtVerify(token, secret);
     return payload as unknown as { hotelId: string; email: string };
   } catch {
@@ -23,17 +31,17 @@ export async function proxy(request: NextRequest) {
   const session = token ? await verifySession(token) : null;
 
   // Redirect authenticated users away from auth pages
-  if (authRoutes.some((route) => path.startsWith(route)) && session) {
+  if (authRoutes.some((route) => matchesRoute(path, route)) && session) {
     return NextResponse.redirect(new URL("/settings", request.url));
   }
 
   // Protect admin pages
-  if (protectedRoutes.some((route) => path.startsWith(route)) && !session) {
+  if (protectedRoutes.some((route) => matchesRoute(path, route)) && !session) {
     return NextResponse.redirect(new URL("/admin/login", request.url));
   }
 
   // Protect admin API routes
-  if (protectedApiRoutes.some((route) => path.startsWith(route)) && !session) {
+  if (protectedApiRoutes.some((route) => matchesRoute(path, route)) && !session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

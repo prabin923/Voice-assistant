@@ -21,20 +21,20 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         setError(data.error || "Login failed");
-        setLoading(false);
         return;
       }
 
-      window.location.href = "/settings";
+      router.push("/settings");
     } catch (err: any) {
       setError(err?.message || "Network error. Please try again.");
+    } finally {
       setLoading(false);
     }
   }
