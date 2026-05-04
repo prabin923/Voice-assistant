@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Mic, Volume2, Loader2, Phone, PhoneCall, Settings, Globe, ChevronDown, Check, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Mic, Volume2, Loader2, Phone, PhoneCall, Settings, Globe, ChevronDown, Check, ThumbsUp, ThumbsDown, Sun, Moon } from "lucide-react";
 import CallOverlay from "@/components/CallOverlay";
 
 interface BrandingConfig {
@@ -114,6 +114,7 @@ export default function VoiceAssistant() {
   const [languageSearch, setLanguageSearch] = useState("");
   const [inCall, setInCall] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [branding, setBranding] = useState<BrandingConfig>({
     hotelName: "Willow Hotel",
     tagline: "Premium AI Concierge",
@@ -135,6 +136,21 @@ export default function VoiceAssistant() {
   selectedLanguageRef.current = selectedLanguage;
 
   useEffect(() => { setMounted(true); }, []);
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem("theme");
+    const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const nextTheme = savedTheme === "light" || savedTheme === "dark"
+      ? savedTheme
+      : (systemPrefersDark ? "dark" : "light");
+    setTheme(nextTheme);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.remove("light", "dark");
+    document.documentElement.classList.add(theme);
+    window.localStorage.setItem("theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     fetch("/api/config")
@@ -480,23 +496,35 @@ export default function VoiceAssistant() {
   );
 
   const isRTL = ["ar", "he"].includes(selectedLanguage.code.split("-")[0]);
+  const isDark = theme === "dark";
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans selection:bg-rose-500/30 overflow-hidden" dir={isRTL ? "rtl" : "ltr"}>
+    <div
+      className={`min-h-screen flex flex-col font-sans selection:bg-rose-500/30 overflow-hidden transition-colors ${
+        isDark ? "bg-neutral-950 text-neutral-100" : "bg-neutral-100 text-neutral-900"
+      }`}
+      dir={isRTL ? "rtl" : "ltr"}
+    >
       {/* Premium Background — static radial gradients (no runtime blur) */}
-      <div className="fixed inset-0 -z-10 bg-[#050505]">
+      <div className={`fixed inset-0 -z-10 ${isDark ? "bg-[#050505]" : "bg-[#f5f5f5]"}`}>
         <div 
           className="absolute top-[-5%] left-[-5%] w-[45%] h-[45%] rounded-full opacity-15"
-          style={{ background: `radial-gradient(circle, ${branding.accentColor}40 0%, transparent 70%)` }}
+          style={{ background: `radial-gradient(circle, ${branding.accentColor}${isDark ? "40" : "26"} 0%, transparent 70%)` }}
         />
         <div 
           className="absolute bottom-[-5%] right-[-5%] w-[50%] h-[50%] rounded-full opacity-10"
-          style={{ background: `radial-gradient(circle, ${branding.accentColor}30 0%, transparent 70%)` }}
+          style={{ background: `radial-gradient(circle, ${branding.accentColor}${isDark ? "30" : "1f"} 0%, transparent 70%)` }}
         />
       </div>
 
       {/* Glass Header — mobile responsive */}
-      <header className="px-4 sm:px-6 py-4 sm:py-6 flex justify-between items-center sticky top-0 z-20 glass-morphic border-b border-white/[0.03]">
+      <header
+        className={`px-4 sm:px-6 py-4 sm:py-6 flex justify-between items-center sticky top-0 z-20 border-b backdrop-blur-md ${
+          isDark
+            ? "glass-morphic border-white/[0.03]"
+            : "bg-white/80 border-neutral-200"
+        }`}
+      >
         <div className="flex items-center gap-4 cursor-pointer" onClick={() => window.location.reload()}>
           <div
             className="h-11 w-11 rounded-2xl flex items-center justify-center shadow-2xl rotate-3 hover:rotate-0 transition-transform duration-500"
@@ -508,10 +536,10 @@ export default function VoiceAssistant() {
             <Phone className="w-5 h-5 text-white" />
           </div>
           <div className="flex flex-col">
-            <h1 className="text-sm font-bold tracking-tight text-white leading-tight">{branding.hotelName}</h1>
+            <h1 className={`text-sm font-bold tracking-tight leading-tight ${isDark ? "text-white" : "text-neutral-900"}`}>{branding.hotelName}</h1>
             <div className="hidden sm:flex items-center gap-2 mt-0.5">
               <span className={`w-1.5 h-1.5 rounded-full ${useServerSTT ? "bg-cyan-400" : "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.6)]"}`} />
-              <span className="text-[9px] font-black tracking-widest text-neutral-500 uppercase">
+              <span className={`text-[9px] font-black tracking-widest uppercase ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
                 {useServerSTT ? "AI Mode" : "Native Mode"}
               </span>
             </div>
@@ -519,10 +547,28 @@ export default function VoiceAssistant() {
         </div>
 
         <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+            className={`h-10 w-10 flex items-center justify-center rounded-2xl transition-all active:scale-90 ${
+              isDark
+                ? "glass text-neutral-400 hover:text-white"
+                : "bg-white border border-neutral-200 text-neutral-500 hover:text-neutral-900"
+            }`}
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
+
           <div className="relative" ref={langMenuRef}>
             <button
               onClick={() => setShowLanguageMenu(!showLanguageMenu)}
-              className="glass px-4 py-2.5 rounded-2xl text-[13px] font-medium text-neutral-300 hover:text-white transition-all flex items-center gap-3 active:scale-95"
+              className={`px-4 py-2.5 rounded-2xl text-[13px] font-medium transition-all flex items-center gap-3 active:scale-95 ${
+                isDark
+                  ? "glass text-neutral-300 hover:text-white"
+                  : "bg-white border border-neutral-200 text-neutral-700 hover:text-neutral-900"
+              }`}
             >
               <span className="text-lg">{selectedLanguage.flag}</span>
               <span className="hidden sm:inline tracking-tight">{selectedLanguage.nativeName}</span>
@@ -530,14 +576,23 @@ export default function VoiceAssistant() {
             </button>
 
             {showLanguageMenu && (
-              <div className="absolute right-0 mt-3 w-80 max-h-96 glass-morphic rounded-3xl shadow-2xl overflow-hidden z-30 animate-in slide-in-from-top-2" dir="ltr">
-                <div className="p-4 border-b border-white/[0.05]">
+              <div
+                className={`absolute right-0 mt-3 w-80 max-h-96 rounded-3xl shadow-2xl overflow-hidden z-30 animate-in slide-in-from-top-2 ${
+                  isDark ? "glass-morphic" : "bg-white border border-neutral-200"
+                }`}
+                dir="ltr"
+              >
+                <div className={`p-4 border-b ${isDark ? "border-white/[0.05]" : "border-neutral-200"}`}>
                   <input
                     type="text"
                     placeholder="Search language..."
                     value={languageSearch}
                     onChange={(e) => setLanguageSearch(e.target.value)}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-sm outline-none font-medium"
+                    className={`w-full px-4 py-3 rounded-2xl text-sm outline-none font-medium ${
+                      isDark
+                        ? "bg-white/5 border border-white/10 text-white"
+                        : "bg-neutral-50 border border-neutral-200 text-neutral-900"
+                    }`}
                     autoFocus
                   />
                 </div>
@@ -547,7 +602,9 @@ export default function VoiceAssistant() {
                       key={lang.code}
                       onClick={() => changeLanguage(lang)}
                       className={`w-full px-5 py-3.5 flex items-center gap-4 text-sm transition-all group ${
-                        selectedLanguage.code === lang.code ? "bg-white/10 text-white" : "text-neutral-400 hover:bg-white/[0.03]"
+                        selectedLanguage.code === lang.code
+                          ? (isDark ? "bg-white/10 text-white" : "bg-neutral-100 text-neutral-900")
+                          : (isDark ? "text-neutral-400 hover:bg-white/[0.03]" : "text-neutral-600 hover:bg-neutral-50")
                       }`}
                     >
                       <span className="text-xl group-hover:scale-110 transition-transform">{lang.flag}</span>
@@ -565,7 +622,11 @@ export default function VoiceAssistant() {
 
           <Link
             href="/settings"
-            className="h-10 w-10 glass flex items-center justify-center rounded-2xl text-neutral-400 hover:text-white transition-all active:scale-90"
+            className={`h-10 w-10 flex items-center justify-center rounded-2xl transition-all active:scale-90 ${
+              isDark
+                ? "glass text-neutral-400 hover:text-white"
+                : "bg-white border border-neutral-200 text-neutral-500 hover:text-neutral-900"
+            }`}
           >
             <Settings className="w-5 h-5" />
           </Link>
@@ -585,33 +646,37 @@ export default function VoiceAssistant() {
               </div>
             )}
 
-            <div className={`glass-circle relative z-10 w-56 h-56 sm:w-64 sm:h-64 rounded-full flex flex-col items-center justify-center overflow-hidden border hover:scale-105 active:scale-95 transition-all duration-700 ease-out animate-morph ${isListening ? 'scale-110 glass-circle-listening' : 'border-white/[0.08] group-hover:border-white/20'} ${isProcessing ? 'animate-pulse' : ''} ${isSpeaking ? 'scale-105 glass-circle-speaking' : ''}`}>
+            <div className={`glass-circle relative z-10 w-56 h-56 sm:w-64 sm:h-64 rounded-full flex flex-col items-center justify-center overflow-hidden border hover:scale-105 active:scale-95 transition-all duration-700 ease-out animate-morph ${isListening ? "scale-110 glass-circle-listening" : (isDark ? "border-white/[0.08] group-hover:border-white/20" : "border-neutral-200 group-hover:border-neutral-300")} ${isProcessing ? "animate-pulse" : ""} ${isSpeaking ? "scale-105 glass-circle-speaking" : ""}`}>
               {isProcessing ? (
                 <div className="flex flex-col items-center gap-4">
-                  <Loader2 className="w-16 h-16 text-white/80 animate-spin" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-white/30 animate-pulse">Processing</span>
+                  <Loader2 className={`w-16 h-16 animate-spin ${isDark ? "text-white/80" : "text-neutral-700"}`} />
+                  <span className={`text-[10px] font-black uppercase tracking-widest animate-pulse ${isDark ? "text-white/30" : "text-neutral-500"}`}>Processing</span>
                 </div>
               ) : isListening ? (
-                <Mic className="w-20 h-20 text-white/90 animate-pulse" />
+                <Mic className={`w-20 h-20 animate-pulse ${isDark ? "text-white/90" : "text-neutral-800"}`} />
               ) : isSpeaking ? (
-                <Volume2 className="w-20 h-20 text-white/90 animate-pulse-soft" />
+                <Volume2 className={`w-20 h-20 animate-pulse-soft ${isDark ? "text-white/90" : "text-neutral-800"}`} />
               ) : (
                 <div className="flex flex-col items-center gap-4">
-                  <div className="w-20 h-20 rounded-full bg-white/[0.04] flex items-center justify-center border border-white/[0.08] group-hover:bg-white/[0.08] group-hover:border-white/15 transition-colors duration-300">
-                    <Mic className="w-10 h-10 text-neutral-400 group-hover:text-white/90 transition-colors duration-300" />
+                  <div className={`w-20 h-20 rounded-full flex items-center justify-center border transition-colors duration-300 ${
+                    isDark
+                      ? "bg-white/[0.04] border-white/[0.08] group-hover:bg-white/[0.08] group-hover:border-white/15"
+                      : "bg-white/80 border-neutral-200 group-hover:bg-white group-hover:border-neutral-300"
+                  }`}>
+                    <Mic className={`w-10 h-10 transition-colors duration-300 ${isDark ? "text-neutral-400 group-hover:text-white/90" : "text-neutral-500 group-hover:text-neutral-900"}`} />
                   </div>
                   <div className="flex flex-col items-center gap-1">
-                    <span className="text-[11px] font-black uppercase tracking-[0.4em] text-neutral-500 group-hover:text-neutral-300 transition-colors duration-300">
+                    <span className={`text-[11px] font-black uppercase tracking-[0.4em] transition-colors duration-300 ${isDark ? "text-neutral-500 group-hover:text-neutral-300" : "text-neutral-600 group-hover:text-neutral-800"}`}>
                       {ui.tapToSpeak.split(' ')[0]}
                     </span>
-                    <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-neutral-600 group-hover:text-neutral-400 transition-colors duration-300">
+                    <span className={`text-[9px] font-bold uppercase tracking-[0.2em] transition-colors duration-300 ${isDark ? "text-neutral-600 group-hover:text-neutral-400" : "text-neutral-500 group-hover:text-neutral-700"}`}>
                       {ui.tapToSpeak.split(' ').slice(1).join(' ')}
                     </span>
                   </div>
                 </div>
               )}
 
-              <div className="absolute inset-0 rounded-full bg-gradient-to-b from-white/[0.06] to-transparent pointer-events-none" />
+              <div className={`absolute inset-0 rounded-full pointer-events-none ${isDark ? "bg-gradient-to-b from-white/[0.06] to-transparent" : "bg-gradient-to-b from-white/70 via-white/20 to-transparent"}`} />
             </div>
 
             <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 whitespace-nowrap">
@@ -620,7 +685,7 @@ export default function VoiceAssistant() {
                   {isListening ? ui.listening : isSpeaking ? ui.speaking : isProcessing ? 'Processing' : inConversation ? 'Tap to End' : ui.ready}
                 </span>
                 {!isListening && !isSpeaking && !isProcessing && (
-                  <div className="w-12 h-0.5 rounded-full bg-white/5 overflow-hidden">
+                  <div className={`w-12 h-0.5 rounded-full overflow-hidden ${isDark ? "bg-white/5" : "bg-neutral-300/70"}`}>
                     <div className="w-full h-full bg-rose-500/20 animate-shimmer" />
                   </div>
                 )}
@@ -634,9 +699,9 @@ export default function VoiceAssistant() {
             )}
           </div>
           ) : (
-          <div className="relative w-56 h-56 sm:w-64 sm:h-64 rounded-full glass-circle flex flex-col items-center justify-center border border-white/[0.08]">
-            <div className="w-20 h-20 rounded-full bg-white/[0.04] flex items-center justify-center border border-white/[0.08]">
-              <Mic className="w-10 h-10 text-neutral-400" />
+          <div className={`relative w-56 h-56 sm:w-64 sm:h-64 rounded-full glass-circle flex flex-col items-center justify-center border ${isDark ? "border-white/[0.08]" : "border-neutral-200"}`}>
+            <div className={`w-20 h-20 rounded-full flex items-center justify-center border ${isDark ? "bg-white/[0.04] border-white/[0.08]" : "bg-white/80 border-neutral-200"}`}>
+              <Mic className={`w-10 h-10 ${isDark ? "text-neutral-400" : "text-neutral-500"}`} />
             </div>
           </div>
           )}
@@ -644,18 +709,22 @@ export default function VoiceAssistant() {
           <div className="flex flex-col items-center gap-6 mt-8">
             <button
               onClick={() => setInCall(true)}
-              className="group flex items-center gap-4 px-8 py-4 rounded-full glass hover:bg-white/[0.05] transition-all active:scale-95 border-emerald-500/20 hover:border-emerald-500/40"
+              className={`group flex items-center gap-4 px-8 py-4 rounded-full transition-all active:scale-95 ${
+                isDark
+                  ? "glass hover:bg-white/[0.05] border-emerald-500/20 hover:border-emerald-500/40"
+                  : "bg-white border border-emerald-200 hover:border-emerald-300 shadow-[0_8px_28px_rgba(16,185,129,0.08)]"
+              }`}
             >
               <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500/20">
                 <PhoneCall className="w-5 h-5 group-hover:animate-ring" />
               </div>
               <div className="flex flex-col items-start text-left">
-                <span className="text-[13px] font-bold text-white tracking-tight">Concierge Call</span>
+                <span className={`text-[13px] font-bold tracking-tight ${isDark ? "text-white" : "text-neutral-900"}`}>Concierge Call</span>
                 <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500/60">Telephony Mode</span>
               </div>
             </button>
             
-            <p className="text-[11px] font-bold text-neutral-500 text-center max-w-xs leading-loose tracking-widest uppercase opacity-60">
+            <p className={`text-[11px] font-bold text-center max-w-xs leading-loose tracking-widest uppercase opacity-70 ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
               {branding.tagline}
             </p>
           </div>
@@ -663,11 +732,15 @@ export default function VoiceAssistant() {
 
         <div className="w-full max-w-2xl mt-16 space-y-8 z-10">
           {messages.length === 0 ? (
-            <div className="text-center animate-in backdrop-blur-sm p-12 rounded-[50px] border border-white/[0.02]">
+            <div className={`text-center animate-in backdrop-blur-sm p-12 rounded-[50px] border ${
+              isDark
+                ? "border-white/[0.02] bg-transparent"
+                : "border-neutral-200 bg-white/65 shadow-[0_18px_50px_rgba(15,23,42,0.08)]"
+            }`}>
               <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-gradient mb-4">
                 {branding.welcomeMessage}
               </h2>
-              <p className="text-neutral-500 text-sm font-medium leading-relaxed max-w-sm mx-auto opacity-70">
+              <p className={`text-sm font-medium leading-relaxed max-w-sm mx-auto opacity-80 ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
                 {ui.welcomeHint}
               </p>
             </div>
@@ -683,13 +756,17 @@ export default function VoiceAssistant() {
                   <div className={`
                     px-4 sm:px-6 py-3 sm:py-4 rounded-3xl max-w-[95%] sm:max-w-[80%] text-[14px] sm:text-[15px] font-medium leading-relaxed
                     ${msg.role === "user" 
-                      ? "bg-white/5 text-neutral-200 rounded-tr-none border border-white/10" 
-                      : "glass text-white rounded-tl-none border-rose-500/20 shadow-xl shadow-rose-950/20"}
+                      ? (isDark
+                          ? "bg-white/5 text-neutral-200 rounded-tr-none border border-white/10"
+                          : "bg-white text-neutral-800 rounded-tr-none border border-neutral-200 shadow-[0_10px_30px_rgba(15,23,42,0.08)]")
+                      : (isDark
+                          ? "glass text-white rounded-tl-none border-rose-500/20 shadow-xl shadow-rose-950/20"
+                          : "bg-gradient-to-br from-rose-50 to-orange-50 text-neutral-800 rounded-tl-none border border-rose-200/70 shadow-[0_12px_34px_rgba(244,63,94,0.12)]")}
                   `}>
                     {msg.content}
                   </div>
                   <div className="flex items-center gap-2 px-1">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-neutral-600">
+                    <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>
                       {msg.role === "user" ? ui.you : branding.hotelName}
                     </span>
                     {msg.role === "assistant" && (
@@ -705,7 +782,7 @@ export default function VoiceAssistant() {
                                 setFeedbackGiven(prev => ({ ...prev, [i]: "up" }));
                                 fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageContent: msg.content, rating: "up" }) });
                               }}
-                              className="p-1 rounded-lg text-neutral-600 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all"
+                              className={`p-1 rounded-lg transition-all ${isDark ? "text-neutral-600 hover:text-emerald-400 hover:bg-emerald-500/10" : "text-neutral-500 hover:text-emerald-600 hover:bg-emerald-500/10"}`}
                               title="Helpful"
                             >
                               <ThumbsUp className="w-3 h-3" />
@@ -715,7 +792,7 @@ export default function VoiceAssistant() {
                                 setFeedbackGiven(prev => ({ ...prev, [i]: "down" }));
                                 fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageContent: msg.content, rating: "down" }) });
                               }}
-                              className="p-1 rounded-lg text-neutral-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
+                              className={`p-1 rounded-lg transition-all ${isDark ? "text-neutral-600 hover:text-rose-400 hover:bg-rose-500/10" : "text-neutral-500 hover:text-rose-600 hover:bg-rose-500/10"}`}
                               title="Not helpful"
                             >
                               <ThumbsDown className="w-3 h-3" />
@@ -733,7 +810,13 @@ export default function VoiceAssistant() {
         </div>
       </main>
 
-      <footer className="text-center py-6 text-[10px] font-bold tracking-[0.2em] text-neutral-600 border-t border-white/[0.02] uppercase bg-black/20 backdrop-blur-md">
+      <footer
+        className={`text-center py-6 text-[10px] font-bold tracking-[0.2em] uppercase backdrop-blur-md ${
+          isDark
+            ? "text-neutral-600 border-t border-white/[0.02] bg-black/20"
+            : "text-neutral-500 border-t border-neutral-200 bg-white/70"
+        }`}
+      >
         {branding.hotelName} concierge • {selectedLanguage.flag} {selectedLanguage.nativeName}
       </footer>
 

@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   ChevronLeft, Settings, LogOut, User, Loader2,
   Inbox, CheckCircle2, Clock, Send, MessageSquare, AlertCircle,
-  RefreshCw, BarChart3, Bell, ExternalLink, X
+  RefreshCw, BarChart3, Bell, ExternalLink, X, Sun, Moon
 } from "lucide-react";
 import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
 
@@ -69,6 +69,7 @@ export default function SupportInbox() {
   const [refreshing, setRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   const fetchTickets = useCallback(async (showSpinner = false) => {
     if (showSpinner) setRefreshing(true);
@@ -99,6 +100,21 @@ export default function SupportInbox() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem("theme");
+    const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const nextTheme = savedTheme === "light" || savedTheme === "dark"
+      ? savedTheme
+      : (systemPrefersDark ? "dark" : "light");
+    setTheme(nextTheme);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.remove("light", "dark");
+    document.documentElement.classList.add(theme);
+    window.localStorage.setItem("theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     if (!loading) fetchTickets();
@@ -142,7 +158,7 @@ export default function SupportInbox() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-neutral-950">
+      <div className={`min-h-screen flex items-center justify-center ${theme === "dark" ? "bg-neutral-950" : "bg-neutral-100"}`}>
         {loadError ? (
           <div className="text-center space-y-4 px-4">
             <p className="text-sm text-red-400">{loadError}</p>
@@ -156,7 +172,7 @@ export default function SupportInbox() {
         ) : (
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="w-8 h-8 text-rose-500 animate-spin" />
-            <p className="text-sm text-neutral-600">Loading support inbox...</p>
+            <p className={`text-sm ${theme === "dark" ? "text-neutral-600" : "text-neutral-500"}`}>Loading support inbox...</p>
           </div>
         )}
       </div>
@@ -170,9 +186,10 @@ export default function SupportInbox() {
     if (pa !== pb) return pb - pa;
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
+  const isDark = theme === "dark";
 
   return (
-    <div className="min-h-screen bg-neutral-950">
+    <div className={`min-h-screen ${isDark ? "bg-neutral-950 text-neutral-100" : "bg-neutral-100 text-neutral-900"}`}>
       {loadError && (
         <div className="max-w-7xl mx-auto px-6 pt-4">
           <div className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
@@ -183,7 +200,7 @@ export default function SupportInbox() {
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-6 right-6 z-50 animate-in slide-in-from-top-2 fade-in">
-          <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm font-medium shadow-2xl backdrop-blur-xl">
+          <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl border text-sm font-medium shadow-2xl backdrop-blur-xl ${isDark ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300" : "bg-white border-emerald-200 text-emerald-600"}`}>
             <CheckCircle2 className="w-4 h-4" />
             {toastMessage}
             <button onClick={() => setToastMessage(null)} className="ml-2 text-emerald-400/50 hover:text-emerald-300">
@@ -194,41 +211,57 @@ export default function SupportInbox() {
       )}
 
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-neutral-950/80 backdrop-blur-xl border-b border-white/5">
+      <header className={`sticky top-0 z-20 backdrop-blur-xl border-b ${isDark ? "bg-neutral-950/80 border-white/5" : "bg-white/85 border-neutral-200"}`}>
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/settings" className="flex items-center gap-2 text-neutral-400 hover:text-white transition-colors">
+            <Link href="/settings" className={`flex items-center gap-2 transition-colors ${isDark ? "text-neutral-400 hover:text-white" : "text-neutral-600 hover:text-neutral-900"}`}>
               <ChevronLeft className="w-5 h-5" />
               <span className="text-sm">Settings</span>
             </Link>
-            <div className="h-6 w-px bg-neutral-800" />
+            <div className={`h-6 w-px ${isDark ? "bg-neutral-800" : "bg-neutral-300"}`} />
             <div className="flex items-center gap-2">
               <Inbox className="w-5 h-5 text-amber-400" />
               <h1 className="text-lg font-semibold">Support Inbox</h1>
               {openCount > 0 && (
-                <span className="ml-1 px-2.5 py-0.5 text-xs font-bold bg-amber-500 text-black rounded-full animate-pulse">{openCount}</span>
+                <span className={`ml-1 px-2.5 py-0.5 text-xs font-bold rounded-full ${isDark ? "bg-amber-500 text-black animate-pulse" : "bg-amber-100 text-amber-700 border border-amber-300"}`}>{openCount}</span>
               )}
             </div>
           </div>
           <div className="flex items-center gap-3">
             <button
+              type="button"
+              onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+              className={`h-8 w-8 rounded-xl border flex items-center justify-center transition-all ${
+                isDark ? "border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-600" : "border-neutral-300 text-neutral-500 hover:text-neutral-900 hover:border-neutral-400 bg-white"
+              }`}
+              aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
+            >
+              {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+            </button>
+            <button
               onClick={() => fetchTickets(true)}
               disabled={refreshing}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium text-neutral-400 border border-neutral-800 hover:border-neutral-600 hover:text-white transition-all disabled:opacity-50"
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all disabled:opacity-50 ${
+                isDark ? "text-neutral-400 border-neutral-800 hover:border-neutral-600 hover:text-white" : "text-neutral-600 border-neutral-300 hover:border-neutral-400 hover:text-neutral-900 bg-white"
+              }`}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">{refreshing ? "Refreshing..." : "Refresh"}</span>
             </button>
-            <Link href="/admin/analytics" className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium text-neutral-400 border border-neutral-800 hover:border-rose-500/30 hover:text-rose-400 transition-all">
+            <Link href="/admin/analytics" className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+              isDark ? "text-neutral-400 border-neutral-800 hover:border-rose-500/30 hover:text-rose-400" : "text-neutral-600 border-neutral-300 hover:border-rose-400/40 hover:text-rose-500 bg-white"
+            }`}>
               <BarChart3 className="w-3.5 h-3.5" /> Analytics
             </Link>
             {hotelUser && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/[0.08] text-sm text-neutral-400">
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm ${isDark ? "bg-white/5 border border-white/[0.08] text-neutral-400" : "bg-white border border-neutral-200 text-neutral-600"}`}>
                 <User className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">{hotelUser.name}</span>
               </div>
             )}
-            <button onClick={handleLogout} className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm text-neutral-500 hover:text-red-400 border border-neutral-800 hover:border-red-500/30 transition-all">
+            <button onClick={handleLogout} className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm border transition-all ${
+              isDark ? "text-neutral-500 hover:text-red-400 border-neutral-800 hover:border-red-500/30" : "text-neutral-500 hover:text-red-500 border-neutral-300 hover:border-red-400/40 bg-white"
+            }`}>
               <LogOut className="w-4 h-4" />
             </button>
           </div>
@@ -238,24 +271,24 @@ export default function SupportInbox() {
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
         {/* Stats Strip */}
         <div className="grid grid-cols-3 gap-4">
-          <div className="bg-amber-500/5 border border-amber-500/10 rounded-xl p-3 flex items-center gap-3">
+          <div className={`rounded-xl p-3 flex items-center gap-3 border ${isDark ? "bg-amber-500/5 border-amber-500/10" : "bg-white border-amber-200/70 shadow-[0_8px_22px_rgba(245,158,11,0.08)]"}`}>
             <Clock className="w-4 h-4 text-amber-400" />
             <div>
               <p className="text-lg font-bold text-amber-400">{openCount}</p>
               <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Open</p>
             </div>
           </div>
-          <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-3 flex items-center gap-3">
+          <div className={`rounded-xl p-3 flex items-center gap-3 border ${isDark ? "bg-emerald-500/5 border-emerald-500/10" : "bg-white border-emerald-200/70 shadow-[0_8px_22px_rgba(16,185,129,0.08)]"}`}>
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             <div>
               <p className="text-lg font-bold text-emerald-400">{tickets.length - openCount >= 0 ? tickets.filter(t => t.status === "resolved").length : 0}</p>
               <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Resolved</p>
             </div>
           </div>
-          <div className="bg-neutral-800/30 border border-neutral-800/60 rounded-xl p-3 flex items-center gap-3">
-            <MessageSquare className="w-4 h-4 text-neutral-400" />
+          <div className={`rounded-xl p-3 flex items-center gap-3 border ${isDark ? "bg-neutral-800/30 border-neutral-800/60" : "bg-white border-neutral-200 shadow-[0_8px_22px_rgba(15,23,42,0.06)]"}`}>
+            <MessageSquare className={`w-4 h-4 ${isDark ? "text-neutral-400" : "text-neutral-600"}`} />
             <div>
-              <p className="text-lg font-bold text-white">{tickets.length}</p>
+              <p className={`text-lg font-bold ${isDark ? "text-white" : "text-neutral-900"}`}>{tickets.length}</p>
               <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Total</p>
             </div>
           </div>
@@ -270,7 +303,9 @@ export default function SupportInbox() {
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 filter === f
                   ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                  : "text-neutral-400 border border-neutral-800 hover:border-neutral-600 hover:text-white"
+                  : (isDark
+                      ? "text-neutral-400 border border-neutral-800 hover:border-neutral-600 hover:text-white"
+                      : "text-neutral-600 border border-neutral-300 hover:border-neutral-400 hover:text-neutral-900 bg-white")
               }`}
             >
               {f === "open" && <Clock className="w-3.5 h-3.5 inline mr-1.5" />}
@@ -287,40 +322,44 @@ export default function SupportInbox() {
           {/* Ticket List */}
           <div className="lg:col-span-2 space-y-3 max-h-[70vh] overflow-y-auto scrollbar-premium">
             {sortedTickets.length === 0 ? (
-              <div className="bg-neutral-900/50 border border-neutral-800/60 rounded-2xl p-8 text-center">
-                <Inbox className="w-10 h-10 text-neutral-700 mx-auto mb-3" />
-                <p className="text-sm text-neutral-600">No {filter !== "all" ? filter : ""} tickets</p>
-                <p className="text-xs text-neutral-700 mt-1">Escalated conversations will appear here</p>
+              <div className={`rounded-2xl p-8 text-center ${isDark ? "bg-neutral-900/50 border border-neutral-800/60" : "bg-white border border-neutral-200 shadow-[0_10px_30px_rgba(15,23,42,0.06)]"}`}>
+                <Inbox className={`w-10 h-10 mx-auto mb-3 ${isDark ? "text-neutral-700" : "text-neutral-400"}`} />
+                <p className={`text-sm ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>No {filter !== "all" ? filter : ""} tickets</p>
+                <p className={`text-xs mt-1 ${isDark ? "text-neutral-700" : "text-neutral-400"}`}>Escalated conversations will appear here</p>
               </div>
             ) : (
               sortedTickets.map(ticket => {
                 const priority = getPriorityLevel(ticket);
                 const priorityColors: Record<string, string> = {
-                  red: "border-l-red-500",
-                  amber: "border-l-amber-500",
-                  yellow: "border-l-yellow-500",
+                  red: isDark ? "border-l-red-500" : "border-l-red-400",
+                  amber: isDark ? "border-l-amber-500" : "border-l-amber-400",
+                  yellow: isDark ? "border-l-yellow-500" : "border-l-yellow-400",
                   neutral: "border-l-transparent",
                 };
                 return (
                   <button
                     key={ticket.id}
                     onClick={() => setSelectedTicket(ticket)}
-                    className={`w-full text-left bg-neutral-900/50 border rounded-2xl p-4 transition-all hover:border-neutral-600 border-l-4 ${priorityColors[priority.color]} ${
-                      selectedTicket?.id === ticket.id ? "border-rose-500/40 bg-rose-500/5" : "border-neutral-800/60"
+                    className={`w-full text-left border rounded-2xl p-4 transition-all border-l-4 ${priorityColors[priority.color]} ${
+                      selectedTicket?.id === ticket.id
+                        ? "border-rose-500/40 bg-rose-500/5"
+                        : (isDark ? "border-neutral-800/60 bg-neutral-900/50 hover:border-neutral-600" : "border-neutral-200 bg-white hover:border-neutral-300")
                     }`}
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
                           ticket.status === "open"
-                            ? "bg-amber-500/10 text-amber-400"
-                            : "bg-emerald-500/10 text-emerald-400"
+                            ? (isDark ? "bg-amber-500/10 text-amber-400" : "bg-amber-100 text-amber-700 border border-amber-300")
+                            : (isDark ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-100 text-emerald-700 border border-emerald-300")
                         }`}>
                           {ticket.status}
                         </span>
                         {priority.urgency >= 2 && (
                           <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
-                            priority.color === "red" ? "bg-red-500/10 text-red-400 animate-pulse" : "bg-amber-500/10 text-amber-400"
+                            priority.color === "red"
+                              ? (isDark ? "bg-red-500/10 text-red-400 animate-pulse" : "bg-red-100 text-red-700 border border-red-300")
+                              : (isDark ? "bg-amber-500/10 text-amber-400" : "bg-amber-100 text-amber-700 border border-amber-300")
                           }`}>
                             {priority.label}
                           </span>
@@ -330,12 +369,12 @@ export default function SupportInbox() {
                         {getTicketAge(ticket.created_at)}
                       </span>
                     </div>
-                    <p className="text-sm text-neutral-300 line-clamp-2">{ticket.guest_message}</p>
+                    <p className={`text-sm line-clamp-2 ${isDark ? "text-neutral-300" : "text-neutral-700"}`}>{ticket.guest_message}</p>
                     <div className="flex items-center justify-between mt-2">
                       <span className="text-[10px] text-neutral-600">
                         {LANG_NAMES[ticket.language] || ticket.language}
                       </span>
-                      <span className="text-[10px] font-mono text-neutral-700">#{ticket.id.slice(-6)}</span>
+                      <span className={`text-[10px] font-mono ${isDark ? "text-neutral-700" : "text-neutral-500"}`}>#{ticket.id.slice(-6)}</span>
                     </div>
                   </button>
                 );
@@ -346,7 +385,7 @@ export default function SupportInbox() {
           {/* Ticket Detail */}
           <div className="lg:col-span-3">
             {selectedTicket ? (
-              <div className="bg-neutral-900/50 border border-neutral-800/60 rounded-2xl p-6 space-y-5 sticky top-24">
+              <div className={`rounded-2xl p-6 space-y-5 sticky top-24 ${isDark ? "bg-neutral-900/50 border border-neutral-800/60" : "bg-white border border-neutral-200 shadow-[0_10px_30px_rgba(15,23,42,0.06)]"}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded-full ${
@@ -359,13 +398,13 @@ export default function SupportInbox() {
                     <span className="text-xs text-neutral-500">
                       {LANG_NAMES[selectedTicket.language] || selectedTicket.language}
                     </span>
-                    <span className="text-[10px] font-mono text-neutral-700">#{selectedTicket.id.slice(-6)}</span>
+                    <span className={`text-[10px] font-mono ${isDark ? "text-neutral-700" : "text-neutral-500"}`}>#{selectedTicket.id.slice(-6)}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-neutral-600 tabular-nums">
                       {getTicketAge(selectedTicket.created_at)}
                     </span>
-                    <button onClick={() => setSelectedTicket(null)} className="text-neutral-600 hover:text-white transition-colors">
+                    <button onClick={() => setSelectedTicket(null)} className={`transition-colors ${isDark ? "text-neutral-600 hover:text-white" : "text-neutral-500 hover:text-neutral-900"}`}>
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -376,7 +415,7 @@ export default function SupportInbox() {
                   <p className="text-xs font-semibold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
                     <MessageSquare className="w-3 h-3" /> Guest Message
                   </p>
-                  <div className="bg-neutral-800/40 rounded-xl p-4 text-sm text-neutral-200 leading-relaxed">
+                  <div className={`rounded-xl p-4 text-sm leading-relaxed ${isDark ? "bg-neutral-800/40 text-neutral-200" : "bg-neutral-50 text-neutral-800 border border-neutral-200"}`}>
                     {selectedTicket.guest_message}
                   </div>
                 </div>
@@ -386,7 +425,7 @@ export default function SupportInbox() {
                   <p className="text-xs font-semibold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
                     <AlertCircle className="w-3 h-3" /> AI Response (Escalated)
                   </p>
-                  <div className="bg-neutral-800/40 rounded-xl p-4 text-sm text-neutral-300 leading-relaxed">
+                  <div className={`rounded-xl p-4 text-sm leading-relaxed ${isDark ? "bg-neutral-800/40 text-neutral-300" : "bg-neutral-50 text-neutral-700 border border-neutral-200"}`}>
                     {selectedTicket.ai_response}
                   </div>
                 </div>
@@ -397,7 +436,7 @@ export default function SupportInbox() {
                     <p className="text-xs font-semibold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
                       <CheckCircle2 className="w-3 h-3" /> Staff Reply
                     </p>
-                    <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-4 text-sm text-neutral-200 leading-relaxed">
+                    <div className={`rounded-xl p-4 text-sm leading-relaxed border ${isDark ? "bg-emerald-500/5 border-emerald-500/10 text-neutral-200" : "bg-emerald-50 border-emerald-200/70 text-neutral-800"}`}>
                       {selectedTicket.staff_reply}
                     </div>
                     <p className="text-xs text-neutral-600">
@@ -406,14 +445,18 @@ export default function SupportInbox() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
+                    <p className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 ${isDark ? "text-neutral-400" : "text-neutral-600"}`}>
                       <Send className="w-3 h-3" /> Reply to Guest
                     </p>
                     <textarea
                       value={replyText}
                       onChange={e => setReplyText(e.target.value)}
                       placeholder="Type your response to the guest..."
-                      className="w-full rounded-xl bg-neutral-800/50 border border-neutral-700/50 px-4 py-3 text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-rose-500/40 focus:border-rose-500/40 transition-all h-28 resize-none"
+                    className={`w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/40 focus:border-rose-500/40 transition-all h-28 resize-none ${
+                        isDark
+                          ? "bg-neutral-800/50 border border-neutral-700/50 text-neutral-100 placeholder-neutral-500"
+                          : "bg-white border border-neutral-300 text-neutral-900 placeholder-neutral-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+                      }`}
                     />
                     <div className="flex items-center justify-between">
                       <p className="text-[10px] text-neutral-600">This will mark the ticket as resolved</p>
@@ -430,10 +473,10 @@ export default function SupportInbox() {
                 )}
               </div>
             ) : (
-              <div className="bg-neutral-900/50 border border-neutral-800/60 rounded-2xl p-12 text-center sticky top-24">
-                <MessageSquare className="w-10 h-10 text-neutral-700 mx-auto mb-3" />
-                <p className="text-sm text-neutral-600">Select a ticket to view details</p>
-                <p className="text-xs text-neutral-700 mt-1">Tickets are sorted by priority</p>
+              <div className={`rounded-2xl p-12 text-center sticky top-24 ${isDark ? "bg-neutral-900/50 border border-neutral-800/60" : "bg-white border border-neutral-200 shadow-[0_10px_30px_rgba(15,23,42,0.06)]"}`}>
+                <MessageSquare className={`w-10 h-10 mx-auto mb-3 ${isDark ? "text-neutral-700" : "text-neutral-400"}`} />
+                <p className={`text-sm ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>Select a ticket to view details</p>
+                <p className={`text-xs mt-1 ${isDark ? "text-neutral-700" : "text-neutral-400"}`}>Tickets are sorted by priority</p>
               </div>
             )}
           </div>

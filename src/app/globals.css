@@ -18,6 +18,10 @@
     @apply bg-neutral-950 text-neutral-100 antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
+
+  html.light body {
+    @apply bg-neutral-100 text-neutral-900;
+  }
 }
 
 /* ── Glassmorphism (lightweight) ── */
@@ -28,12 +32,24 @@
   border: 1px solid var(--glass-border);
 }
 
+html.light .glass {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+}
+
 .glass-morphic {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 100%);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.3);
+}
+
+html.light .glass-morphic {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.88) 0%, rgba(255, 255, 255, 0.72) 100%);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.1);
 }
 
 /* ── Scrollbar ── */
@@ -50,10 +66,21 @@
   box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 0 rgba(255,255,255,0.05);
   will-change: transform;
 }
+
+html.light .glass-circle {
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.8), rgba(229, 231, 235, 0.95));
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.14), inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+}
 .glass-circle-listening {
   background: radial-gradient(circle at 30% 30%, rgba(244,63,94,0.18), rgba(244,63,94,0.1), rgba(10,10,10,0.9));
   border-color: rgba(255,255,255,0.3);
   box-shadow: 0 0 60px -10px rgba(244,63,94,0.2), inset 0 1px 0 0 rgba(255,255,255,0.08);
+}
+
+html.light .glass-circle-listening {
+  background: radial-gradient(circle at 30% 30%, rgba(244, 63, 94, 0.16), rgba(244, 63, 94, 0.08), rgba(255, 255, 255, 0.94));
+  border-color: rgba(244, 63, 94, 0.22);
+  box-shadow: 0 0 60px -14px rgba(244, 63, 94, 0.3), 0 12px 36px rgba(15, 23, 42, 0.12);
 }
 .glass-circle-speaking {
   background: radial-gradient(circle at 30% 30%, rgba(251,146,60,0.12), rgba(251,146,60,0.08), rgba(10,10,10,0.9));
@@ -61,9 +88,20 @@
   box-shadow: 0 0 50px -10px rgba(251,146,60,0.15), inset 0 1px 0 0 rgba(255,255,255,0.08);
 }
 
+html.light .glass-circle-speaking {
+  background: radial-gradient(circle at 30% 30%, rgba(251, 146, 60, 0.15), rgba(251, 146, 60, 0.08), rgba(255, 255, 255, 0.95));
+  border-color: rgba(251, 146, 60, 0.28);
+  box-shadow: 0 0 52px -16px rgba(251, 146, 60, 0.25), 0 12px 36px rgba(15, 23, 42, 0.12);
+}
+
 .glass-outer-ring {
   background: conic-gradient(from 0deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01), rgba(255,255,255,0.04));
   opacity: 0.3;
+}
+
+html.light .glass-outer-ring {
+  background: conic-gradient(from 0deg, rgba(15, 23, 42, 0.1), rgba(15, 23, 42, 0.03), rgba(15, 23, 42, 0.1));
+  opacity: 0.22;
 }
 
 .glass-inner-circle {
@@ -125,6 +163,10 @@
 .text-balance { text-wrap: balance; }
 .text-gradient {
   @apply bg-clip-text text-transparent bg-gradient-to-br from-white via-white to-white/50;
+}
+
+html.light .text-gradient {
+  @apply bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-600;
 }
 
 /* ── Reduce motion for users who prefer it ── */

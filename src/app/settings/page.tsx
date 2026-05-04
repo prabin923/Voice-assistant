@@ -6,7 +6,7 @@ import {
   Settings, Hotel, Phone, Clock, Utensils, Dumbbell,
   Save, RotateCcw, Plus, Trash2, ChevronLeft, CheckCircle2,
   AlertCircle, MessageSquare, LogOut, User, BarChart3, Inbox, X,
-  Crown, Sparkles
+  Crown, Sparkles, Sun, Moon
 } from "lucide-react";
 import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
 
@@ -37,6 +37,7 @@ export default function SettingsPage() {
   const [hotelUser, setHotelUser] = useState<{ name: string; email: string } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "delete" | "info" } | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   const showToast = useCallback((message: string, type: "success" | "delete" | "info" = "success") => {
     setToast({ message, type });
@@ -63,6 +64,21 @@ export default function SettingsPage() {
   useEffect(() => {
     loadProtectedData();
   }, [loadProtectedData]);
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem("theme");
+    const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const nextTheme = savedTheme === "light" || savedTheme === "dark"
+      ? savedTheme
+      : (systemPrefersDark ? "dark" : "light");
+    setTheme(nextTheme);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.remove("light", "dark");
+    document.documentElement.classList.add(theme);
+    window.localStorage.setItem("theme", theme);
+  }, [theme]);
 
   const handleLogout = async () => {
     await fetchJsonWithAuth<{ success: boolean }>("/api/auth/logout", { method: "POST" });
@@ -123,10 +139,19 @@ export default function SettingsPage() {
     { id: "faq", label: "Custom FAQ", icon: <MessageSquare className="w-4 h-4" /> },
     { id: "persona", label: "AI Persona", icon: <Settings className="w-4 h-4" /> },
   ];
+  const isDark = theme === "dark";
 
-  const inputCls = "w-full rounded-xl bg-neutral-800/50 border border-neutral-700/50 px-4 py-3 text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-rose-500/40 focus:border-rose-500/40 transition-all";
-  const labelCls = "block text-xs font-medium text-neutral-400 mb-1.5 uppercase tracking-wider";
-  const cardCls = "bg-neutral-900/50 border border-neutral-800/60 rounded-2xl p-6 space-y-5";
+  const inputCls = `w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/40 focus:border-rose-500/40 transition-all ${
+    isDark
+      ? "bg-neutral-800/50 border border-neutral-700/50 text-neutral-100 placeholder-neutral-500"
+      : "bg-white border border-neutral-300 text-neutral-900 placeholder-neutral-400"
+  }`;
+  const labelCls = `block text-xs font-medium mb-1.5 uppercase tracking-wider ${isDark ? "text-neutral-400" : "text-neutral-600"}`;
+  const cardCls = `rounded-2xl p-6 space-y-5 ${
+    isDark
+      ? "bg-neutral-900/50 border border-neutral-800/60"
+      : "bg-white border border-neutral-200 shadow-[0_10px_30px_rgba(15,23,42,0.06)]"
+  }`;
 
   // Helper to update nested config
   const updateBranding = (key: string, value: string) => setConfig({ ...config, branding: { ...config.branding, [key]: value } });
@@ -134,7 +159,7 @@ export default function SettingsPage() {
   const updatePolicy = (key: string, value: string) => setConfig({ ...config, policies: { ...config.policies, [key]: value } });
 
   return (
-    <div className="min-h-screen bg-neutral-950">
+    <div className={`min-h-screen ${isDark ? "bg-neutral-950 text-neutral-100" : "bg-neutral-100 text-neutral-900"}`}>
       {/* Toast Notification */}
       {toast && (
         <div className="fixed top-6 right-6 z-50 animate-in slide-in-from-top-2 fade-in">
@@ -155,30 +180,44 @@ export default function SettingsPage() {
       )}
 
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-neutral-950/80 backdrop-blur-xl border-b border-white/5">
+      <header className={`sticky top-0 z-20 backdrop-blur-xl border-b ${isDark ? "bg-neutral-950/80 border-white/5" : "bg-white/85 border-neutral-200"}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/" className="flex items-center gap-2 text-neutral-400 hover:text-white transition-colors">
+            <Link href="/" className={`flex items-center gap-2 transition-colors ${isDark ? "text-neutral-400 hover:text-white" : "text-neutral-600 hover:text-neutral-900"}`}>
               <ChevronLeft className="w-5 h-5" />
               <span className="text-sm">Back to Assistant</span>
             </Link>
-            <div className="h-6 w-px bg-neutral-800" />
+            <div className={`h-6 w-px ${isDark ? "bg-neutral-800" : "bg-neutral-300"}`} />
             <div className="flex items-center gap-2">
               <Settings className="w-5 h-5 text-rose-400" />
               <h1 className="text-lg font-semibold">Hotel Configuration</h1>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+              className={`h-9 w-9 rounded-xl border flex items-center justify-center transition-all ${
+                isDark ? "border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-600" : "border-neutral-300 text-neutral-500 hover:text-neutral-900 hover:border-neutral-400 bg-white"
+              }`}
+              aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
+            >
+              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
             {hotelUser && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/[0.08] text-sm text-neutral-400">
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm ${isDark ? "bg-white/5 border border-white/[0.08] text-neutral-400" : "bg-white border border-neutral-200 text-neutral-600"}`}>
                 <User className="w-3.5 h-3.5" />
                 <span>{hotelUser.name}</span>
               </div>
             )}
-            <Link href="/admin/support" className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-neutral-400 border border-neutral-800 hover:border-amber-500/30 hover:text-amber-400 transition-all">
+            <Link href="/admin/support" className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm border transition-all ${
+              isDark ? "text-neutral-400 border-neutral-800 hover:border-amber-500/30 hover:text-amber-400" : "text-neutral-600 border-neutral-300 hover:border-amber-400/40 hover:text-amber-600 bg-white"
+            }`}>
               <Inbox className="w-4 h-4" /><span className="hidden sm:inline">Support</span>
             </Link>
-            <Link href="/admin/analytics" className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-neutral-400 border border-neutral-800 hover:border-rose-500/30 hover:text-rose-400 transition-all">
+            <Link href="/admin/analytics" className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm border transition-all ${
+              isDark ? "text-neutral-400 border-neutral-800 hover:border-rose-500/30 hover:text-rose-400" : "text-neutral-600 border-neutral-300 hover:border-rose-400/40 hover:text-rose-500 bg-white"
+            }`}>
               <BarChart3 className="w-4 h-4" /><span className="hidden sm:inline">Analytics</span>
             </Link>
             {saveStatus === "success" && (
@@ -191,13 +230,17 @@ export default function SettingsPage() {
                 <AlertCircle className="w-4 h-4" /> Error saving
               </span>
             )}
-            <button onClick={reset} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-neutral-400 border border-neutral-800 hover:border-neutral-600 hover:text-white transition-all">
+            <button onClick={reset} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm border transition-all ${
+              isDark ? "text-neutral-400 border-neutral-800 hover:border-neutral-600 hover:text-white" : "text-neutral-600 border-neutral-300 hover:border-neutral-400 hover:text-neutral-900 bg-white"
+            }`}>
               <RotateCcw className="w-4 h-4" /> Reset
             </button>
             <button onClick={save} disabled={saving} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-rose-500 hover:bg-rose-600 text-white transition-all disabled:opacity-50 shadow-lg shadow-rose-500/20">
               <Save className="w-4 h-4" /> {saving ? "Saving..." : "Save Changes"}
             </button>
-            <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-neutral-500 hover:text-red-400 border border-neutral-800 hover:border-red-500/30 transition-all">
+            <button onClick={handleLogout} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm border transition-all ${
+              isDark ? "text-neutral-500 hover:text-red-400 border-neutral-800 hover:border-red-500/30" : "text-neutral-500 hover:text-red-500 border-neutral-300 hover:border-red-400/40 bg-white"
+            }`}>
               <LogOut className="w-4 h-4" />
             </button>
           </div>
