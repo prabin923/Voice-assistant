@@ -6,13 +6,21 @@ import { NextResponse } from "next/server";
 const SESSION_COOKIE = "session";
 const CSRF_COOKIE = "csrf-token";
 
-// SECURITY: Never fall back to a hardcoded secret in production
-if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
-  throw new Error("FATAL: JWT_SECRET environment variable is not set. Auth cannot function safely in production.");
+const DEV_FALLBACK = "dev-only-local-secret-do-not-use-in-prod";
+
+/** Lazy so `next build` can import this module before env is available; production sign still requires a real secret. */
+function getJwtSecretBytes(): Uint8Array {
+  const raw = process.env.JWT_SECRET?.trim();
+  if (raw && raw.length >= 8) {
+    return new TextEncoder().encode(raw);
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "JWT_SECRET is missing or too short. Add it in Vercel → Project → Settings → Environment Variables, then redeploy."
+    );
+  }
+  return new TextEncoder().encode(DEV_FALLBACK);
 }
-const secret = new TextEncoder().encode(
-  process.env.JWT_SECRET || "dev-only-local-secret-do-not-use-in-prod"
-);
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hashSync(password, 10);
@@ -23,20 +31,17 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 }
 
 export async function createToken(payload: { hotelId: string; email: string }): Promise<string> {
-  if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
-    throw new Error("JWT_SECRET is not configured. Cannot create tokens in production.");
-  }
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("24h")
-    .sign(secret);
+    .sign(getJwtSecretBytes());
 }
 
 export async function verifyToken(token: string): Promise<{ hotelId: string; email: string } | null> {
   try {
-    if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") return null;
-    const { payload } = await jwtVerify(token, secret);
+    if (!process.env.JWT_SECRET?.trim() && process.env.NODE_ENV === "production") return null;
+    const { payload } = await jwtVerify(token, getJwtSecretBytes());
     return payload as unknown as { hotelId: string; email: string };
   } catch {
     return null;
