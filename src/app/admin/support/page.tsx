@@ -8,6 +8,8 @@ import {
   RefreshCw, BarChart3, Bell, ExternalLink, X, Sun, Moon
 } from "lucide-react";
 import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
+import { StaynepLogo } from "@/components/StaynepLogo";
+import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 
 interface Ticket {
   id: string;
@@ -157,24 +159,28 @@ export default function SupportInbox() {
   };
 
   if (loading) {
+    const loadingDark = theme === "dark";
     return (
-      <div className={`min-h-screen flex items-center justify-center ${theme === "dark" ? "bg-neutral-950" : "bg-neutral-100"}`}>
-        {loadError ? (
-          <div className="text-center space-y-4 px-4">
-            <p className="text-sm text-red-400">{loadError}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium"
-            >
-              Retry
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-4">
-            <Loader2 className="w-8 h-8 text-rose-500 animate-spin" />
-            <p className={`text-sm ${theme === "dark" ? "text-neutral-600" : "text-neutral-500"}`}>Loading support inbox...</p>
-          </div>
-        )}
+      <div className={`relative min-h-screen overflow-hidden ${loadingDark ? "text-neutral-100" : "text-neutral-900"}`}>
+        <SiteShellBackdrop isDark={loadingDark} />
+        <div className="relative z-10 min-h-screen flex items-center justify-center">
+          {loadError ? (
+            <div className="text-center space-y-4 px-4">
+              <p className="text-sm text-red-400">{loadError}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 rounded-xl bg-[#163a5f] hover:bg-[#1e5278] text-white text-sm font-medium"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 className="w-8 h-8 text-[#163a5f] dark:text-[#e4c449] animate-spin" />
+              <p className={`text-sm ${loadingDark ? "text-neutral-600" : "text-neutral-500"}`}>Loading support inbox...</p>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -189,7 +195,9 @@ export default function SupportInbox() {
   const isDark = theme === "dark";
 
   return (
-    <div className={`min-h-screen ${isDark ? "bg-neutral-950 text-neutral-100" : "bg-neutral-100 text-neutral-900"}`}>
+    <div className={`relative min-h-screen overflow-hidden ${isDark ? "text-neutral-100" : "text-neutral-900"}`}>
+      <SiteShellBackdrop isDark={isDark} />
+      <div className="relative z-10">
       {loadError && (
         <div className="max-w-7xl mx-auto px-6 pt-4">
           <div className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
@@ -211,7 +219,7 @@ export default function SupportInbox() {
       )}
 
       {/* Header */}
-      <header className={`sticky top-0 z-20 backdrop-blur-xl border-b ${isDark ? "bg-neutral-950/80 border-white/5" : "bg-white/85 border-neutral-200"}`}>
+      <header className={`sticky top-0 z-20 border-b backdrop-blur-xl ${siteHeaderChrome(isDark)}`}>
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/settings" className={`flex items-center gap-2 transition-colors ${isDark ? "text-neutral-400 hover:text-white" : "text-neutral-600 hover:text-neutral-900"}`}>
@@ -219,6 +227,10 @@ export default function SupportInbox() {
               <span className="text-sm">Settings</span>
             </Link>
             <div className={`h-6 w-px ${isDark ? "bg-neutral-800" : "bg-neutral-300"}`} />
+            <Link href="/" className="flex shrink-0 items-center" aria-label="StayNEP home">
+              <StaynepLogo isDark={isDark} size="sm" />
+            </Link>
+            <div className={`h-6 w-px hidden sm:block ${isDark ? "bg-neutral-800" : "bg-neutral-300"}`} />
             <div className="flex items-center gap-2">
               <Inbox className="w-5 h-5 text-amber-400" />
               <h1 className="text-lg font-semibold">Support Inbox</h1>
@@ -249,7 +261,7 @@ export default function SupportInbox() {
               <span className="hidden sm:inline">{refreshing ? "Refreshing..." : "Refresh"}</span>
             </button>
             <Link href="/admin/analytics" className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
-              isDark ? "text-neutral-400 border-neutral-800 hover:border-rose-500/30 hover:text-rose-400" : "text-neutral-600 border-neutral-300 hover:border-rose-400/40 hover:text-rose-500 bg-white"
+              isDark ? "text-neutral-400 border-neutral-800 hover:border-[#c9a227]/35 hover:text-[#e4c449]" : "text-neutral-600 border-neutral-300 hover:border-[#285a82]/45 hover:text-[#163a5f] bg-white"
             }`}>
               <BarChart3 className="w-3.5 h-3.5" /> Analytics
             </Link>
@@ -302,7 +314,7 @@ export default function SupportInbox() {
               onClick={() => { setFilter(f); setSelectedTicket(null); }}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 filter === f
-                  ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                  ? "border border-[#163a5f]/25 bg-[#163a5f]/10 text-[#163a5f] dark:border-[#c9a227]/35 dark:bg-[#c9a227]/12 dark:text-[#e4c449]"
                   : (isDark
                       ? "text-neutral-400 border border-neutral-800 hover:border-neutral-600 hover:text-white"
                       : "text-neutral-600 border border-neutral-300 hover:border-neutral-400 hover:text-neutral-900 bg-white")
@@ -312,7 +324,7 @@ export default function SupportInbox() {
               {f === "resolved" && <CheckCircle2 className="w-3.5 h-3.5 inline mr-1.5" />}
               {f === "all" && <Inbox className="w-3.5 h-3.5 inline mr-1.5" />}
               {f.charAt(0).toUpperCase() + f.slice(1)}
-              {f === "open" && openCount > 0 && <span className="ml-1.5 text-xs text-rose-400">({openCount})</span>}
+              {f === "open" && openCount > 0 && <span className="ml-1.5 text-xs text-[#163a5f] dark:text-[#e4c449]">({openCount})</span>}
             </button>
           ))}
         </div>
@@ -342,7 +354,7 @@ export default function SupportInbox() {
                     onClick={() => setSelectedTicket(ticket)}
                     className={`w-full text-left border rounded-2xl p-4 transition-all border-l-4 ${priorityColors[priority.color]} ${
                       selectedTicket?.id === ticket.id
-                        ? "border-rose-500/40 bg-rose-500/5"
+                        ? "border-[#285a82]/55 bg-[#163a5f]/8 dark:border-[#c9a227]/45 dark:bg-[#c9a227]/10"
                         : (isDark ? "border-neutral-800/60 bg-neutral-900/50 hover:border-neutral-600" : "border-neutral-200 bg-white hover:border-neutral-300")
                     }`}
                   >
@@ -412,7 +424,7 @@ export default function SupportInbox() {
 
                 {/* Guest Message */}
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[#163a5f] dark:text-[#e4c449] flex items-center gap-1.5">
                     <MessageSquare className="w-3 h-3" /> Guest Message
                   </p>
                   <div className={`rounded-xl p-4 text-sm leading-relaxed ${isDark ? "bg-neutral-800/40 text-neutral-200" : "bg-neutral-50 text-neutral-800 border border-neutral-200"}`}>
@@ -452,7 +464,7 @@ export default function SupportInbox() {
                       value={replyText}
                       onChange={e => setReplyText(e.target.value)}
                       placeholder="Type your response to the guest..."
-                    className={`w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/40 focus:border-rose-500/40 transition-all h-28 resize-none ${
+                    className={`w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#c9a227]/38 focus:border-[#c9a227]/55 transition-all h-28 resize-none ${
                         isDark
                           ? "bg-neutral-800/50 border border-neutral-700/50 text-neutral-100 placeholder-neutral-500"
                           : "bg-white border border-neutral-300 text-neutral-900 placeholder-neutral-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
@@ -463,7 +475,7 @@ export default function SupportInbox() {
                       <button
                         onClick={handleReply}
                         disabled={replying || !replyText.trim()}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-rose-500 hover:bg-rose-600 text-white transition-all disabled:opacity-50 shadow-lg shadow-rose-500/20"
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-[#163a5f] hover:bg-[#1e5278] text-white transition-all disabled:opacity-50 shadow-lg shadow-[#163a5f]/25"
                       >
                         {replying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                         {replying ? "Sending..." : "Reply & Resolve"}
@@ -481,6 +493,7 @@ export default function SupportInbox() {
             )}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

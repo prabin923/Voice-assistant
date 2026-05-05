@@ -9,6 +9,8 @@ import {
   Crown, Sparkles, Sun, Moon
 } from "lucide-react";
 import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
+import { StaynepLogo } from "@/components/StaynepLogo";
+import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 
 interface RoomType { name: string; pricePerNight: number; currency: string; description: string; maxOccupancy: number; }
 interface DiningVenue { name: string; cuisine: string; hours: string; description: string; }
@@ -117,13 +119,13 @@ export default function SettingsPage() {
             <p className="text-sm text-red-400">{loadError}</p>
             <button
               onClick={loadProtectedData}
-              className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium"
+              className="px-4 py-2 rounded-xl bg-[#163a5f] hover:bg-[#1e5278] text-white text-sm font-medium"
             >
               Retry
             </button>
           </div>
         ) : (
-          <div className="w-8 h-8 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-2 border-[#163a5f] dark:border-[#e4c449] border-t-transparent rounded-full animate-spin" />
         )}
       </div>
     );
@@ -141,7 +143,7 @@ export default function SettingsPage() {
   ];
   const isDark = theme === "dark";
 
-  const inputCls = `w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/40 focus:border-rose-500/40 transition-all ${
+  const inputCls = `w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#c9a227]/38 focus:border-[#c9a227]/55 transition-all ${
     isDark
       ? "bg-neutral-800/50 border border-neutral-700/50 text-neutral-100 placeholder-neutral-500"
       : "bg-white border border-neutral-300 text-neutral-900 placeholder-neutral-400"
@@ -159,13 +161,15 @@ export default function SettingsPage() {
   const updatePolicy = (key: string, value: string) => setConfig({ ...config, policies: { ...config.policies, [key]: value } });
 
   return (
-    <div className={`min-h-screen ${isDark ? "bg-neutral-950 text-neutral-100" : "bg-neutral-100 text-neutral-900"}`}>
+    <div className={`relative min-h-screen overflow-hidden ${isDark ? "text-neutral-100" : "text-neutral-900"}`}>
+      <SiteShellBackdrop isDark={isDark} />
+      <div className="relative z-10">
       {/* Toast Notification */}
       {toast && (
         <div className="fixed top-6 right-6 z-50 animate-in slide-in-from-top-2 fade-in">
           <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl text-sm font-medium shadow-2xl backdrop-blur-xl border ${
             toast.type === "success" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300" :
-            toast.type === "delete" ? "bg-rose-500/10 border-rose-500/20 text-rose-300" :
+            toast.type === "delete" ? "bg-red-500/10 border-red-500/25 text-red-300" :
             "bg-blue-500/10 border-blue-500/20 text-blue-300"
           }`}>
             {toast.type === "success" ? <CheckCircle2 className="w-4 h-4" /> :
@@ -180,16 +184,20 @@ export default function SettingsPage() {
       )}
 
       {/* Header */}
-      <header className={`sticky top-0 z-20 backdrop-blur-xl border-b ${isDark ? "bg-neutral-950/80 border-white/5" : "bg-white/85 border-neutral-200"}`}>
+      <header className={`sticky top-0 z-20 border-b backdrop-blur-xl ${siteHeaderChrome(isDark)}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/" className={`flex items-center gap-2 transition-colors ${isDark ? "text-neutral-400 hover:text-white" : "text-neutral-600 hover:text-neutral-900"}`}>
+            <Link href="/assistant" className={`flex items-center gap-2 transition-colors ${isDark ? "text-neutral-400 hover:text-white" : "text-neutral-600 hover:text-neutral-900"}`}>
               <ChevronLeft className="w-5 h-5" />
               <span className="text-sm">Back to Assistant</span>
             </Link>
             <div className={`h-6 w-px ${isDark ? "bg-neutral-800" : "bg-neutral-300"}`} />
+            <Link href="/" className="flex shrink-0 items-center" aria-label="StayNEP home">
+              <StaynepLogo isDark={isDark} size="sm" />
+            </Link>
+            <div className={`h-6 w-px ${isDark ? "bg-neutral-800" : "bg-neutral-300"}`} />
             <div className="flex items-center gap-2">
-              <Settings className="w-5 h-5 text-rose-400" />
+              <Settings className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" />
               <h1 className="text-lg font-semibold">Hotel Configuration</h1>
             </div>
           </div>
@@ -216,7 +224,7 @@ export default function SettingsPage() {
               <Inbox className="w-4 h-4" /><span className="hidden sm:inline">Support</span>
             </Link>
             <Link href="/admin/analytics" className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm border transition-all ${
-              isDark ? "text-neutral-400 border-neutral-800 hover:border-rose-500/30 hover:text-rose-400" : "text-neutral-600 border-neutral-300 hover:border-rose-400/40 hover:text-rose-500 bg-white"
+              isDark ? "text-neutral-400 border-neutral-800 hover:border-sky-500/35 hover:text-sky-300" : "text-neutral-600 border-neutral-300 hover:border-[#285a82]/45 hover:text-[#163a5f] bg-white"
             }`}>
               <BarChart3 className="w-4 h-4" /><span className="hidden sm:inline">Analytics</span>
             </Link>
@@ -235,7 +243,7 @@ export default function SettingsPage() {
             }`}>
               <RotateCcw className="w-4 h-4" /> Reset
             </button>
-            <button onClick={save} disabled={saving} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-rose-500 hover:bg-rose-600 text-white transition-all disabled:opacity-50 shadow-lg shadow-rose-500/20">
+            <button onClick={save} disabled={saving} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-[#163a5f] hover:bg-[#1e5278] text-white transition-all disabled:opacity-50 shadow-lg shadow-[#163a5f]/25">
               <Save className="w-4 h-4" /> {saving ? "Saving..." : "Save Changes"}
             </button>
             <button onClick={handleLogout} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm border transition-all ${
@@ -257,7 +265,7 @@ export default function SettingsPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   activeTab === tab.id
-                    ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                    ? "border border-[#163a5f]/25 bg-[#163a5f]/10 text-[#163a5f] dark:border-[#c9a227]/35 dark:bg-[#c9a227]/12 dark:text-[#e4c449]"
                     : "text-neutral-400 hover:text-white hover:bg-neutral-900/50"
                 }`}
               >
@@ -275,7 +283,7 @@ export default function SettingsPage() {
               {/* Hotel Identity Card */}
               <div className={cardCls}>
                 <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold flex items-center gap-2"><Hotel className="w-5 h-5 text-rose-400" /> Hotel Identity</h2>
+                  <h2 className="text-lg font-semibold flex items-center gap-2"><Hotel className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> Hotel Identity</h2>
                   <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/20 text-amber-400">
                     <Crown className="w-3 h-3" /> Premium
                   </span>
@@ -333,7 +341,7 @@ export default function SettingsPage() {
                   {
                     label: "Warm",
                     colors: [
-                      { name: "Rose", hex: "#f43f5e" },
+                      { name: "Gold", hex: "#c9a227" },
                       { name: "Pink", hex: "#ec4899" },
                       { name: "Orange", hex: "#f97316" },
                       { name: "Amber", hex: "#f59e0b" },
@@ -435,7 +443,7 @@ export default function SettingsPage() {
 
               {/* Messages Card */}
               <div className={cardCls}>
-                <h2 className="text-lg font-semibold flex items-center gap-2"><MessageSquare className="w-5 h-5 text-rose-400" /> Guest Messages</h2>
+                <h2 className="text-lg font-semibold flex items-center gap-2"><MessageSquare className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> Guest Messages</h2>
                 <p className="text-neutral-500 text-sm">Customize the messages guests see when interacting with your AI receptionist.</p>
                 <div><label className={labelCls}>Welcome Message</label><textarea className={inputCls + " h-20 resize-none"} value={config.branding.welcomeMessage} onChange={e => updateBranding("welcomeMessage", e.target.value)} /></div>
                 <div><label className={labelCls}>Farewell Message</label><textarea className={inputCls + " h-20 resize-none"} value={config.branding.farewellMessage} onChange={e => updateBranding("farewellMessage", e.target.value)} /></div>
@@ -446,7 +454,7 @@ export default function SettingsPage() {
           {/* CONTACT */}
           {activeTab === "contact" && (
             <div className={cardCls}>
-              <h2 className="text-lg font-semibold flex items-center gap-2"><Phone className="w-5 h-5 text-rose-400" /> Contact Information</h2>
+              <h2 className="text-lg font-semibold flex items-center gap-2"><Phone className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> Contact Information</h2>
               <p className="text-neutral-500 text-sm">This information is shared with guests when they ask for contact details.</p>
               <div className="grid grid-cols-2 gap-5">
                 <div><label className={labelCls}>Phone</label><input className={inputCls} value={config.contact.phone} onChange={e => updateContact("phone", e.target.value)} /></div>
@@ -462,7 +470,7 @@ export default function SettingsPage() {
           {/* POLICIES */}
           {activeTab === "policies" && (
             <div className={cardCls}>
-              <h2 className="text-lg font-semibold flex items-center gap-2"><Clock className="w-5 h-5 text-rose-400" /> Hotel Policies</h2>
+              <h2 className="text-lg font-semibold flex items-center gap-2"><Clock className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> Hotel Policies</h2>
               <p className="text-neutral-500 text-sm">Define policies the AI receptionist will communicate to guests.</p>
               <div className="grid grid-cols-2 gap-5">
                 <div><label className={labelCls}>Check-In Time</label><input className={inputCls} value={config.policies.checkInTime} onChange={e => updatePolicy("checkInTime", e.target.value)} /></div>
@@ -481,7 +489,7 @@ export default function SettingsPage() {
             <div className={cardCls}>
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-lg font-semibold flex items-center gap-2"><Hotel className="w-5 h-5 text-rose-400" /> Room Types</h2>
+                  <h2 className="text-lg font-semibold flex items-center gap-2"><Hotel className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> Room Types</h2>
                   <p className="text-neutral-500 text-sm mt-1">Define the room categories and pricing for your hotel.</p>
                 </div>
                 <button onClick={() => { setConfig({ ...config, rooms: [...config.rooms, { name: "", pricePerNight: 0, currency: "USD", description: "", maxOccupancy: 2 }] }); showToast("New room type added", "success"); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-neutral-800 border border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white transition-all">
@@ -513,7 +521,7 @@ export default function SettingsPage() {
             <div className={cardCls}>
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-lg font-semibold flex items-center gap-2"><Utensils className="w-5 h-5 text-rose-400" /> Dining Venues</h2>
+                  <h2 className="text-lg font-semibold flex items-center gap-2"><Utensils className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> Dining Venues</h2>
                   <p className="text-neutral-500 text-sm mt-1">Add restaurants and dining options at your hotel.</p>
                 </div>
                 <button onClick={() => { setConfig({ ...config, dining: [...config.dining, { name: "", cuisine: "", hours: "", description: "" }] }); showToast("New dining venue added", "success"); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-neutral-800 border border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white transition-all">
@@ -542,7 +550,7 @@ export default function SettingsPage() {
             <div className={cardCls}>
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-lg font-semibold flex items-center gap-2"><Dumbbell className="w-5 h-5 text-rose-400" /> Amenities</h2>
+                  <h2 className="text-lg font-semibold flex items-center gap-2"><Dumbbell className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> Amenities</h2>
                   <p className="text-neutral-500 text-sm mt-1">List all facilities and services available at your hotel.</p>
                 </div>
                 <button onClick={() => { setConfig({ ...config, amenities: [...config.amenities, { name: "", description: "", hours: "" }] }); showToast("New amenity added", "success"); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-neutral-800 border border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white transition-all">
@@ -570,7 +578,7 @@ export default function SettingsPage() {
             <div className={cardCls}>
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-lg font-semibold flex items-center gap-2"><MessageSquare className="w-5 h-5 text-rose-400" /> Custom FAQ</h2>
+                  <h2 className="text-lg font-semibold flex items-center gap-2"><MessageSquare className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> Custom FAQ</h2>
                   <p className="text-neutral-500 text-sm mt-1">Add custom questions and answers specific to your hotel. If a guest's message matches the keyword, the corresponding answer will be used.</p>
                 </div>
                 <button onClick={() => { setConfig({ ...config, customFAQ: [...config.customFAQ, { question: "", answer: "" }] }); showToast("New FAQ entry added", "success"); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-neutral-800 border border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white transition-all">
@@ -593,13 +601,14 @@ export default function SettingsPage() {
           {/* AI PERSONA */}
           {activeTab === "persona" && (
             <div className={cardCls}>
-              <h2 className="text-lg font-semibold flex items-center gap-2"><Settings className="w-5 h-5 text-rose-400" /> AI Receptionist Persona</h2>
+              <h2 className="text-lg font-semibold flex items-center gap-2"><Settings className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> AI Receptionist Persona</h2>
               <p className="text-neutral-500 text-sm">Define how the AI receptionist should behave and communicate. This acts as the system prompt when integrated with LLM APIs like OpenAI or Gemini.</p>
               <div><label className={labelCls}>Persona / System Prompt</label><textarea className={inputCls + " h-40 resize-none"} value={config.receptionistPersona} onChange={e => setConfig({ ...config, receptionistPersona: e.target.value })} /></div>
               <div><label className={labelCls}>Language</label><input className={inputCls} value={config.language} onChange={e => setConfig({ ...config, language: e.target.value })} /></div>
             </div>
           )}
         </main>
+      </div>
       </div>
     </div>
   );

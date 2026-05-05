@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, UserPlus, Hotel, Moon, Sun } from "lucide-react";
+import { Loader2, UserPlus, Moon, Sun } from "lucide-react";
+import { StaynepLogo } from "@/components/StaynepLogo";
+import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -75,16 +77,30 @@ export default function RegisterPage() {
   const isDark = theme === "dark";
 
   return (
-    <div className={`min-h-screen flex items-center justify-center px-4 ${isDark ? "bg-neutral-950" : "bg-neutral-100"}`}>
+    <div className="relative min-h-screen overflow-hidden">
+      <SiteShellBackdrop isDark={isDark} />
+      <div className="relative z-10 flex min-h-screen flex-col">
+        <header className={`sticky top-0 z-20 border-b backdrop-blur-xl ${siteHeaderChrome(isDark)}`}>
+          <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
+            <Link href="/" className="-ml-0.5 flex shrink-0 items-center" aria-label="StayNEP home">
+              <StaynepLogo isDark={isDark} size="md" priority />
+            </Link>
+            <Link href="/assistant" className={`text-xs font-semibold uppercase tracking-wider hover:text-yellow-700 dark:hover:text-[#e4c449] ${isDark ? "text-neutral-400" : "text-neutral-600"}`}>
+              Voice assistant
+            </Link>
+          </div>
+        </header>
+
+        <div className="flex flex-1 items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
         <div className="flex justify-end mb-4">
           <button
             type="button"
             onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-            className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold transition-colors ${
+            className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold transition-colors bg-transparent ${
               isDark
-                ? "bg-white/[0.04] border-white/10 text-neutral-200 hover:bg-white/[0.08]"
-                : "bg-white border-neutral-200 text-neutral-700 hover:bg-neutral-50"
+                ? "border-white/15 text-neutral-200 hover:bg-white/[0.06]"
+                : "border-neutral-300 text-neutral-700 hover:bg-neutral-900/5"
             }`}
             aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
           >
@@ -93,16 +109,12 @@ export default function RegisterPage() {
           </button>
         </div>
         <div className="flex flex-col items-center mb-8">
-          <div className={`w-16 h-16 rounded-2xl border flex items-center justify-center mb-4 ${isDark ? "bg-white/5 border-white/10" : "bg-white border-neutral-200"}`}>
-            <Hotel className="w-8 h-8 text-rose-400" />
-          </div>
           <h1 className={`text-2xl font-bold ${isDark ? "text-white" : "text-neutral-900"}`}>Create Account</h1>
           <p className={`text-sm mt-1 ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>Register your hotel to get started</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className={`rounded-2xl border p-6 space-y-4 ${isDark ? "bg-white/[0.03] border-white/[0.08]" : "bg-white border-neutral-200"}`}
-            style={{ backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}>
+          <div className="space-y-4">
 
             {error && (
               <div className="px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
@@ -119,7 +131,7 @@ export default function RegisterPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/20 transition-all text-sm ${
+                className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:border-[#c9a227]/65 focus:ring-1 focus:ring-[#c9a227]/22 transition-all text-sm ${
                   isDark
                     ? "bg-white/[0.04] border-white/[0.08] text-white placeholder-neutral-600"
                     : "bg-white border-neutral-300 text-neutral-900 placeholder-neutral-400"
@@ -137,7 +149,7 @@ export default function RegisterPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/20 transition-all text-sm ${
+                className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:border-[#c9a227]/65 focus:ring-1 focus:ring-[#c9a227]/22 transition-all text-sm ${
                   isDark
                     ? "bg-white/[0.04] border-white/[0.08] text-white placeholder-neutral-600"
                     : "bg-white border-neutral-300 text-neutral-900 placeholder-neutral-400"
@@ -155,7 +167,7 @@ export default function RegisterPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/20 transition-all text-sm ${
+                className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:border-[#c9a227]/65 focus:ring-1 focus:ring-[#c9a227]/22 transition-all text-sm ${
                   isDark
                     ? "bg-white/[0.04] border-white/[0.08] text-white placeholder-neutral-600"
                     : "bg-white border-neutral-300 text-neutral-900 placeholder-neutral-400"
@@ -173,7 +185,7 @@ export default function RegisterPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
-                className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/20 transition-all text-sm ${
+                className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:border-[#c9a227]/65 focus:ring-1 focus:ring-[#c9a227]/22 transition-all text-sm ${
                   isDark
                     ? "bg-white/[0.04] border-white/[0.08] text-white placeholder-neutral-600"
                     : "bg-white border-neutral-300 text-neutral-900 placeholder-neutral-400"
@@ -185,7 +197,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 rounded-xl bg-rose-500 hover:bg-rose-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm flex items-center justify-center gap-2 transition-colors"
+              className="w-full py-3 rounded-xl bg-[#163a5f] hover:bg-[#1e5278] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm flex items-center justify-center gap-2 transition-colors"
             >
               {loading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -199,10 +211,12 @@ export default function RegisterPage() {
 
         <p className={`text-center text-sm mt-6 ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>
           Already have an account?{" "}
-          <Link href="/admin/login" className="text-rose-400 hover:text-rose-300 transition-colors">
+          <Link href="/admin/login" className="text-[#163a5f] dark:text-[#e4c449] underline-offset-4 hover:underline transition-colors dark:hover:text-[#fce878]">
             Sign in
           </Link>
         </p>
+      </div>
+        </div>
       </div>
     </div>
   );

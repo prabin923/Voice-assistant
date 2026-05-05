@@ -8,6 +8,8 @@ import {
   AlertTriangle, CheckCircle2, Timer, Inbox, RefreshCw, Zap, ThumbsUp, Sun, Moon
 } from "lucide-react";
 import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
+import { StaynepLogo } from "@/components/StaynepLogo";
+import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 
 interface AnalyticsData {
   total: number;
@@ -38,7 +40,7 @@ const LANG_NAMES: Record<string, string> = {
   "tr-TR": "Turkish", "vi-VN": "Vietnamese",
 };
 
-const COLORS = ["#f43f5e", "#3b82f6", "#22c55e", "#a855f7", "#fb923c", "#14b8a6", "#eab308", "#ec4899"];
+const COLORS = ["#163a5f", "#3b82f6", "#22c55e", "#a855f7", "#ca8a04", "#14b8a6", "#e4c449", "#285a82"];
 
 export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
@@ -97,24 +99,28 @@ export default function AnalyticsPage() {
   };
 
   if (loading || !data) {
+    const loadingDark = theme === "dark";
     return (
-      <div className={`min-h-screen flex items-center justify-center ${theme === "dark" ? "bg-neutral-950" : "bg-neutral-100"}`}>
-        {loadError ? (
-          <div className="text-center space-y-4 px-4">
-            <p className="text-sm text-red-400">{loadError}</p>
-            <button
-              onClick={() => fetchData()}
-              className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium"
-            >
-              Retry
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-4">
-            <Loader2 className="w-8 h-8 text-rose-500 animate-spin" />
-            <p className={`text-sm ${theme === "dark" ? "text-neutral-600" : "text-neutral-500"}`}>Loading analytics...</p>
-          </div>
-        )}
+      <div className={`relative min-h-screen overflow-hidden ${loadingDark ? "text-neutral-100" : "text-neutral-900"}`}>
+        <SiteShellBackdrop isDark={loadingDark} />
+        <div className="relative z-10 min-h-screen flex items-center justify-center">
+          {loadError ? (
+            <div className="text-center space-y-4 px-4">
+              <p className="text-sm text-red-400">{loadError}</p>
+              <button
+                onClick={() => fetchData()}
+                className="px-4 py-2 rounded-xl bg-[#163a5f] hover:bg-[#1e5278] text-white text-sm font-medium"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 className="w-8 h-8 text-[#163a5f] dark:text-[#e4c449] animate-spin" />
+              <p className={`text-sm ${loadingDark ? "text-neutral-600" : "text-neutral-500"}`}>Loading analytics...</p>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -126,7 +132,9 @@ export default function AnalyticsPage() {
   const isDark = theme === "dark";
 
   return (
-    <div className={`min-h-screen ${isDark ? "bg-neutral-950 text-neutral-100" : "bg-neutral-100 text-neutral-900"}`}>
+    <div className={`relative min-h-screen overflow-hidden ${isDark ? "text-neutral-100" : "text-neutral-900"}`}>
+      <SiteShellBackdrop isDark={isDark} />
+      <div className="relative z-10">
       {loadError && (
         <div className="max-w-7xl mx-auto px-6 pt-4">
           <div className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
@@ -135,7 +143,7 @@ export default function AnalyticsPage() {
         </div>
       )}
       {/* Header */}
-      <header className={`sticky top-0 z-20 backdrop-blur-xl border-b ${isDark ? "bg-neutral-950/80 border-white/5" : "bg-white/85 border-neutral-200"}`}>
+      <header className={`sticky top-0 z-20 border-b backdrop-blur-xl ${siteHeaderChrome(isDark)}`}>
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/settings" className={`flex items-center gap-2 transition-colors ${isDark ? "text-neutral-400 hover:text-white" : "text-neutral-500 hover:text-neutral-900"}`}>
@@ -143,8 +151,12 @@ export default function AnalyticsPage() {
               <span className="text-sm">Settings</span>
             </Link>
             <div className={`h-6 w-px ${isDark ? "bg-neutral-800" : "bg-neutral-300"}`} />
+            <Link href="/" className="flex shrink-0 items-center" aria-label="StayNEP home">
+              <StaynepLogo isDark={isDark} size="sm" />
+            </Link>
+            <div className={`h-6 w-px hidden sm:block ${isDark ? "bg-neutral-800" : "bg-neutral-300"}`} />
             <div className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-rose-400" />
+              <BarChart3 className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" />
               <h1 className="text-lg font-semibold">Analytics Dashboard</h1>
             </div>
           </div>
@@ -198,7 +210,7 @@ export default function AnalyticsPage() {
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
         {/* KPI Cards — Row 1 */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-          <StatCard icon={<MessageSquare className="w-5 h-5" />} label="Total Interactions" value={data.total} color="rose" isDark={isDark} />
+          <StatCard icon={<MessageSquare className="w-5 h-5" />} label="Total Interactions" value={data.total} color="brand" isDark={isDark} />
           <StatCard icon={<Activity className="w-5 h-5" />} label="Today" value={data.today} color="blue" isDark={isDark} />
           <StatCard icon={<TrendingUp className="w-5 h-5" />} label="Daily Avg (30d)" value={data.avgDaily} color="emerald" isDark={isDark} />
           <StatCard icon={<AlertTriangle className="w-5 h-5" />} label="Escalation Rate" value={`${data.escalationRate}%`} color="amber" isDark={isDark} />
@@ -255,12 +267,12 @@ export default function AnalyticsPage() {
                 <p className="text-xs text-neutral-500 uppercase tracking-wider">Helpful Responses</p>
               </div>
             </div>
-            <div className={`rounded-2xl p-4 flex items-center gap-4 border ${isDark ? "bg-rose-500/5 border-rose-500/10" : "bg-white border-rose-200/70 shadow-[0_8px_24px_rgba(244,63,94,0.08)]"}`}>
-              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+            <div className={`rounded-2xl p-4 flex items-center gap-4 border ${isDark ? "border-[#c9a227]/18 bg-[#163a5f]/10" : "border-[#285a82]/35 bg-white shadow-[0_8px_24px_rgba(22,58,95,0.08)]"}`}>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#c9a227]/35 bg-[#163a5f]/10 text-[#163a5f] dark:bg-[#c9a227]/15 dark:text-[#e4c449]">
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xl font-bold text-rose-400">{data.feedbackStats.down}</p>
+                <p className="text-xl font-bold text-amber-600 dark:text-[#e4c449]">{data.feedbackStats.down}</p>
                 <p className="text-xs text-neutral-500 uppercase tracking-wider">Needs Improvement</p>
               </div>
             </div>
@@ -281,7 +293,7 @@ export default function AnalyticsPage() {
           {/* Daily Trend */}
           <div className={`rounded-2xl p-6 ${isDark ? "bg-neutral-900/50 border border-neutral-800/60" : "bg-white border border-neutral-200 shadow-[0_10px_30px_rgba(15,23,42,0.06)]"}`}>
             <h2 className={`text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2 ${isDark ? "text-neutral-300" : "text-neutral-700"}`}>
-              <TrendingUp className="w-4 h-4 text-rose-400" /> Daily Interactions (30 days)
+              <TrendingUp className="h-4 w-4 text-[#163a5f] dark:text-[#e4c449]" /> Daily Interactions (30 days)
             </h2>
             {data.dailyCounts.length === 0 ? (
               <EmptyState text="No interaction data yet" isDark={isDark} />
@@ -291,13 +303,13 @@ export default function AnalyticsPage() {
                   <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative">
                     <div className={`absolute -top-10 left-1/2 -translate-x-1/2 text-xs px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10 shadow-xl border ${isDark ? "bg-neutral-800 text-neutral-300 border-neutral-700/50" : "bg-white text-neutral-700 border-neutral-200"}`}>
                       <span className="font-mono">{d.date}</span>
-                      <span className="text-rose-400 font-bold ml-2">{d.count}</span>
+                      <span className="ml-2 font-bold text-amber-600 dark:text-[#e4c449]">{d.count}</span>
                     </div>
                     <div
-                      className={`w-full rounded-t bg-gradient-to-t hover:from-rose-400 hover:to-rose-300 transition-all min-h-[2px] ${
+                      className={`w-full rounded-t bg-gradient-to-t transition-all hover:from-amber-300 hover:to-[#fce878] min-h-[2px] ${
                         isDark
-                          ? "from-rose-500/60 to-rose-400/90 shadow-sm shadow-rose-500/10"
-                          : "from-rose-400/75 to-rose-300/95 shadow-[0_3px_10px_rgba(244,63,94,0.22)]"
+                          ? "from-[#285a82]/90 to-[#e4c449]/95 shadow-sm shadow-[#163a5f]/15 dark:shadow-[#c9a227]/25"
+                          : "from-[#163a5f]/80 to-[#ca8a04]/95 shadow-[0_3px_10px_rgba(22,58,95,0.2)] dark:shadow-[0_3px_10px_rgba(201,162,39,0.18)]"
                       }`}
                       style={{ height: `${(d.count / maxDaily) * 100}%` }}
                     />
@@ -310,7 +322,7 @@ export default function AnalyticsPage() {
           {/* Language Distribution */}
           <div className={`rounded-2xl p-6 ${isDark ? "bg-neutral-900/50 border border-neutral-800/60" : "bg-white border border-neutral-200 shadow-[0_10px_30px_rgba(15,23,42,0.06)]"}`}>
             <h2 className={`text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2 ${isDark ? "text-neutral-300" : "text-neutral-700"}`}>
-              <Globe className="w-4 h-4 text-rose-400" /> Language Distribution
+              <Globe className="h-4 w-4 text-[#163a5f] dark:text-[#e4c449]" /> Language Distribution
             </h2>
             {data.languageDistribution.length === 0 ? (
               <EmptyState text="No language data yet" isDark={isDark} />
@@ -341,7 +353,7 @@ export default function AnalyticsPage() {
         {/* Peak Hours */}
         <div className={`rounded-2xl p-6 ${isDark ? "bg-neutral-900/50 border border-neutral-800/60" : "bg-white border border-neutral-200 shadow-[0_10px_30px_rgba(15,23,42,0.06)]"}`}>
           <h2 className={`text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2 ${isDark ? "text-neutral-300" : "text-neutral-700"}`}>
-            <Clock className="w-4 h-4 text-rose-400" /> Activity Heatmap (24h)
+            <Clock className="h-4 w-4 text-[#163a5f] dark:text-[#e4c449]" /> Activity Heatmap (24h)
           </h2>
           {data.peakHours.length === 0 ? (
             <EmptyState text="No hourly data yet" isDark={isDark} />
@@ -382,7 +394,7 @@ export default function AnalyticsPage() {
         <div className={`rounded-2xl p-6 ${isDark ? "bg-neutral-900/50 border border-neutral-800/60" : "bg-white border border-neutral-200 shadow-[0_10px_30px_rgba(15,23,42,0.06)]"}`}>
           <div className="flex items-center justify-between mb-4">
             <h2 className={`text-sm font-semibold uppercase tracking-wider flex items-center gap-2 ${isDark ? "text-neutral-300" : "text-neutral-700"}`}>
-              <MessageSquare className="w-4 h-4 text-rose-400" /> Recent Conversations
+              <MessageSquare className="h-4 w-4 text-[#163a5f] dark:text-[#e4c449]" /> Recent Conversations
             </h2>
             <span className={`text-xs ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>Last 20</span>
           </div>
@@ -403,7 +415,7 @@ export default function AnalyticsPage() {
                     </span>
                   </div>
                   <div className={`text-sm ${isDark ? "text-neutral-300" : "text-neutral-700"}`}>
-                    <span className="text-rose-400 font-semibold">Guest:</span> {msg.guest_message}
+                    <span className="font-semibold text-amber-600 dark:text-[#e4c449]">Guest:</span> {msg.guest_message}
                   </div>
                   <div className={`text-sm ${isDark ? "text-neutral-400" : "text-neutral-600"}`}>
                     <span className="text-blue-400 font-semibold">AI:</span> {msg.ai_response.length > 200 ? msg.ai_response.slice(0, 200) + "…" : msg.ai_response}
@@ -414,13 +426,14 @@ export default function AnalyticsPage() {
           )}
         </div>
       </div>
+      </div>
     </div>
   );
 }
 
 function StatCard({ icon, label, value, color, isDark }: { icon: React.ReactNode; label: string; value: number | string; color: string; isDark: boolean }) {
   const colorMap: Record<string, string> = {
-    rose: "text-rose-400 bg-rose-500/10 border-rose-500/20",
+    brand: "text-[#163a5f] dark:text-[#e4c449] bg-[#163a5f]/12 border-[#285a82]/30 dark:bg-[#c9a227]/14 dark:border-[#c9a227]/35",
     blue: "text-blue-400 bg-blue-500/10 border-blue-500/20",
     emerald: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
     amber: "text-amber-400 bg-amber-500/10 border-amber-500/20",

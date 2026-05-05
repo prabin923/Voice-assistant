@@ -81,7 +81,7 @@ export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
   branding: {
     hotelName: "Willow Hotel",
     tagline: "Your 24/7 Virtual AI Receptionist",
-    accentColor: "#f43f5e",    // rose-500
+    accentColor: "#c9a227",    // StayNEP gold
     welcomeMessage: "Welcome to Willow Hotel! How can I assist you with your stay today?",
     farewellMessage: "Thank you for choosing Willow Hotel. Have a wonderful day!",
   },
