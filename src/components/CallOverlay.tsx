@@ -38,6 +38,8 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioLevelFrameRef = useRef<number>(0);
+  const audioLevelRef = useRef(0);
+  const lastAudioLevelUpdateRef = useRef(0);
   useServerModeRef.current = useServerMode;
 
   // Scroll call log
@@ -158,6 +160,8 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
       cancelAnimationFrame(audioLevelFrameRef.current);
       audioLevelFrameRef.current = 0;
     }
+    audioLevelRef.current = 0;
+    lastAudioLevelUpdateRef.current = 0;
     setAudioLevel(0);
   }, []);
 
@@ -204,6 +208,8 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
           cancelAnimationFrame(audioLevelFrameRef.current);
           audioLevelFrameRef.current = 0;
         }
+        audioLevelRef.current = 0;
+        lastAudioLevelUpdateRef.current = 0;
         setAudioLevel(0);
 
         const blob = new Blob(chunksRef.current, { type: blobType });
@@ -249,8 +255,17 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
         analyser.getByteFrequencyData(dataArray);
         const avg = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
 
-        // Update audio level for visualization (0-1 range)
-        setAudioLevel(Math.min(avg / 80, 1));
+        // Throttle visual updates to avoid rerendering the full call UI on every frame.
+        const normalized = Math.min(avg / 80, 1);
+        const now = Date.now();
+        if (
+          now - lastAudioLevelUpdateRef.current > 80 ||
+          Math.abs(normalized - audioLevelRef.current) >= 0.08
+        ) {
+          audioLevelRef.current = normalized;
+          lastAudioLevelUpdateRef.current = now;
+          setAudioLevel(normalized);
+        }
 
         if (avg > SILENCE_THRESHOLD) {
           hasHeardSpeech = true;

@@ -52,14 +52,12 @@ const STEPS = [
 const LANGS = ["English", "Spanish", "French", "Arabic", "Japanese", "Hindi", "German", "Portuguese", "+26 more"];
 
 export default function MarketingHomePage() {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-
-  useEffect(() => {
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    if (typeof window === "undefined") return "dark";
     const saved = window.localStorage.getItem("theme");
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const next = saved === "light" || saved === "dark" ? saved : prefersDark ? "dark" : "light";
-    setTheme(next);
-  }, []);
+    if (saved === "light" || saved === "dark") return saved;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
 
   useEffect(() => {
     document.documentElement.classList.remove("light", "dark");
@@ -72,7 +70,6 @@ export default function MarketingHomePage() {
   const border = isDark ? "border-white/10" : "border-neutral-200";
   const glassHoverGlow =
     "transition-all duration-500 hover:-translate-y-1.5 hover:border-[#e8c96a]/55 hover:shadow-[0_30px_72px_-26px_rgba(22,58,95,0.42),0_0_52px_-24px_rgba(110,164,199,0.16)] hover:brightness-[1.04]";
-  const glassCard = `glass-panel rounded-2xl border ${glassHoverGlow}`;
   const statStripe = isDark ? "border-white/10 bg-white/[0.04] backdrop-blur-2xl" : "border-neutral-200/90 bg-white/60 backdrop-blur-2xl";
 
   return (

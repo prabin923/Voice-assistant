@@ -1,5 +1,10 @@
 import "./globals.css";
-import Link from "next/link";
+import { Inter } from "next/font/google";
+
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+});
 
 export default function RootLayout({
   children,
@@ -7,13 +12,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-      </head>
-      <body className="font-['Inter',sans-serif] antialiased bg-neutral-950 text-neutral-100">
+    <html lang="en" className={`dark ${inter.className}`}>
+      <body className="antialiased bg-neutral-950 text-neutral-100">
         {children}
       </body>
     </html>
