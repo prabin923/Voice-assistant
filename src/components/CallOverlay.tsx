@@ -5,15 +5,68 @@ import { Phone, PhoneOff, MicOff, Mic, Volume2, VolumeX } from "lucide-react";
 
 type CallState = "ringing" | "connected" | "ended";
 
+interface SpeechRecognitionResultLike {
+  isFinal: boolean;
+  0: { transcript: string };
+}
+
+interface SpeechRecognitionEventLike {
+  results: ArrayLike<SpeechRecognitionResultLike>;
+}
+
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+const PREMIUM_VOICE_HINTS = [
+  "neural",
+  "wavenet",
+  "studio",
+  "premium",
+  "enhanced",
+  "natural",
+  "siri",
+  "samantha",
+  "daniel",
+  "karen",
+  "moira",
+  "ava",
+  "serena",
+  "alloy",
+  "nova",
+];
+const ROBOTIC_VOICE_HINTS = ["compact", "espeak", "mbrola", "festival", "old", "legacy"];
+
+export interface CallHistoryRecord {
+  id: string;
+  startedAt: number;
+  endedAt: number;
+  durationSec: number;
+  languageCode: string;
+  mode: "native" | "server";
+  transcriptPreview: string;
+  totalTurns: number;
+}
+
 interface CallOverlayProps {
   hotelName: string;
   accentColor: string;
   languageCode: string;
   ttsLang: string;
-  onEnd: () => void;
+  voiceStyle: "warm" | "professional" | "energetic";
+  onEnd: (record?: CallHistoryRecord) => void;
 }
 
-export default function CallOverlay({ hotelName, accentColor, languageCode, ttsLang, onEnd }: CallOverlayProps) {
+export default function CallOverlay({ hotelName, accentColor, languageCode, ttsLang, voiceStyle, onEnd }: CallOverlayProps) {
   const [callState, setCallState] = useState<CallState>("ringing");
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
@@ -24,8 +77,9 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
   const [liveTranscript, setLiveTranscript] = useState("");
   const [callLog, setCallLog] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
   const [audioLevel, setAudioLevel] = useState(0);
+  const callStartedAtRef = useRef(Date.now());
 
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -80,19 +134,29 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
     const candidates = voices.filter(v => v.lang === langCode || v.lang.startsWith(langPrimary));
     if (!candidates.length) return null;
 
-    const premiumKeywords = ["premium", "enhanced", "natural", "neural", "wavenet", "google", "samantha", "daniel", "karen"];
-    const roboticKeywords = ["compact", "espeak", "mbrola"];
     const scored = candidates.map(v => {
       const nameL = v.name.toLowerCase();
       let score = 0;
-      if (premiumKeywords.some(k => nameL.includes(k))) score += 10;
-      if (roboticKeywords.some(k => nameL.includes(k))) score -= 20;
+      if (PREMIUM_VOICE_HINTS.some(k => nameL.includes(k))) score += 14;
+      if (ROBOTIC_VOICE_HINTS.some(k => nameL.includes(k))) score -= 25;
       if (!v.localService) score += 5;
+      if (["female", "woman", "samantha", "serena", "karen", "moira", "ava"].some((k) => nameL.includes(k))) score += 4;
       if (v.lang === langCode) score += 3;
       return { voice: v, score };
     });
     scored.sort((a, b) => b.score - a.score);
     return scored[0].voice;
+  }, []);
+
+  const toHumanSpeechText = useCallback((text: string) => {
+    return text
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/\s+/g, " ")
+      .replace(/\s*([,.;!?])\s*/g, "$1 ")
+      .replace(/([a-z])\s*-\s*([a-z])/gi, "$1 $2")
+      .trim();
   }, []);
 
   // Speak helper
@@ -105,12 +169,20 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
       return;
     }
     synthRef.current.cancel();
-    const utt = new SpeechSynthesisUtterance(text);
+    const utt = new SpeechSynthesisUtterance(toHumanSpeechText(text));
     utt.lang = ttsLang;
     const bestVoice = pickBestVoice(ttsLang);
     if (bestVoice) utt.voice = bestVoice;
-    utt.rate = 0.95;
-    utt.pitch = 1.05;
+    if (voiceStyle === "professional") {
+      utt.rate = 0.88;
+      utt.pitch = 0.95;
+    } else if (voiceStyle === "energetic") {
+      utt.rate = 0.97;
+      utt.pitch = 1.04;
+    } else {
+      utt.rate = 0.9;
+      utt.pitch = 0.98;
+    }
     utt.volume = 1.0;
     utt.onstart = () => setIsSpeaking(true);
     utt.onend = () => {
@@ -120,7 +192,7 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
     };
     utt.onerror = () => setIsSpeaking(false);
     synthRef.current.speak(utt);
-  }, [ttsLang, isSpeakerOff, pickBestVoice]);
+  }, [ttsLang, isSpeakerOff, pickBestVoice, toHumanSpeechText, voiceStyle]);
 
   // Send to chat API
   const sendMessage = useCallback(async (text: string) => {
@@ -176,8 +248,21 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
     setCallState("ended");
     setIsListening(false);
     setIsSpeaking(false);
-    setTimeout(() => onEnd(), 1200);
-  }, [onEnd, stopServerListening]);
+    const endedAt = Date.now();
+    const lastUserText = [...callLog].reverse().find((entry) => entry.role === "user")?.text ?? "No guest speech captured";
+    const transcriptPreview = lastUserText.length > 140 ? `${lastUserText.slice(0, 137)}...` : lastUserText;
+    const record: CallHistoryRecord = {
+      id: `${callStartedAtRef.current}-${endedAt}`,
+      startedAt: callStartedAtRef.current,
+      endedAt,
+      durationSec: duration,
+      languageCode,
+      mode: useServerModeRef.current ? "server" : "native",
+      transcriptPreview,
+      totalTurns: callLog.length,
+    };
+    setTimeout(() => onEnd(record), 1200);
+  }, [callLog, duration, languageCode, onEnd, stopServerListening]);
 
   const pickCallRecorderMimeType = (): string | undefined => {
     if (typeof MediaRecorder === "undefined") return undefined;
@@ -239,7 +324,7 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
 
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
       const SILENCE_THRESHOLD = 15;
-      const SILENCE_DURATION_MS = 1500;
+      const SILENCE_DURATION_MS = 5000;
       const SPEECH_MIN_MS = 500;
       const MAX_RECORD_MS = 15000;
 
@@ -317,7 +402,8 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
       return;
     }
 
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const win = window as Window & { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor };
+    const SR = win.SpeechRecognition || win.webkitSpeechRecognition;
     if (!SR) {
       useServerModeRef.current = true;
       setUseServerMode(true);
@@ -332,7 +418,7 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
 
     rec.onstart = () => setIsListening(true);
 
-    rec.onresult = (e: any) => {
+    rec.onresult = (e: SpeechRecognitionEventLike) => {
       let interim = "";
       let final = "";
       for (let i = 0; i < e.results.length; i++) {
@@ -346,7 +432,7 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
       }
     };
 
-    rec.onerror = (e: any) => {
+    rec.onerror = (e: { error: string }) => {
       setIsListening(false);
       if (e.error === "network") {
         useServerModeRef.current = true;

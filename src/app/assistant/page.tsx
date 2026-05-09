@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Mic, Volume2, Loader2, Phone, PhoneCall, Settings, Globe, ChevronDown, Check, ThumbsUp, ThumbsDown, Sun, Moon } from "lucide-react";
-import CallOverlay from "@/components/CallOverlay";
+import { Mic, Volume2, Loader2, Phone, PhoneCall, Settings, ChevronDown, Check, ThumbsUp, ThumbsDown, Sun, Moon, History, Clock3 } from "lucide-react";
+import CallOverlay, { type CallHistoryRecord } from "@/components/CallOverlay";
 import { StaynepLogo } from "@/components/StaynepLogo";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 
@@ -13,6 +13,7 @@ interface BrandingConfig {
   accentColor: string;
   welcomeMessage: string;
 }
+type VoiceStyle = "warm" | "professional" | "energetic";
 
 interface LanguageOption {
   code: string;
@@ -43,6 +44,50 @@ interface UIStrings {
   poweredByAI: string;
   languagesSupported: string;
 }
+
+interface SpeechRecognitionResultLike {
+  isFinal: boolean;
+  0: { transcript: string };
+}
+
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+}
+
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+const CALL_HISTORY_STORAGE_KEY = "staynep-call-history";
+const PREMIUM_VOICE_HINTS = [
+  "neural",
+  "wavenet",
+  "studio",
+  "premium",
+  "enhanced",
+  "natural",
+  "siri",
+  "samantha",
+  "daniel",
+  "karen",
+  "moira",
+  "ava",
+  "serena",
+  "alloy",
+  "nova",
+];
+const ROBOTIC_VOICE_HINTS = ["compact", "espeak", "mbrola", "festival", "old", "legacy"];
 
 // 34 languages supported by Gemini
 const ALL_LANGUAGES: LanguageOption[] = [
@@ -102,12 +147,10 @@ function pickRecorderMimeType(): string | undefined {
 
 export default function VoiceAssistant() {
   const [isListening, setIsListening] = useState(false);
-  const [transcript, setTranscript] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isSupported, setIsSupported] = useState(true);
   const [inConversation, setInConversation] = useState(false);
   const inConversationRef = useRef(false);
   const [feedbackGiven, setFeedbackGiven] = useState<Record<number, "up" | "down">>({});
@@ -115,6 +158,7 @@ export default function VoiceAssistant() {
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [languageSearch, setLanguageSearch] = useState("");
   const [inCall, setInCall] = useState(false);
+  const [callHistory, setCallHistory] = useState<CallHistoryRecord[]>([]);
   const [mounted, setMounted] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [branding, setBranding] = useState<BrandingConfig>({
@@ -123,9 +167,10 @@ export default function VoiceAssistant() {
     accentColor: "#c9a227",
     welcomeMessage: "Welcome to Willow Hotel. How may I assist you today?",
   });
+  const [voiceStyle, setVoiceStyle] = useState<VoiceStyle>("warm");
 
   const ui = useMemo(() => getUI(selectedLanguage.code), [selectedLanguage]);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -138,6 +183,19 @@ export default function VoiceAssistant() {
   selectedLanguageRef.current = selectedLanguage;
 
   useEffect(() => { setMounted(true); }, []);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(CALL_HISTORY_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setCallHistory(parsed.filter(Boolean).slice(0, 30));
+      }
+    } catch {
+      // ignore storage parse errors
+    }
+  }, []);
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("theme");
@@ -159,6 +217,9 @@ export default function VoiceAssistant() {
       .then((r) => r.json())
       .then((data) => {
         if (data?.branding) setBranding(data.branding);
+        if (data?.voiceStyle && ["warm", "professional", "energetic"].includes(data.voiceStyle)) {
+          setVoiceStyle(data.voiceStyle as VoiceStyle);
+        }
         if (data?.language) {
           const lang = ALL_LANGUAGES.find(l => l.code === data.language || l.code.startsWith(data.language));
           if (lang) setSelectedLanguage(lang);
@@ -196,20 +257,18 @@ export default function VoiceAssistant() {
     );
     if (!candidates.length) return null;
 
-    // Prefer premium/natural voices — these names indicate high-quality engines
-    const premiumKeywords = ["premium", "enhanced", "natural", "neural", "wavenet", "google", "samantha", "daniel", "karen", "moira", "tessa", "fiona"];
-    const roboticKeywords = ["compact", "espeak", "mbrola"];
-
     // Score each candidate
     const scored = candidates.map(v => {
       const nameL = v.name.toLowerCase();
       let score = 0;
       // Premium indicators
-      if (premiumKeywords.some(k => nameL.includes(k))) score += 10;
+      if (PREMIUM_VOICE_HINTS.some(k => nameL.includes(k))) score += 14;
       // Robotic indicators (penalize)
-      if (roboticKeywords.some(k => nameL.includes(k))) score -= 20;
+      if (ROBOTIC_VOICE_HINTS.some(k => nameL.includes(k))) score -= 25;
       // Prefer non-local (cloud) voices
       if (!v.localService) score += 5;
+      // Prefer female-leaning concierge tone (when available)
+      if (["female", "woman", "samantha", "serena", "karen", "moira", "ava"].some((k) => nameL.includes(k))) score += 4;
       // Exact lang match bonus
       if (v.lang === langCode) score += 3;
       return { voice: v, score };
@@ -219,13 +278,25 @@ export default function VoiceAssistant() {
     return scored[0].voice;
   }, []);
 
+  const toHumanSpeechText = useCallback((text: string) => {
+    return text
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/\s+/g, " ")
+      .replace(/\s*([,.;!?])\s*/g, "$1 ")
+      .replace(/([a-z])\s*-\s*([a-z])/gi, "$1 $2")
+      .trim();
+  }, []);
+
   // Start listening (extracted so it can be called from auto-listen)
   const startListeningInternal = useCallback(() => {
     setErrorMessage(null);
     synthRef.current?.cancel();
     setIsSpeaking(false);
 
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const win = window as Window & { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor };
+    const SR = win.SpeechRecognition || win.webkitSpeechRecognition;
     if (!SR || useServerSTT) {
       startServerRecordingRef.current();
       return;
@@ -237,7 +308,7 @@ export default function VoiceAssistant() {
     recognition.lang = selectedLanguageRef.current.code;
 
     recognition.onstart = () => setIsListening(true);
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event: SpeechRecognitionEventLike) => {
       let final = "";
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) final += event.results[i][0].transcript;
@@ -247,7 +318,7 @@ export default function VoiceAssistant() {
         handleUserAudioCompleteRef.current(final);
       }
     };
-    recognition.onerror = (e: any) => {
+    recognition.onerror = (e: { error: string }) => {
       if (e.error === "network") setUseServerSTT(true);
       setIsListening(false);
       autoListenAfterSpeakRef.current = false;
@@ -261,13 +332,13 @@ export default function VoiceAssistant() {
   const startListeningInternalRef = useRef(startListeningInternal);
   startListeningInternalRef.current = startListeningInternal;
   const startServerRecordingRef = useRef(() => {});
-  const handleUserAudioCompleteRef = useRef((_text: string) => {});
+  const handleUserAudioCompleteRef = useRef<(incomingText: string) => void>(() => {});
 
   const speakText = useCallback((text: string) => {
     if (!synthRef.current) return;
     synthRef.current.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    const utterance = new SpeechSynthesisUtterance(toHumanSpeechText(text));
     const lang = selectedLanguageRef.current.ttsLang;
     utterance.lang = lang;
 
@@ -278,8 +349,16 @@ export default function VoiceAssistant() {
     if (cachedVoiceRef.current) utterance.voice = cachedVoiceRef.current;
 
     // Natural speech tuning
-    utterance.rate = 0.93;  // Slightly slower than default for clarity
-    utterance.pitch = 1.0;  // Natural pitch
+    if (voiceStyle === "professional") {
+      utterance.rate = 0.88;
+      utterance.pitch = 0.95;
+    } else if (voiceStyle === "energetic") {
+      utterance.rate = 0.97;
+      utterance.pitch = 1.04;
+    } else {
+      utterance.rate = 0.9;   // Warm default
+      utterance.pitch = 0.98;
+    }
     utterance.volume = 1.0;
 
     utterance.onstart = () => setIsSpeaking(true);
@@ -298,7 +377,7 @@ export default function VoiceAssistant() {
       setIsSpeaking(false);
     };
     synthRef.current.speak(utterance);
-  }, [pickBestVoice]);
+  }, [pickBestVoice, toHumanSpeechText, voiceStyle]);
 
   const handleUserAudioComplete = useCallback(async (text: string) => {
     setIsListening(false);
@@ -335,7 +414,7 @@ export default function VoiceAssistant() {
     } finally {
       setIsProcessing(false);
     }
-  }, [selectedLanguage, speakText, ui.errorConnection, ui.errorGeneric]);
+  }, [messages, selectedLanguage, speakText, ui.errorConnection, ui.errorGeneric]);
 
   // Keep refs up to date for use inside callbacks
   handleUserAudioCompleteRef.current = handleUserAudioComplete;
@@ -386,8 +465,7 @@ export default function VoiceAssistant() {
 
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
       const SILENCE_THRESHOLD = 15;      // Audio level below this = silence
-      const SILENCE_DURATION_MS = 1500;   // Stop after 1.5s of silence
-      const SPEECH_MIN_MS = 500;          // Must hear speech for at least 0.5s before silence can trigger stop
+      const SILENCE_DURATION_MS = 5000;   // Stop after 5s of silence
       const MAX_RECORD_MS = 15000;        // Safety: max 15 seconds
 
       let silenceStart: number | null = null;
@@ -499,6 +577,25 @@ export default function VoiceAssistant() {
 
   const isRTL = ["ar", "he"].includes(selectedLanguage.code.split("-")[0]);
   const isDark = theme === "dark";
+  const persistCallHistory = useCallback((next: CallHistoryRecord[]) => {
+    setCallHistory(next);
+    window.localStorage.setItem(CALL_HISTORY_STORAGE_KEY, JSON.stringify(next));
+  }, []);
+
+  const handleCallEnd = useCallback((record?: CallHistoryRecord) => {
+    setInCall(false);
+    if (!record) return;
+    setCallHistory((prev) => {
+      const next = [record, ...prev].slice(0, 30);
+      window.localStorage.setItem(CALL_HISTORY_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const formatCallTime = (ts: number) =>
+    new Date(ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  const formatCallDuration = (secs: number) => `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, "0")}s`;
 
   return (
     <div
@@ -713,6 +810,61 @@ export default function VoiceAssistant() {
                 <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500/60">Telephony Mode</span>
               </div>
             </button>
+
+            <div className={`w-full max-w-xl rounded-3xl border p-4 sm:p-5 ${isDark ? "glass border-white/10" : "bg-white/90 border-neutral-200 shadow-[0_12px_30px_rgba(15,23,42,0.08)]"}`}>
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <History className={`h-4 w-4 ${isDark ? "text-[#e4c449]" : "text-[#163a5f]"}`} />
+                  <h3 className={`text-xs font-black uppercase tracking-[0.18em] ${isDark ? "text-neutral-300" : "text-neutral-700"}`}>
+                    Call History
+                  </h3>
+                </div>
+                {callHistory.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => persistCallHistory([])}
+                    className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-neutral-500 hover:text-neutral-300" : "text-neutral-500 hover:text-neutral-700"}`}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {callHistory.length === 0 ? (
+                <p className={`text-xs ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
+                  No calls yet. Start a concierge call to build history.
+                </p>
+              ) : (
+                <div className="space-y-2.5">
+                  {callHistory.slice(0, 4).map((item) => (
+                    <div key={item.id} className={`rounded-2xl border p-3 ${isDark ? "border-white/10 bg-white/[0.03]" : "border-neutral-200 bg-white"}`}>
+                      <div className="mb-1.5 flex items-center justify-between gap-3">
+                        <span className={`text-[10px] font-black uppercase tracking-wider ${isDark ? "text-neutral-400" : "text-neutral-600"}`}>
+                          {item.mode === "server" ? "AI Speech Mode" : "Native Speech Mode"}
+                        </span>
+                        <span className={`text-[10px] font-bold ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+                          {formatCallTime(item.startedAt)}
+                        </span>
+                      </div>
+                      <p className={`text-xs leading-relaxed ${isDark ? "text-neutral-300" : "text-neutral-700"}`}>
+                        {item.transcriptPreview}
+                      </p>
+                      <div className="mt-2 flex items-center gap-3">
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold ${isDark ? "text-neutral-400" : "text-neutral-600"}`}>
+                          <Clock3 className="h-3 w-3" /> {formatCallDuration(item.durationSec)}
+                        </span>
+                        <span className={`text-[10px] font-bold ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+                          {item.languageCode}
+                        </span>
+                        <span className={`text-[10px] font-bold ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+                          {item.totalTurns} turns
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             
             <p className={`text-[11px] font-bold text-center max-w-xs leading-loose tracking-widest uppercase opacity-70 ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
               {branding.tagline}
@@ -816,7 +968,8 @@ export default function VoiceAssistant() {
           accentColor={branding.accentColor}
           languageCode={selectedLanguage.code}
           ttsLang={selectedLanguage.ttsLang}
-          onEnd={() => setInCall(false)}
+          voiceStyle={voiceStyle}
+          onEnd={handleCallEnd}
         />
       )}
     </div>

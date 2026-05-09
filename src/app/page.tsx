@@ -61,12 +61,16 @@ const STEPS = [
 const LANGS = ["English", "Spanish", "French", "Arabic", "Japanese", "Hindi", "German", "Portuguese", "+26 more"];
 
 export default function MarketingHomePage() {
-  const [theme, setTheme] = useState<"dark" | "light">(() => {
-    if (typeof window === "undefined") return "dark";
+  // Keep first server/client paint deterministic to avoid hydration mismatch.
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  useEffect(() => {
     const saved = window.localStorage.getItem("theme");
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    return saved === "light" || saved === "dark" ? saved : prefersDark ? "dark" : "light";
-  });
+    const next = saved === "light" || saved === "dark" ? saved : prefersDark ? "dark" : "light";
+    // Schedule after mount so initial hydration markup stays consistent.
+    queueMicrotask(() => setTheme(next));
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.remove("light", "dark");

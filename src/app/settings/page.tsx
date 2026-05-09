@@ -26,6 +26,7 @@ interface HotelConfig {
   amenities: Amenity[];
   customFAQ: FAQ[];
   receptionistPersona: string;
+  voiceStyle?: "warm" | "professional" | "energetic";
   language: string;
 }
 
@@ -579,7 +580,7 @@ export default function SettingsPage() {
               <div className="flex justify-between items-center">
                 <div>
                   <h2 className="text-lg font-semibold flex items-center gap-2"><MessageSquare className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> Custom FAQ</h2>
-                  <p className="text-neutral-500 text-sm mt-1">Add custom questions and answers specific to your hotel. If a guest's message matches the keyword, the corresponding answer will be used.</p>
+                  <p className="text-neutral-500 text-sm mt-1">Add custom questions and answers specific to your hotel. If a guest&apos;s message matches the keyword, the corresponding answer will be used.</p>
                 </div>
                 <button onClick={() => { setConfig({ ...config, customFAQ: [...config.customFAQ, { question: "", answer: "" }] }); showToast("New FAQ entry added", "success"); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-neutral-800 border border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white transition-all">
                   <Plus className="w-4 h-4" /> Add FAQ
@@ -604,6 +605,21 @@ export default function SettingsPage() {
               <h2 className="text-lg font-semibold flex items-center gap-2"><Settings className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> AI Receptionist Persona</h2>
               <p className="text-neutral-500 text-sm">Define how the AI receptionist should behave and communicate. This acts as the system prompt when integrated with LLM APIs like OpenAI or Gemini.</p>
               <div><label className={labelCls}>Persona / System Prompt</label><textarea className={inputCls + " h-40 resize-none"} value={config.receptionistPersona} onChange={e => setConfig({ ...config, receptionistPersona: e.target.value })} /></div>
+              <div>
+                <label className={labelCls}>Voice Style</label>
+                <select
+                  className={inputCls}
+                  value={config.voiceStyle || "warm"}
+                  onChange={(e) => setConfig({ ...config, voiceStyle: e.target.value as "warm" | "professional" | "energetic" })}
+                >
+                  <option value="warm">Warm</option>
+                  <option value="professional">Professional</option>
+                  <option value="energetic">Energetic</option>
+                </select>
+                <p className="mt-1 text-[11px] text-neutral-500">
+                  Controls speech pacing and tone used by the voice assistant and call receptionist.
+                </p>
+              </div>
               <div><label className={labelCls}>Language</label><input className={inputCls} value={config.language} onChange={e => setConfig({ ...config, language: e.target.value })} /></div>
             </div>
           )}
