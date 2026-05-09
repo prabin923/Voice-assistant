@@ -30,12 +30,46 @@
 @layer base {
   body {
     @apply bg-neutral-950 text-neutral-100 antialiased;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
   html.light body {
     @apply bg-neutral-100 text-neutral-900;
   }
+}
+
+.va-display {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  letter-spacing: -0.045em;
+  font-weight: 700;
+  line-height: 0.94;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (max-width: 640px) {
+  .va-display {
+    letter-spacing: -0.038em;
+    line-height: 0.96;
+  }
+}
+
+.va-noise::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -3;
+  opacity: 0.2;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 0.5px, transparent 0.5px);
+  background-size: 3px 3px;
+}
+
+html.light .va-noise::after {
+  opacity: 0.12;
+  background-image: radial-gradient(rgba(15, 23, 42, 0.16) 0.5px, transparent 0.5px);
 }
 
 /* ── Glassmorphism (lightweight) ── */
