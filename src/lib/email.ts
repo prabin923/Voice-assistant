@@ -9,6 +9,12 @@ interface EscalationEmailData {
   staffEmail: string;
 }
 
+interface PasswordResetEmailData {
+  toEmail: string;
+  hotelName: string;
+  resetUrl: string;
+}
+
 function getTransporter() {
   // Use configured SMTP or default to a "log only" mode
   const host = process.env.SMTP_HOST;
@@ -102,4 +108,45 @@ export async function sendEscalationEmail(data: EscalationEmailData): Promise<vo
   });
 
   console.log(`[EMAIL] Escalation alert sent to ${data.staffEmail} for ticket #${data.ticketId}`);
+}
+
+export async function sendPasswordResetEmail(data: PasswordResetEmailData): Promise<void> {
+  const transporter = getTransporter();
+  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || "ai-receptionist@hotel.local";
+  const safeHotelName = escapeHtml(data.hotelName);
+  const safeResetUrl = escapeHtml(data.resetUrl);
+
+  const subject = `Reset your ${safeHotelName} admin password`;
+  const html = `
+    <div style="font-family: -apple-system, system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 20px;">
+      <div style="background: linear-gradient(135deg, #163a5f, #c9a227); padding: 18px 22px; border-radius: 14px 14px 0 0;">
+        <h2 style="color: #fff; margin: 0; font-size: 18px;">Password Reset Request</h2>
+      </div>
+      <div style="background: #1a1a1a; border-radius: 0 0 14px 14px; padding: 22px; color: #e5e5e5;">
+        <p style="margin-top: 0; line-height: 1.6;">We received a request to reset your admin password for <strong>${safeHotelName}</strong>.</p>
+        <p style="line-height: 1.6;">This link expires in 30 minutes and can only be used once.</p>
+        <p style="margin: 22px 0;">
+          <a href="${safeResetUrl}" style="display: inline-block; background: #163a5f; color: #fff; text-decoration: none; padding: 10px 16px; border-radius: 10px; font-weight: 600;">
+            Reset Password
+          </a>
+        </p>
+        <p style="line-height: 1.5; color: #a3a3a3;">If you did not request this, you can ignore this email.</p>
+      </div>
+    </div>
+  `;
+
+  if (!transporter) {
+    console.log("[EMAIL] Password reset (SMTP not configured):");
+    console.log(`  To: ${data.toEmail}`);
+    console.log(`  Subject: ${subject}`);
+    console.log(`  Reset URL: ${data.resetUrl}`);
+    return;
+  }
+
+  await transporter.sendMail({
+    from: `"${data.hotelName} AI" <${fromEmail}>`,
+    to: data.toEmail,
+    subject,
+    html,
+  });
 }

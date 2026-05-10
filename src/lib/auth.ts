@@ -2,6 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { hotels } from "@/lib/db";
 
 const SESSION_COOKIE = "session";
 const CSRF_COOKIE = "csrf-token";
@@ -30,7 +31,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return bcrypt.compareSync(password, hash);
 }
 
-export async function createToken(payload: { hotelId: string; email: string }): Promise<string> {
+export async function createToken(payload: { hotelId: string; email: string; tokenVersion: number }): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -38,11 +39,11 @@ export async function createToken(payload: { hotelId: string; email: string }): 
     .sign(getJwtSecretBytes());
 }
 
-export async function verifyToken(token: string): Promise<{ hotelId: string; email: string } | null> {
+export async function verifyToken(token: string): Promise<{ hotelId: string; email: string; tokenVersion: number } | null> {
   try {
     if (!process.env.JWT_SECRET?.trim() && process.env.NODE_ENV === "production") return null;
     const { payload } = await jwtVerify(token, getJwtSecretBytes());
-    return payload as unknown as { hotelId: string; email: string };
+    return payload as unknown as { hotelId: string; email: string; tokenVersion: number };
   } catch {
     return null;
   }
@@ -83,11 +84,19 @@ export async function ensureCsrfCookie() {
   });
 }
 
-export async function getSession(): Promise<{ hotelId: string; email: string } | null> {
+export async function getSession(): Promise<{ hotelId: string; email: string; tokenVersion: number } | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  return verifyToken(token);
+  const session = await verifyToken(token);
+  if (!session) return null;
+
+  const hotel = hotels.findById(session.hotelId);
+  if (!hotel || hotel.session_version !== session.tokenVersion) {
+    return null;
+  }
+
+  return session;
 }
 
 export async function clearSession() {
@@ -101,7 +110,7 @@ export async function clearSession() {
  * Returns the session if authenticated, or a 401 NextResponse if not.
  */
 export async function requireAuth(): Promise<
-  { session: { hotelId: string; email: string }; error?: never } |
+  { session: { hotelId: string; email: string; tokenVersion: number }; error?: never } |
   { session?: never; error: NextResponse }
 > {
   const session = await getSession();

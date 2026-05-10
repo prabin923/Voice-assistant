@@ -28,6 +28,14 @@ interface AnalyticsData {
   feedbackStats: { total: number; up: number; down: number; satisfaction: number };
 }
 
+interface AuthAuditLog {
+  id: string;
+  email: string;
+  event: string;
+  ip: string | null;
+  created_at: string;
+}
+
 const LANG_NAMES: Record<string, string> = {
   "en-US": "English (US)", "en-GB": "English (UK)", "ar-SA": "Arabic", "bn-BD": "Bengali",
   "bg-BG": "Bulgarian", "zh-CN": "Chinese", "hr-HR": "Croatian", "cs-CZ": "Czech",
@@ -44,6 +52,7 @@ const COLORS = ["#163a5f", "#3b82f6", "#22c55e", "#a855f7", "#ca8a04", "#14b8a6"
 
 export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
+  const [authLogs, setAuthLogs] = useState<AuthAuditLog[]>([]);
   const [hotelUser, setHotelUser] = useState<{ name: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -61,6 +70,8 @@ export default function AnalyticsPage() {
       ]);
       setData(analytics);
       if (user.name) setHotelUser({ name: user.name });
+      const authAudit = await fetchJsonWithAuth<{ logs: AuthAuditLog[] }>("/api/auth/audit?limit=20");
+      setAuthLogs(authAudit.logs || []);
       setLastRefresh(new Date());
     } catch (err: unknown) {
       if (!isUnauthorizedError(err)) {
@@ -419,6 +430,34 @@ export default function AnalyticsPage() {
                   </div>
                   <div className={`text-sm ${isDark ? "text-neutral-400" : "text-neutral-600"}`}>
                     <span className="text-blue-400 font-semibold">AI:</span> {msg.ai_response.length > 200 ? msg.ai_response.slice(0, 200) + "…" : msg.ai_response}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className={`rounded-2xl p-6 ${isDark ? "bg-neutral-900/50 border border-neutral-800/60" : "bg-white border border-neutral-200 shadow-[0_10px_30px_rgba(15,23,42,0.06)]"}`}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className={`text-sm font-semibold uppercase tracking-wider flex items-center gap-2 ${isDark ? "text-neutral-300" : "text-neutral-700"}`}>
+              <Settings className="h-4 w-4 text-[#163a5f] dark:text-[#e4c449]" /> Auth Activity
+            </h2>
+            <span className={`text-xs ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>Last 20</span>
+          </div>
+          {authLogs.length === 0 ? (
+            <EmptyState text="No auth events yet" isDark={isDark} />
+          ) : (
+            <div className="space-y-2 max-h-80 overflow-y-auto scrollbar-premium">
+              {authLogs.map((log) => (
+                <div key={log.id} className={`rounded-xl p-3 border text-sm ${isDark ? "bg-neutral-800/30 border-neutral-800/50" : "bg-neutral-50 border-neutral-200"}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={`${isDark ? "text-neutral-300" : "text-neutral-700"} font-medium`}>{log.event.replaceAll("_", " ")}</span>
+                    <span className={`text-xs tabular-nums ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>
+                      {new Date(log.created_at + "Z").toLocaleString()}
+                    </span>
+                  </div>
+                  <div className={`mt-1 text-xs ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
+                    {log.email} {log.ip ? `• ${log.ip}` : ""}
                   </div>
                 </div>
               ))}

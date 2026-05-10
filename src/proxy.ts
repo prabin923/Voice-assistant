@@ -8,7 +8,7 @@ const secret = jwtSecret ? new TextEncoder().encode(jwtSecret) : null;
 
 const protectedRoutes = ["/settings", "/admin/analytics", "/admin/support"];
 const protectedApiRoutes = ["/api/config", "/api/analytics", "/api/support"];
-const authRoutes = ["/admin/login", "/admin/register"];
+const authRoutes = ["/admin/login", "/admin/register", "/admin/forgot-password", "/admin/reset-password"];
 
 function matchesRoute(path: string, route: string): boolean {
   return path === route || path.startsWith(`${route}/`);

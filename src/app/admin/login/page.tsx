@@ -198,6 +198,11 @@ export default function LoginPage() {
             Register your hotel
           </Link>
         </p>
+        <p className={`text-center text-sm mt-2 ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>
+          <Link href="/admin/forgot-password" className="text-[#163a5f] dark:text-[#e4c449] underline-offset-4 hover:underline transition-colors dark:hover:text-[#fce878]">
+            Forgot password?
+          </Link>
+        </p>
       </div>
         </div>
       </div>

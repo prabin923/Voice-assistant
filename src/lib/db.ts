@@ -18,11 +18,18 @@ function getDb(): Database.Database {
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
       password TEXT NOT NULL,
+      session_version INTEGER NOT NULL DEFAULT 0,
       config TEXT DEFAULT '{}',
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     )
   `);
+
+  // Lightweight migrations for existing databases.
+  const hotelColumns = db.prepare("PRAGMA table_info(hotels)").all() as Array<{ name: string }>;
+  if (!hotelColumns.some((col) => col.name === "session_version")) {
+    db.exec("ALTER TABLE hotels ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0");
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS interactions (
@@ -57,6 +64,30 @@ function getDb(): Database.Database {
     )
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS auth_audit_logs (
+      id TEXT PRIMARY KEY,
+      hotel_id TEXT,
+      email TEXT NOT NULL,
+      event TEXT NOT NULL,
+      ip TEXT,
+      user_agent TEXT,
+      metadata TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id TEXT PRIMARY KEY,
+      hotel_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
   if (process.env.NODE_ENV !== "production") globalForDb.db = db;
   
   // Seed default admin user if none exist
@@ -85,9 +116,21 @@ export interface Hotel {
   name: string;
   email: string;
   password: string;
+  session_version: number;
   config: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface AuthAuditLog {
+  id: string;
+  hotel_id: string | null;
+  email: string;
+  event: string;
+  ip: string | null;
+  user_agent: string | null;
+  metadata: string | null;
+  created_at: string;
 }
 
 export interface Interaction {
@@ -223,6 +266,20 @@ export const hotels = {
     return this.findById(id)!;
   },
 
+  bumpSessionVersion(id: string): number {
+    db.prepare(
+      "UPDATE hotels SET session_version = session_version + 1, updated_at = datetime('now') WHERE id = ?"
+    ).run(id);
+    const result = db.prepare("SELECT session_version FROM hotels WHERE id = ?").get(id) as { session_version: number } | undefined;
+    return result?.session_version ?? 0;
+  },
+
+  updatePassword(id: string, password: string) {
+    db.prepare(
+      "UPDATE hotels SET password = ?, updated_at = datetime('now') WHERE id = ?"
+    ).run(password, id);
+  },
+
   updateConfig(id: string, config: string) {
     db.prepare(
       "UPDATE hotels SET config = ?, updated_at = datetime('now') WHERE id = ?"
@@ -231,6 +288,69 @@ export const hotels = {
 
   getFirst(): Hotel | undefined {
     return db.prepare("SELECT * FROM hotels LIMIT 1").get() as Hotel | undefined;
+  },
+};
+
+export const authAuditLogs = {
+  create(data: {
+    hotelId?: string | null;
+    email: string;
+    event: "login_success" | "login_fail" | "register" | "logout" | "password_reset_request" | "password_reset_success";
+    ip?: string | null;
+    userAgent?: string | null;
+    metadata?: string | null;
+  }) {
+    const id = generateId();
+    db.prepare(
+      "INSERT INTO auth_audit_logs (id, hotel_id, email, event, ip, user_agent, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).run(
+      id,
+      data.hotelId ?? null,
+      data.email,
+      data.event,
+      data.ip ?? null,
+      data.userAgent ?? null,
+      data.metadata ?? null
+    );
+  },
+
+  recentByHotel(hotelId: string, limit: number = 50): AuthAuditLog[] {
+    return db.prepare(
+      "SELECT * FROM auth_audit_logs WHERE hotel_id = ? ORDER BY created_at DESC LIMIT ?"
+    ).all(hotelId, limit) as AuthAuditLog[];
+  },
+};
+
+export const passwordResetTokens = {
+  create(data: { hotelId: string; tokenHash: string; expiresAt: string }) {
+    const id = generateId();
+    db.prepare(
+      "INSERT INTO password_reset_tokens (id, hotel_id, token_hash, expires_at) VALUES (?, ?, ?, ?)"
+    ).run(id, data.hotelId, data.tokenHash, data.expiresAt);
+  },
+
+  findActiveByHash(tokenHash: string): { id: string; hotel_id: string; expires_at: string } | undefined {
+    return db.prepare(`
+      SELECT id, hotel_id, expires_at
+      FROM password_reset_tokens
+      WHERE token_hash = ?
+        AND used_at IS NULL
+        AND expires_at > datetime('now')
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).get(tokenHash) as { id: string; hotel_id: string; expires_at: string } | undefined;
+  },
+
+  markUsed(id: string) {
+    db.prepare(
+      "UPDATE password_reset_tokens SET used_at = datetime('now') WHERE id = ?"
+    ).run(id);
+  },
+
+  invalidateActiveForHotel(hotelId: string) {
+    db.prepare(
+      "UPDATE password_reset_tokens SET used_at = datetime('now') WHERE hotel_id = ? AND used_at IS NULL"
+    ).run(hotelId);
   },
 };
 
