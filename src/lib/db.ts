@@ -4,7 +4,8 @@ import { randomUUID } from "crypto";
 
 const dbPath = path.join(process.cwd(), "hotel.db");
 
-const globalForDb = globalThis as unknown as { db: Database.Database };
+const globalForDb = globalThis as unknown as { db: Database.Database; authCleanupStarted?: boolean };
+const AUTH_RETENTION_DAYS = 90;
 
 function getDb(): Database.Database {
   if (globalForDb.db) return globalForDb.db;
@@ -109,6 +110,25 @@ export const db = getDb();
 
 function generateId(): string {
   return randomUUID();
+}
+
+function cleanupOldAuthRecords() {
+  db.prepare(
+    `DELETE FROM auth_audit_logs
+     WHERE created_at < datetime('now', ?)`
+  ).run(`-${AUTH_RETENTION_DAYS} days`);
+
+  db.prepare(
+    `DELETE FROM password_reset_tokens
+     WHERE used_at IS NOT NULL
+        OR expires_at < datetime('now', '-1 day')`
+  ).run();
+}
+
+if (!globalForDb.authCleanupStarted) {
+  cleanupOldAuthRecords();
+  setInterval(cleanupOldAuthRecords, 24 * 60 * 60 * 1000);
+  globalForDb.authCleanupStarted = true;
 }
 
 export interface Hotel {

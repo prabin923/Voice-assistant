@@ -68,20 +68,21 @@ describe('Auth — Password Hashing', () => {
 describe('Auth — JWT Tokens', () => {
 
   it('should create a valid token', async () => {
-    const token = await createToken({ hotelId: 'hotel-1', email: 'test@hotel.com' });
+    const token = await createToken({ hotelId: 'hotel-1', email: 'test@hotel.com', tokenVersion: 1 });
     expect(token).toBeTruthy();
     expect(typeof token).toBe('string');
     expect(token.split('.').length).toBe(3); // JWT has 3 parts
   });
 
   it('TC-1.5: Should verify a valid token', async () => {
-    const payload = { hotelId: 'hotel-1', email: 'admin@hotel.com' };
+    const payload = { hotelId: 'hotel-1', email: 'admin@hotel.com', tokenVersion: 1 };
     const token = await createToken(payload);
     const verified = await verifyToken(token);
 
     expect(verified).not.toBeNull();
     expect(verified?.hotelId).toBe('hotel-1');
     expect(verified?.email).toBe('admin@hotel.com');
+    expect(verified?.tokenVersion).toBe(1);
   });
 
   it('TC-1.6: Should reject an invalid token', async () => {
@@ -90,7 +91,7 @@ describe('Auth — JWT Tokens', () => {
   });
 
   it('should reject a tampered token', async () => {
-    const token = await createToken({ hotelId: 'hotel-1', email: 'test@hotel.com' });
+    const token = await createToken({ hotelId: 'hotel-1', email: 'test@hotel.com', tokenVersion: 1 });
     const tampered = token.slice(0, -5) + 'XXXXX';
     const result = await verifyToken(tampered);
     expect(result).toBeNull();
@@ -103,14 +104,14 @@ describe('Auth — JWT Tokens', () => {
 
   it('token should contain correct email', async () => {
     const email = 'unique@example.com';
-    const token = await createToken({ hotelId: 'h1', email });
+    const token = await createToken({ hotelId: 'h1', email, tokenVersion: 1 });
     const decoded = await verifyToken(token);
     expect(decoded?.email).toBe(email);
   });
 
   it('different payloads should produce different tokens', async () => {
-    const token1 = await createToken({ hotelId: 'h1', email: 'a@b.com' });
-    const token2 = await createToken({ hotelId: 'h2', email: 'c@d.com' });
+    const token1 = await createToken({ hotelId: 'h1', email: 'a@b.com', tokenVersion: 1 });
+    const token2 = await createToken({ hotelId: 'h2', email: 'c@d.com', tokenVersion: 2 });
     expect(token1).not.toBe(token2);
   });
 });

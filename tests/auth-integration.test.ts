@@ -4,6 +4,8 @@ import { NextRequest } from "next/server";
 const mockFindByEmail = vi.fn();
 const mockFindById = vi.fn();
 const mockCreate = vi.fn();
+const mockBumpSessionVersion = vi.fn();
+const mockUpdatePassword = vi.fn();
 const mockVerifyPassword = vi.fn();
 const mockHashPassword = vi.fn();
 const mockCreateToken = vi.fn();
@@ -12,12 +14,26 @@ const mockGetSession = vi.fn();
 const mockClearSession = vi.fn();
 const mockCheckRateLimit = vi.fn();
 const mockGetClientIP = vi.fn();
+const mockValidateCsrf = vi.fn();
+const mockAuditCreate = vi.fn();
 
 vi.mock("@/lib/db", () => ({
   hotels: {
     findByEmail: mockFindByEmail,
     findById: mockFindById,
     create: mockCreate,
+    bumpSessionVersion: mockBumpSessionVersion,
+    updatePassword: mockUpdatePassword,
+  },
+  authAuditLogs: {
+    create: mockAuditCreate,
+    recentByHotel: vi.fn(),
+  },
+  passwordResetTokens: {
+    invalidateActiveForHotel: vi.fn(),
+    create: vi.fn(),
+    findActiveByHash: vi.fn(),
+    markUsed: vi.fn(),
   },
 }));
 
@@ -35,11 +51,17 @@ vi.mock("@/lib/rateLimit", () => ({
   getClientIP: mockGetClientIP,
 }));
 
+vi.mock("@/lib/csrf", () => ({
+  validateCsrf: mockValidateCsrf,
+}));
+
 describe("Auth integration flows", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCheckRateLimit.mockReturnValue({ allowed: true, retryAfterMs: 0 });
     mockGetClientIP.mockReturnValue("127.0.0.1");
+    mockValidateCsrf.mockResolvedValue(null);
+    mockBumpSessionVersion.mockReturnValue(1);
   });
 
   it("redirects expired/invalid session cookie on protected page to /admin/login", async () => {
@@ -49,14 +71,13 @@ describe("Auth integration flows", () => {
     });
 
     const res = await proxy(request);
-
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toBe("http://localhost:3000/admin/login");
   });
 
   it("/api/auth/me returns 401 and clears stale session", async () => {
     const { GET } = await import("@/app/api/auth/me/route");
-    mockGetSession.mockResolvedValue({ hotelId: "missing-hotel", email: "x@y.com" });
+    mockGetSession.mockResolvedValue({ hotelId: "missing-hotel", email: "x@y.com", tokenVersion: 1 });
     mockFindById.mockReturnValue(undefined);
 
     const res = await GET();
@@ -74,6 +95,7 @@ describe("Auth integration flows", () => {
       name: "Hotel One",
       email: "admin@hotel.com",
       password: "hashed-pw",
+      session_version: 0,
     });
     mockVerifyPassword.mockResolvedValue(true);
     mockCreateToken.mockResolvedValue("jwt-token");
@@ -89,16 +111,22 @@ describe("Auth integration flows", () => {
 
     expect(res.status).toBe(200);
     expect(body.email).toBe("admin@hotel.com");
+    expect(mockCreateToken).toHaveBeenCalledWith({
+      hotelId: "hotel-1",
+      email: "admin@hotel.com",
+      tokenVersion: 1,
+    });
     expect(mockSetSessionCookie).toHaveBeenCalledWith("jwt-token");
   });
 
-  it("login fails with invalid credentials", async () => {
+  it("login fails with invalid credentials using uniform message", async () => {
     const { POST } = await import("@/app/api/auth/login/route");
     mockFindByEmail.mockReturnValue({
       id: "hotel-1",
       name: "Hotel One",
       email: "admin@hotel.com",
       password: "hashed-pw",
+      session_version: 0,
     });
     mockVerifyPassword.mockResolvedValue(false);
 
@@ -112,7 +140,7 @@ describe("Auth integration flows", () => {
     const body = await res.json();
 
     expect(res.status).toBe(401);
-    expect(body.error).toBe("Invalid email or password");
+    expect(body.error).toBe("Invalid credentials");
     expect(mockSetSessionCookie).not.toHaveBeenCalled();
   });
 
@@ -124,6 +152,7 @@ describe("Auth integration flows", () => {
       id: "hotel-2",
       name: "New Hotel",
       email: "new@hotel.com",
+      session_version: 0,
     });
     mockCreateToken.mockResolvedValue("new-jwt-token");
 
@@ -142,16 +171,22 @@ describe("Auth integration flows", () => {
 
     expect(res.status).toBe(201);
     expect(body.email).toBe("new@hotel.com");
+    expect(mockCreateToken).toHaveBeenCalledWith({
+      hotelId: "hotel-2",
+      email: "new@hotel.com",
+      tokenVersion: 0,
+    });
     expect(mockSetSessionCookie).toHaveBeenCalledWith("new-jwt-token");
   });
 
-  it("register fails for duplicate email", async () => {
+  it("register duplicate returns generic failure message", async () => {
     const { POST } = await import("@/app/api/auth/register/route");
     mockFindByEmail.mockReturnValue({
       id: "hotel-1",
       name: "Existing Hotel",
       email: "admin@hotel.com",
       password: "hashed",
+      session_version: 0,
     });
 
     const req = new Request("http://localhost:3000/api/auth/register", {
@@ -167,8 +202,8 @@ describe("Auth integration flows", () => {
     const res = await POST(req);
     const body = await res.json();
 
-    expect(res.status).toBe(409);
-    expect(body.error).toBe("Registration failed. Please try a different email.");
+    expect(res.status).toBe(400);
+    expect(body.error).toBe("Registration failed");
     expect(mockSetSessionCookie).not.toHaveBeenCalled();
   });
 });
