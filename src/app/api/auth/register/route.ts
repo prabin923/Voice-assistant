@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   try {
     // SECURITY: Rate limit registration — 3 per hour per IP
     const ip = getClientIP(request);
-    const limit = checkRateLimit(`register:${ip}`, { maxRequests: 10, windowMs: 3600000 });
+    const limit = checkRateLimit(`register:${ip}`, { maxRequests: 3, windowMs: 3600000 });
     if (!limit.allowed) {
       return NextResponse.json(
         { error: "Too many registration attempts. Please try again later." },
@@ -30,9 +30,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Name must be between 2 and 100 characters" }, { status: 400 });
     }
 
+    const normalizedEmail = email.toLowerCase().trim();
+
     // Basic email format validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(normalizedEmail)) {
       return NextResponse.json({ error: "Invalid email format" }, { status: 400 });
     }
 
@@ -40,7 +42,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
     const existing = hotels.findByEmail(normalizedEmail);
     if (existing) {
       // SECURITY: Don't reveal whether an email exists — use generic error

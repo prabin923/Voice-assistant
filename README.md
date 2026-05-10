@@ -207,6 +207,7 @@ To enable email alerts, add SMTP credentials to `.env.local` (see Setup section)
 4. Protected routes redirect unauthenticated users
 5. Sessions stored as HTTP-only JWT cookies (24-hour expiry, SameSite: Strict)
 6. Brute-force protection on auth endpoints and expensive AI routes (STT/Chat)
+7. Auth inputs are normalized and validated (trimmed/lowercased email, minimum password length)
 
 ---
 
