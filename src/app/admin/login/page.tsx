@@ -7,6 +7,12 @@ import { Loader2, LogIn, Moon, Sun } from "lucide-react";
 import { StaynepLogo } from "@/components/StaynepLogo";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 
+function getCookie(name: string): string | null {
+  const parts = document.cookie.split(";").map((entry) => entry.trim());
+  const found = parts.find((entry) => entry.startsWith(`${name}=`));
+  return found ? decodeURIComponent(found.slice(name.length + 1)) : null;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -19,6 +25,8 @@ export default function LoginPage() {
   useEffect(() => {
     const reason = new URLSearchParams(window.location.search).get("reason");
     setSessionExpired(reason === "session-expired");
+
+    void fetch("/api/auth/csrf", { credentials: "include" });
 
     const savedTheme = window.localStorage.getItem("theme");
     const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -48,9 +56,14 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      const csrfToken = getCookie("csrf-token");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (csrfToken) headers["x-csrf-token"] = csrfToken;
+
       const res = await fetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
+        credentials: "include",
         body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
 

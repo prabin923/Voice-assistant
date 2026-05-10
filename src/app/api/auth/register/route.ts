@@ -2,9 +2,13 @@ import { NextResponse } from "next/server";
 import { hotels } from "@/lib/db";
 import { hashPassword, createToken, setSessionCookie } from "@/lib/auth";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
+import { validateCsrf } from "@/lib/csrf";
 
 export async function POST(request: Request) {
   try {
+    const csrfError = await validateCsrf(request);
+    if (csrfError) return csrfError;
+
     // SECURITY: Rate limit registration — 3 per hour per IP
     const ip = getClientIP(request);
     const limit = checkRateLimit(`register:${ip}`, { maxRequests: 3, windowMs: 3600000 });

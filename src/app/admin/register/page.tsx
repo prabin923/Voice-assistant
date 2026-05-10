@@ -7,6 +7,12 @@ import { Loader2, UserPlus, Moon, Sun } from "lucide-react";
 import { StaynepLogo } from "@/components/StaynepLogo";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 
+function getCookie(name: string): string | null {
+  const parts = document.cookie.split(";").map((entry) => entry.trim());
+  const found = parts.find((entry) => entry.startsWith(`${name}=`));
+  return found ? decodeURIComponent(found.slice(name.length + 1)) : null;
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -18,6 +24,8 @@ export default function RegisterPage() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
+    void fetch("/api/auth/csrf", { credentials: "include" });
+
     const savedTheme = window.localStorage.getItem("theme");
     const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const nextTheme = savedTheme === "light" || savedTheme === "dark"
@@ -49,9 +57,14 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
+      const csrfToken = getCookie("csrf-token");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (csrfToken) headers["x-csrf-token"] = csrfToken;
+
       const res = await fetch("/api/auth/register", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
+        credentials: "include",
         body: JSON.stringify({
           name: name.trim(),
           email: email.trim().toLowerCase(),

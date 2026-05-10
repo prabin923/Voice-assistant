@@ -68,6 +68,21 @@ export async function setSessionCookie(token: string) {
   });
 }
 
+export async function ensureCsrfCookie() {
+  const cookieStore = await cookies();
+  const existing = cookieStore.get(CSRF_COOKIE)?.value;
+  if (existing) return;
+
+  const csrfToken = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
+  cookieStore.set(CSRF_COOKIE, csrfToken, {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    path: "/",
+    maxAge: 60 * 60 * 24,
+  });
+}
+
 export async function getSession(): Promise<{ hotelId: string; email: string } | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
