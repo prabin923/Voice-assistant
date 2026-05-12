@@ -17,7 +17,7 @@ A production-ready AI voice receptionist that provides 24/7 multilingual guest s
 | **Silence Detection** | Auto-stops recording when the user stops talking (Web Audio API) |
 | **Seamless Conversation** | Tap once to start, auto-listen loop after each response, tap again to stop |
 | **Guest Feedback** | Thumbs up/down on every AI response, stored and tracked |
-| **Hotel Admin Auth** | Secure registration and login system (JWT + bcrypt) |
+| **Hotel Admin Auth** | JWT + bcrypt, CSRF, session rotation, audit log, optional email password reset |
 | **Admin Dashboard** | 8-tab configuration panel (Persisted to SQLite) — Branding, Contact, Policies, Rooms, Dining, Amenities, FAQ, AI Persona |
 | **Analytics Dashboard** | 7 KPI cards, daily trends, peak hours, language distribution, activity heatmap, guest satisfaction |
 | **Support Inbox** | Priority-sorted escalation tickets with auto-refresh and email alerts |
@@ -60,28 +60,30 @@ npm install
 
 ### 2. Environment setup
 
-Create a `.env.local` file:
+Create a `.env.local` file (see `.env.example` for a minimal template):
 
 ```bash
 # Required: Gemini API Key
 GOOGLE_GENERATIVE_AI_API_KEY=your_key_from_aistudio.google.com
 
-# Database
-DATABASE_URL="file:./dev.db"
-
-# JWT Secret for Auth sessions
+# JWT Secret for Auth sessions (use a long random value in production)
 JWT_SECRET=your_random_secret_here
+
+# Public URL of the app — used in password-reset emails when set (otherwise the request origin is used)
+NEXT_PUBLIC_APP_URL=https://your-production-domain.com
 
 # Required for telephony webhook authentication
 WEBHOOK_SECRET=your_webhook_shared_secret
 
-# Optional: Email notifications on escalation
+# Optional: SMTP for escalation alerts and admin password-reset emails
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your-email@gmail.com
 SMTP_PASS=your-app-password
 SMTP_FROM=ai-receptionist@yourhotel.com
 ```
+
+SQLite data is stored in `hotel.db` at the project root (see `src/lib/db.ts`). That file is gitignored; back it up if you rely on local data.
 
 ### 3. Run the dev server
 
@@ -103,6 +105,8 @@ src/
 │   ├── admin/
 │   │   ├── login/page.tsx          # Hotel admin login
 │   │   ├── register/page.tsx       # Hotel admin registration
+│   │   ├── forgot-password/page.tsx
+│   │   ├── reset-password/page.tsx
 │   │   ├── analytics/page.tsx      # Analytics dashboard (KPIs, charts, heatmap)
 │   │   └── support/page.tsx        # Support inbox (escalation tickets)
 │   ├── api/
@@ -112,7 +116,7 @@ src/
 │   │   ├── analytics/route.ts      # Analytics data aggregation
 │   │   ├── support/route.ts        # Support ticket management
 │   │   ├── feedback/route.ts       # Guest feedback (thumbs up/down)
-│   │   ├── auth/                   # Auth endpoints (register/login/logout/me)
+│   │   ├── auth/                   # Auth (register/login/logout/me/csrf/audit/forgot/reset)
 │   │   └── telephony/webhook/      # Phone call webhook
 │   ├── globals.css                 # Design system & animations
 │   └── layout.tsx                  # Root layout
@@ -178,6 +182,7 @@ Real-time dashboard with auto-refresh (30s):
 - Peak hours heatmap
 - Language distribution
 - Escalation summary strip
+- Recent auth audit events (login, logout, password reset, etc.)
 
 ### Support Inbox (`/admin/support`)
 Priority-sorted escalation tickets with auto-refresh (15s):
@@ -195,19 +200,21 @@ When the AI detects a guest issue requiring human help (complaint, booking chang
 2. Creates a support ticket in the database
 3. Sends a styled HTML email to the hotel's configured email address
 
-To enable email alerts, add SMTP credentials to `.env.local` (see Setup section). Without SMTP config, escalations are logged to console.
+To enable email alerts and password-reset emails, add SMTP credentials to `.env.local` (see Setup section). Without SMTP config, escalation and reset flows log details to the server console instead of sending mail.
 
 ---
 
 ## Auth Flow
 
 1. Hotel admin registers at `/admin/register`
-2. Login at `/admin/login`
+2. Login at `/admin/login` (optional **Forgot password** at `/admin/forgot-password` → email link → `/admin/reset-password`)
 3. Authenticated users access `/settings`, analytics, and support
 4. Protected routes redirect unauthenticated users
-5. Sessions stored as HTTP-only JWT cookies (24-hour expiry, SameSite: Strict)
-6. Brute-force protection on auth endpoints and expensive AI routes (STT/Chat)
-7. Auth inputs are normalized and validated (trimmed/lowercased email, minimum password length)
+5. Sessions stored as HTTP-only JWT cookies (24-hour expiry, SameSite: Strict) with a server-side session version; successful login or password reset issues a new token and invalidates older ones
+6. Logout clears cookies and writes an audit entry without bumping session version (other devices keep valid sessions until expiry or the next login/reset rotation)
+7. Brute-force protection on auth endpoints and expensive AI routes (STT/Chat)
+8. Auth inputs are normalized and validated (trimmed/lowercased email, minimum password length)
+9. Auth events are stored for the hotel (see Analytics **Auth Activity**); old audit rows and used reset tokens are pruned periodically (90-day audit retention by default)
 
 ---
 
