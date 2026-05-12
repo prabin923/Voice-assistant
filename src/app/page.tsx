@@ -171,21 +171,22 @@ export default function MarketingHomePage() {
                   isDark ? "border-[#fde047]/35 bg-[#dab52d]/12 text-[#fde047]" : "border-[#163a5f]/28 bg-white text-[#163a5f]"
                 }`}
               >
-                <Hotel className="h-3 w-3 shrink-0" />
-                StayNEP · Nepal
+                <Mic className="h-3 w-3 shrink-0" />
+                AI voice receptionist
               </p>
               <h1
                 className={`hero-intro hero-intro-delay-2 va-display text-balance ${isDark ? "text-[#f8f5eb]" : "text-[#0f2844]"}`}
                 style={{ fontSize: "clamp(2rem, 5vw, 3.75rem)", lineHeight: 1.05 }}
               >
-                Full hotel management software — with an AI voice layer guests feel.
+                Your hotel&apos;s AI voice receptionist — natural, multilingual, always on.
               </h1>
               <p className={`hero-intro hero-intro-delay-3 mx-auto mt-5 max-w-2xl text-[15px] leading-relaxed sm:text-lg ${muted}`}>
-                The same guest journey you expect on{" "}
+                Guests speak freely; the assistant answers with your policies and brand voice, handles dozens of languages, and escalates to staff when
+                needed. Part of the StayNEP ecosystem — try the live demo or explore{" "}
                 <a href={STAYNEP_SITE} target="_blank" rel="noopener noreferrer" className="font-semibold underline-offset-4 hover:underline">
                   staynep.com
-                </a>
-                : rooms, concierge, and policies — plus this product&apos;s multilingual voice receptionist demo.
+                </a>{" "}
+                for rooms and concierge.
               </p>
               <div className="hero-intro hero-intro-delay-4 mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                 <Link
@@ -225,7 +226,8 @@ export default function MarketingHomePage() {
                     <div className="text-center sm:text-left">
                       <p className={`text-[10px] font-bold uppercase tracking-[0.18em] ${isDark ? "text-[#e8c96a]" : "text-[#163a5f]"}`}>Live preview</p>
                       <p className={`mt-2 max-w-sm text-sm leading-relaxed ${muted}`}>
-                        Orb pulse and glass panels echo the motion language of the StayNEP marketing site — calm, premium, and hotel-first.
+                        Tap the demo to hear the receptionist: silence-aware capture, spoken replies, and the same calm motion as your StayNEP brand
+                        surface.
                       </p>
                     </div>
                     <div className="relative flex shrink-0 items-center justify-center">
