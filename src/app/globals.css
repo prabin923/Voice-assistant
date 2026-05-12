@@ -30,7 +30,7 @@
 @layer base {
   body {
     @apply bg-neutral-950 text-neutral-100 antialiased;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
@@ -40,9 +40,9 @@
 }
 
 .va-display {
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  letter-spacing: -0.045em;
-  font-weight: 700;
+  font-family: var(--font-display), ui-serif, Georgia, "Times New Roman", serif;
+  letter-spacing: -0.03em;
+  font-weight: 600;
   line-height: 0.94;
   text-rendering: geometricPrecision;
   -webkit-font-smoothing: antialiased;
