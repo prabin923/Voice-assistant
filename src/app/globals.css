@@ -261,6 +261,82 @@ html.light .ac-bento-card::after {
   }
 }
 
+/* ── StayNEP.com-style landing: soft mesh + service cards ── */
+@keyframes sn-mesh-drift {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  50% {
+    opacity: 0.88;
+    transform: scale(1.06) translate3d(1.5%, -1.2%, 0);
+  }
+}
+
+.sn-landing-mesh {
+  position: absolute;
+  inset: -8% -4% auto -4%;
+  height: min(72vh, 640px);
+  pointer-events: none;
+  border-radius: 0 0 48% 48% / 0 0 22% 22%;
+  background:
+    radial-gradient(ellipse 90% 70% at 50% -10%, rgba(30, 82, 120, 0.42), transparent 58%),
+    radial-gradient(ellipse 55% 45% at 88% 45%, rgba(209, 169, 58, 0.22), transparent 52%),
+    radial-gradient(ellipse 50% 40% at 12% 55%, rgba(110, 164, 199, 0.16), transparent 50%);
+  animation: sn-mesh-drift 20s ease-in-out infinite;
+  z-index: 0;
+}
+
+.sn-eyebrow-shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.sn-eyebrow-shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.22) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: sn-shine-sweep 5.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes sn-shine-sweep {
+  0%, 70% { transform: translateX(-120%); }
+  85% { transform: translateX(120%); }
+  100% { transform: translateX(120%); }
+}
+
+.sn-service-card {
+  transition:
+    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.35s ease,
+    box-shadow 0.45s ease;
+}
+
+.sn-service-card:hover {
+  transform: translateY(-6px);
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.18),
+    0 0 0 1px rgba(var(--accent-gold-rgb), 0.22);
+}
+
+html.light .sn-service-card:hover {
+  box-shadow:
+    0 18px 44px rgba(15, 23, 42, 0.1),
+    0 0 0 1px rgba(22, 58, 95, 0.12);
+}
+
+.sn-footer-link {
+  position: relative;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.sn-footer-link:hover {
+  transform: translateX(3px);
+}
+
 /* ── Marketing: ambient blobs + motion ── */
 @keyframes marketing-blob-1 {
   0%, 100% {
@@ -873,6 +949,16 @@ html.light .text-gradient {
   .nav-link-glide:hover {
     transform: none !important;
   }
+
+  .sn-landing-mesh,
+  .sn-eyebrow-shine::after {
+    animation: none !important;
+  }
+
+  .sn-service-card:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
 }
 
 /* Mobile and coarse-pointer devices are where animation/backdrop pressure is most visible. */
@@ -898,6 +984,11 @@ html.light .text-gradient {
   .ac-border-beam::before,
   .ac-spotlight::before,
   .ac-spotlight::after {
+    animation: none !important;
+  }
+
+  .sn-landing-mesh,
+  .sn-eyebrow-shine::after {
     animation: none !important;
   }
 
