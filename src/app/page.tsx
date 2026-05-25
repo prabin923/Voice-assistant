@@ -124,6 +124,43 @@ export default function MarketingHomePage() {
     window.localStorage.setItem("theme", theme);
   }, [theme]);
 
+  useEffect(() => {
+    let frame = 0;
+
+    const updateScrollMotion = () => {
+      frame = 0;
+      const root = document.documentElement;
+      const maxScroll = Math.max(1, root.scrollHeight - window.innerHeight);
+      const pageProgress = Math.min(1, Math.max(0, window.scrollY / maxScroll));
+      const story = document.getElementById("story");
+      let storyProgress = 0;
+
+      if (story) {
+        const rect = story.getBoundingClientRect();
+        const distance = window.innerHeight + rect.height;
+        storyProgress = Math.min(1, Math.max(0, (window.innerHeight - rect.top) / distance));
+      }
+
+      root.style.setProperty("--kiddo-page-progress", pageProgress.toFixed(4));
+      root.style.setProperty("--kiddo-story-progress", storyProgress.toFixed(4));
+    };
+
+    const requestUpdate = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(updateScrollMotion);
+    };
+
+    updateScrollMotion();
+    window.addEventListener("scroll", requestUpdate, { passive: true });
+    window.addEventListener("resize", requestUpdate);
+
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", requestUpdate);
+      window.removeEventListener("resize", requestUpdate);
+    };
+  }, []);
+
   const isDark = theme === "dark";
   const muted = isDark ? "text-white/62" : "text-slate-600";
   const panel = isDark ? "border-white/10 bg-white/[0.045]" : "border-slate-200 bg-white/82";

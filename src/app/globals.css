@@ -22,6 +22,8 @@
   /* Effect gold: pumped chroma vs logo file for glows/conic rims */
   --accent-gold-rgb: 209, 169, 58;
   --accent-spark-rgb: 110, 164, 199;
+  --kiddo-page-progress: 0;
+  --kiddo-story-progress: 0;
   --bg-dark: #04070c;
   --glass-bg: rgba(255, 255, 255, 0.035);
   --glass-border: rgba(255, 255, 255, 0.1);
@@ -436,6 +438,15 @@ html.light .kiddo-nav-link:hover {
   display: grid;
   place-items: center;
   min-height: min(500px, 70vw);
+  transform:
+    translate3d(
+      calc(var(--kiddo-page-progress) * -18px),
+      calc(var(--kiddo-story-progress) * 28px),
+      0
+    )
+    scale(calc(1 - (var(--kiddo-story-progress) * 0.045)));
+  transition: filter 0.35s ease;
+  will-change: transform;
 }
 
 .kiddo-stage::before {
@@ -451,6 +462,20 @@ html.light .kiddo-nav-link:hover {
   animation: kiddo-field-drift 16s ease-in-out infinite;
 }
 
+.kiddo-stage::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  width: min(520px, 74vw);
+  height: min(720px, 92vw);
+  border-radius: 999px;
+  background: linear-gradient(18deg, transparent 0 34%, rgba(255, 255, 255, 0.28) 45%, transparent 58% 100%);
+  filter: blur(14px);
+  opacity: calc(0.16 + (var(--kiddo-story-progress) * 0.2));
+  transform: translate3d(calc(var(--kiddo-page-progress) * -34px), calc(var(--kiddo-story-progress) * -22px), 0) rotate(9deg);
+  pointer-events: none;
+}
+
 .kiddo-core {
   position: relative;
   z-index: 3;
@@ -461,6 +486,7 @@ html.light .kiddo-nav-link:hover {
   border-radius: 45% 55% 46% 54% / 50% 45% 55% 50%;
   transform-style: preserve-3d;
   animation: kiddo-float 5.6s ease-in-out infinite;
+  filter: saturate(calc(1.02 + (var(--kiddo-story-progress) * 0.22))) contrast(calc(1 + (var(--kiddo-story-progress) * 0.08)));
 }
 
 .kiddo-core::before {
@@ -496,7 +522,8 @@ html.light .kiddo-nav-link:hover {
     inset 0 -24px 48px rgba(3, 9, 22, 0.4),
     inset 0 20px 54px rgba(255, 255, 255, 0.2),
     0 36px 110px rgba(62, 112, 255, 0.32),
-    0 18px 74px rgba(248, 211, 106, 0.16);
+    0 18px 74px rgba(248, 211, 106, 0.16),
+    0 0 calc(40px + (var(--kiddo-story-progress) * 58px)) rgba(142, 232, 255, 0.18);
 }
 
 .kiddo-core-light {
@@ -545,6 +572,7 @@ html.light .kiddo-nav-link:hover {
   border-radius: 999px;
   border: 1px solid rgba(142, 232, 255, 0.28);
   transform: rotateX(68deg) rotateZ(-18deg);
+  opacity: calc(0.55 + (var(--kiddo-story-progress) * 0.38));
 }
 
 .kiddo-orbit::before {
@@ -651,6 +679,20 @@ html.light .kiddo-pin-card {
   grid-template-columns: 3.5rem minmax(0, 1fr);
   overflow: hidden;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 18px 46px rgba(15, 23, 42, 0.08);
+  transform: translate3d(calc(4px - (var(--kiddo-story-progress) * 8px)), 0, 0);
+  transition:
+    transform 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.4s ease,
+    border-color 0.4s ease;
+}
+
+.kiddo-story-panel:hover {
+  transform: translate3d(-4px, -3px, 0);
+  border-color: color-mix(in srgb, var(--story-accent) 42%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 24px 70px rgba(15, 23, 42, 0.14),
+    0 0 44px color-mix(in srgb, var(--story-accent) 15%, transparent);
 }
 
 .kiddo-story-panel::before {
@@ -663,6 +705,8 @@ html.light .kiddo-pin-card {
   background: radial-gradient(circle, color-mix(in srgb, var(--story-accent) 34%, transparent), transparent 68%);
   opacity: 0.72;
   pointer-events: none;
+  transform: translate3d(calc(var(--kiddo-story-progress) * -18px), calc(var(--kiddo-story-progress) * 12px), 0);
+  transition: transform 0.4s ease;
 }
 
 .kiddo-story-panel::after {
@@ -700,6 +744,8 @@ html:not(.light) .kiddo-story-rail {
   width: 2px;
   border-radius: 999px;
   background: linear-gradient(180deg, var(--story-accent), transparent);
+  transform-origin: top;
+  transform: scaleY(calc(0.42 + (var(--kiddo-story-progress) * 0.58)));
 }
 
 .kiddo-story-rail span {
@@ -949,6 +995,44 @@ html:not(.light) .kiddo-story-flow span {
 @keyframes kiddo-wave {
   0%, 100% { height: 22%; opacity: 0.56; }
   50% { height: 86%; opacity: 1; }
+}
+
+@keyframes kiddo-card-scroll-in {
+  from {
+    opacity: 0.72;
+    transform: translate3d(32px, 34px, 0) scale(0.965);
+    filter: blur(3px) saturate(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0) saturate(1);
+  }
+}
+
+@keyframes kiddo-image-scroll-focus {
+  from {
+    filter: saturate(0.9) contrast(0.94);
+    transform: translate3d(-18px, 18px, 0) scale(0.94);
+  }
+  to {
+    filter: saturate(1.08) contrast(1.03);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@supports (animation-timeline: view()) {
+  #story .kiddo-stage {
+    animation: kiddo-image-scroll-focus both linear;
+    animation-timeline: view();
+    animation-range: entry 0% cover 42%;
+  }
+
+  .kiddo-story-panel {
+    animation: kiddo-card-scroll-in both linear;
+    animation-timeline: view();
+    animation-range: entry 4% cover 34%;
+  }
 }
 
 /* ── Marketing: ambient blobs + motion ── */
