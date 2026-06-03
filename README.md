@@ -83,7 +83,9 @@ SMTP_PASS=your-app-password
 SMTP_FROM=ai-receptionist@yourhotel.com
 ```
 
-SQLite data is stored in `hotel.db` at the project root (see `src/lib/db.ts`). That file is gitignored; back it up if you rely on local data.
+SQLite data is stored in `hotel.db` at the project root locally, or `/tmp/hotel.db` on Vercel (see `src/lib/db.ts`). The file is gitignored; back it up if you rely on local data.
+
+**Vercel auth checklist:** set `JWT_SECRET` (≥8 characters) and `NEXT_PUBLIC_APP_URL` to your production URL in Project → Settings → Environment Variables, then redeploy. Without `JWT_SECRET`, login and protected routes will fail in production.
 
 ### 3. Run the dev server
 
@@ -98,6 +100,8 @@ Open [http://localhost:3000](http://localhost:3000) — the voice assistant is r
 ## Project Structure
 
 ```
+scripts/                            # One-off utilities (reports, model checks)
+docs/                               # Project reports and logs
 src/
 ├── app/
 │   ├── page.tsx                    # Main voice assistant UI

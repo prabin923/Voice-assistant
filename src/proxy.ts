@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
-
-const jwtSecret =
-  process.env.JWT_SECRET ||
-  (process.env.NODE_ENV === "production" ? undefined : "dev-only-local-secret-do-not-use-in-prod");
-const secret = jwtSecret ? new TextEncoder().encode(jwtSecret) : null;
+import { getJwtSecretBytes, hasProductionJwtSecret } from "@/lib/jwtSecret";
 
 const protectedRoutes = ["/settings", "/admin/analytics", "/admin/support"];
 const protectedApiRoutes = ["/api/config", "/api/analytics", "/api/support"];
@@ -16,8 +12,8 @@ function matchesRoute(path: string, route: string): boolean {
 
 async function verifySession(token: string) {
   try {
-    if (!secret) return null;
-    const { payload } = await jwtVerify(token, secret);
+    if (!hasProductionJwtSecret() && process.env.NODE_ENV === "production") return null;
+    const { payload } = await jwtVerify(token, getJwtSecretBytes());
     return payload as unknown as { hotelId: string; email: string };
   } catch {
     return null;

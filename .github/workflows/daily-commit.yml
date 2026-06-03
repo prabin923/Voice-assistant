@@ -25,7 +25,7 @@ jobs:
       - name: Update daily log
         run: |
           DATE=$(date -u +"%Y-%m-%d")
-          FILE="daily-log.md"
+          FILE="docs/daily-log.md"
 
           if [ ! -f "$FILE" ]; then
             echo "# Daily Activity Log" > "$FILE"
@@ -39,7 +39,7 @@ jobs:
       - name: Commit and push
         run: |
           DATE=$(date -u +"%Y-%m-%d")
-          git add daily-log.md
+          git add docs/daily-log.md
           git diff --cached --quiet && echo "No changes to commit" && exit 0
           git commit -m "chore: daily project activity update - ${DATE}"
           git push

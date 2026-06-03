@@ -131,8 +131,14 @@ export async function POST(request: Request) {
     await waitForMinimumDuration(requestStart);
 
     return NextResponse.json({ id: hotel.id, name: hotel.name, email: hotel.email });
-  } catch {
+  } catch (err) {
     await waitForMinimumDuration(requestStart);
+    if (err instanceof Error && err.message.includes("JWT_SECRET")) {
+      return NextResponse.json(
+        { error: "Server authentication is not configured. Set JWT_SECRET in Vercel and redeploy." },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: "Login failed" }, { status: 500 });
   }
 }

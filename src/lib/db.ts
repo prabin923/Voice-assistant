@@ -1,8 +1,8 @@
 import Database from "better-sqlite3";
-import path from "path";
 import { randomUUID } from "crypto";
+import { ensureDatabaseDirectory, resolveDatabasePath } from "@/lib/dbPath";
 
-const dbPath = path.join(process.cwd(), "hotel.db");
+const dbPath = resolveDatabasePath();
 
 const globalForDb = globalThis as unknown as { db: Database.Database; authCleanupStarted?: boolean };
 const AUTH_RETENTION_DAYS = 90;
@@ -10,6 +10,7 @@ const AUTH_RETENTION_DAYS = 90;
 function getDb(): Database.Database {
   if (globalForDb.db) return globalForDb.db;
 
+  ensureDatabaseDirectory(dbPath);
   const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
 
@@ -89,7 +90,7 @@ function getDb(): Database.Database {
     )
   `);
 
-  if (process.env.NODE_ENV !== "production") globalForDb.db = db;
+  globalForDb.db = db;
   
   // Seed default admin user if none exist
   const countResult = db.prepare("SELECT COUNT(*) as count FROM hotels").get() as { count: number };
@@ -127,7 +128,9 @@ function cleanupOldAuthRecords() {
 
 if (!globalForDb.authCleanupStarted) {
   cleanupOldAuthRecords();
-  setInterval(cleanupOldAuthRecords, 24 * 60 * 60 * 1000);
+  if (!process.env.VERCEL) {
+    setInterval(cleanupOldAuthRecords, 24 * 60 * 60 * 1000);
+  }
   globalForDb.authCleanupStarted = true;
 }
 
