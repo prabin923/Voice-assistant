@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getHotelConfig } from '@/lib/hotelConfig';
 import { getAssistantResponse } from '@/lib/responseEngine';
-import { interactions, supportTickets } from '@/lib/db';
-import { sendEscalationEmail } from '@/lib/email';
+import { interactions } from '@/lib/db';
+import { notifyHotelStaff } from '@/lib/escalation';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
+import { aiNotConfiguredResponse, isAiConfigured } from '@/lib/ai';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
@@ -23,11 +26,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'A valid message string is required.' }, { status: 400 });
     }
 
-    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY === 'your_gemini_api_key_here') {
-      return NextResponse.json({
-        error: 'Gemini API Key not configured.',
-        details: 'Please add your GOOGLE_GENERATIVE_AI_API_KEY to .env.local'
-      }, { status: 501 });
+    if (!isAiConfigured()) {
+      return NextResponse.json(aiNotConfiguredResponse(), { status: 501 });
     }
 
     const config = getHotelConfig();
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     const conversationHistory = Array.isArray(history) ? history : [];
 
     const startTime = Date.now();
-    const { reply, escalate } = await getAssistantResponse(message, langCode, conversationHistory);
+    const { reply, escalate, reason } = await getAssistantResponse(message, langCode, conversationHistory);
     const responseTimeMs = Date.now() - startTime;
 
     // Log interaction
@@ -50,23 +50,12 @@ export async function POST(req: Request) {
     // Auto-create support ticket + email alert on escalation
     let ticketId: string | undefined;
     if (escalate) {
-      try {
-        const ticket = supportTickets.create({ guestMessage: message, aiResponse: reply, language: langCode });
-        ticketId = ticket.id;
-        console.log(`[ESCALATION] Ticket ${ticket.id} created for: "${message.slice(0, 80)}..."`);
-
-        // Send email alert to staff (non-blocking)
-        sendEscalationEmail({
-          ticketId: ticket.id,
-          guestMessage: message,
-          aiResponse: reply,
-          language: langCode,
-          hotelName: config.branding.hotelName,
-          staffEmail: config.contact.email,
-        }).catch(err => console.error("[EMAIL] Failed to send escalation alert:", err));
-      } catch (e) {
-        console.error("Failed to create support ticket:", e);
-      }
+      ticketId = await notifyHotelStaff({
+        guestMessage: message,
+        aiResponse: reply,
+        language: langCode,
+        reason,
+      });
     }
 
     return NextResponse.json({

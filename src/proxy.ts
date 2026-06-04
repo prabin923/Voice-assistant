@@ -3,7 +3,7 @@ import { jwtVerify } from "jose";
 import { getJwtSecretBytes, hasProductionJwtSecret } from "@/lib/jwtSecret";
 
 const protectedRoutes = ["/settings", "/admin/analytics", "/admin/support"];
-const protectedApiRoutes = ["/api/config", "/api/analytics", "/api/support"];
+const protectedApiRoutes = ["/api/analytics", "/api/support"];
 const authRoutes = ["/admin/login", "/admin/register", "/admin/forgot-password", "/admin/reset-password"];
 
 function matchesRoute(path: string, route: string): boolean {
@@ -36,6 +36,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/admin/login", request.url));
   }
 
+  // Protect config mutations only; GET is public (assistant + landing branding)
+  if (matchesRoute(path, "/api/config") && request.method !== "GET" && !session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   // Protect admin API routes
   if (protectedApiRoutes.some((route) => matchesRoute(path, route)) && !session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -45,5 +50,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/settings/:path*", "/api/config/:path*", "/api/analytics/:path*", "/api/support/:path*", "/admin/:path*"],
+  matcher: ["/settings/:path*", "/api/config", "/api/analytics/:path*", "/api/support/:path*", "/admin/:path*"],
 };

@@ -1585,6 +1585,150 @@ html.light .text-gradient {
   @apply bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-600;
 }
 
+.text-gradient-brand {
+  background-image: linear-gradient(
+    to bottom right,
+    rgb(var(--hotel-accent-bright-rgb)),
+    rgb(var(--hotel-accent-rgb)),
+    rgba(var(--hotel-accent-rgb), 0.55)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+html.light .text-gradient-brand {
+  background-image: linear-gradient(
+    to bottom right,
+    rgb(var(--hotel-accent-deep-rgb)),
+    rgb(var(--hotel-accent-rgb)),
+    rgba(var(--hotel-accent-rgb), 0.72)
+  );
+}
+
+::selection {
+  background: rgba(var(--hotel-accent-rgb), 0.35);
+}
+
+/* ── Gladia-inspired voice pipeline demo ── */
+.voice-pipeline {
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.voice-pipeline-glow {
+  position: absolute;
+  inset: -20% auto auto -10%;
+  width: 55%;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(142, 232, 255, 0.16), transparent 68%);
+  pointer-events: none;
+  animation: voice-pipeline-glow 8s ease-in-out infinite;
+}
+
+html.light .voice-pipeline-glow {
+  background: radial-gradient(circle, rgba(22, 58, 95, 0.12), transparent 68%);
+}
+
+.voice-pipeline-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: rgb(var(--hotel-accent-rgb));
+  animation: voice-pipeline-blink 1s step-end infinite;
+}
+
+.voice-pipeline-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(142, 232, 255, 0.65);
+  animation: voice-pipeline-pulse 1.2s ease-in-out infinite;
+}
+
+.landing-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.landing-stat-card {
+  border-radius: 1rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+html.light .landing-stat-card {
+  border-color: rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.landing-step-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  padding: 1.35rem;
+  transition: transform 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+}
+
+.landing-step-card:hover {
+  transform: translateY(-3px);
+}
+
+.landing-step-number {
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.landing-feature-icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.95rem;
+}
+
+.landing-comparison-row {
+  display: grid;
+  grid-template-columns: 1.2fr repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  border-radius: 1rem;
+}
+
+@keyframes voice-pipeline-glow {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.75; }
+  50% { transform: translate3d(12px, 8px, 0) scale(1.08); opacity: 1; }
+}
+
+@keyframes voice-pipeline-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes voice-pipeline-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.45; }
+  50% { transform: scale(1.35); opacity: 1; }
+}
+
+@media (max-width: 768px) {
+  .landing-comparison-row {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Reduce motion for users who prefer it ── */
 @media (prefers-reduced-motion: reduce) {
   .animate-float,
@@ -1605,6 +1749,12 @@ html.light .text-gradient {
   .hero-intro {
     animation: none !important;
     opacity: 1 !important;
+  }
+
+  .voice-pipeline-glow,
+  .voice-pipeline-cursor,
+  .voice-pipeline-dot {
+    animation: none !important;
   }
 
   .marketing-blob-1,

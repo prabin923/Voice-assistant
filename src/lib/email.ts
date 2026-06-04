@@ -7,6 +7,7 @@ interface EscalationEmailData {
   language: string;
   hotelName: string;
   staffEmail: string;
+  reasonLabel?: string;
 }
 
 interface PasswordResetEmailData {
@@ -56,8 +57,9 @@ export async function sendEscalationEmail(data: EscalationEmailData): Promise<vo
   const safeGuestMessage = escapeHtml(data.guestMessage);
   const safeAiResponse = escapeHtml(data.aiResponse);
   const safeLanguage = escapeHtml(data.language);
+  const safeReason = escapeHtml(data.reasonLabel || "AI flagged for staff follow-up");
 
-  const subject = `🚨 [ESCALATION] Guest needs help — ${safeHotelName}`;
+  const subject = `🚨 [STAFF HANDOFF] Guest needs help — ${safeHotelName}`;
   const html = `
     <div style="font-family: -apple-system, system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="background: linear-gradient(135deg, #163a5f, #c9a227); padding: 20px 24px; border-radius: 16px 16px 0 0;">
@@ -67,6 +69,10 @@ export async function sendEscalationEmail(data: EscalationEmailData): Promise<vo
       <div style="background: #1a1a1a; padding: 24px; border-radius: 0 0 16px 16px; color: #e5e5e5;">
         <p style="color: #a3a3a3; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Ticket ID</p>
         <p style="font-family: monospace; color: #e4c449; font-size: 14px; margin-bottom: 20px;">#${safeTicketId}</p>
+
+        <p style="color: #a3a3a3; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Reason</p>
+        <p style="color: #fbbf24; font-size: 14px; margin-bottom: 20px; font-weight: 600;">${safeReason}</p>
+        <p style="color: #737373; font-size: 12px; margin: -12px 0 20px;">Please take over this conversation in the Support Inbox after the AI reply.</p>
 
         <p style="color: #a3a3a3; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Guest Message</p>
         <div style="background: #262626; padding: 16px; border-radius: 12px; border-left: 3px solid #c9a227; margin-bottom: 20px;">

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Loader2, LogIn, Moon, Sun } from "lucide-react";
 import { StaynepLogo } from "@/components/StaynepLogo";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
+import { getSafeRedirect } from "@/lib/safeRedirect";
 
 function getCookie(name: string): string | null {
   const parts = document.cookie.split(";").map((entry) => entry.trim());
@@ -20,11 +21,17 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [redirectTo, setRedirectTo] = useState("/settings");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
-    const reason = new URLSearchParams(window.location.search).get("reason");
+    const params = new URLSearchParams(window.location.search);
+    const reason = params.get("reason");
     setSessionExpired(reason === "session-expired");
+
+    const emailParam = params.get("email");
+    if (emailParam) setEmail(emailParam.trim().toLowerCase());
+    setRedirectTo(getSafeRedirect(params.get("redirect")));
 
     void fetch("/api/auth/csrf", { credentials: "include" });
 
@@ -74,7 +81,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/settings");
+      router.push(redirectTo);
     } catch (err: any) {
       setError(err?.message || "Network error. Please try again.");
     } finally {
@@ -194,7 +201,10 @@ export default function LoginPage() {
 
         <p className={`text-center text-sm mt-6 ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>
           Don&apos;t have an account?{" "}
-          <Link href="/admin/register" className="text-[#163a5f] dark:text-[#e4c449] underline-offset-4 hover:underline transition-colors dark:hover:text-[#fce878]">
+          <Link
+            href={`/admin/register?email=${encodeURIComponent(email)}&redirect=${encodeURIComponent(redirectTo)}`}
+            className="text-[#163a5f] dark:text-[#e4c449] underline-offset-4 hover:underline transition-colors dark:hover:text-[#fce878]"
+          >
             Register your hotel
           </Link>
         </p>

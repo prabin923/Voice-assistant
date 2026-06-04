@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, UserPlus, Moon, Sun } from "lucide-react";
 import { StaynepLogo } from "@/components/StaynepLogo";
+import { getSafeRedirect } from "@/lib/safeRedirect";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 
 function getCookie(name: string): string | null {
@@ -21,10 +22,16 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [redirectTo, setRedirectTo] = useState("/settings");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
     void fetch("/api/auth/csrf", { credentials: "include" });
+
+    const params = new URLSearchParams(window.location.search);
+    const emailParam = params.get("email");
+    if (emailParam) setEmail(emailParam.trim().toLowerCase());
+    setRedirectTo(getSafeRedirect(params.get("redirect")));
 
     const savedTheme = window.localStorage.getItem("theme");
     const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -79,7 +86,7 @@ export default function RegisterPage() {
         return;
       }
 
-      router.push("/settings");
+      router.push(redirectTo);
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -224,7 +231,10 @@ export default function RegisterPage() {
 
         <p className={`text-center text-sm mt-6 ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>
           Already have an account?{" "}
-          <Link href="/admin/login" className="text-[#163a5f] dark:text-[#e4c449] underline-offset-4 hover:underline transition-colors dark:hover:text-[#fce878]">
+          <Link
+            href={`/admin/login?email=${encodeURIComponent(email)}&redirect=${encodeURIComponent(redirectTo)}`}
+            className="text-[#163a5f] dark:text-[#e4c449] underline-offset-4 hover:underline transition-colors dark:hover:text-[#fce878]"
+          >
             Sign in
           </Link>
         </p>

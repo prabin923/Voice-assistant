@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAssistantResponse } from '@/lib/responseEngine';
+import { notifyHotelStaff } from '@/lib/escalation';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 
 // SECURITY: Verify webhook requests via shared secret
@@ -62,7 +63,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ action: 'speak', text: 'I didn\'t catch that. Could you repeat?' });
     }
 
-    const { reply: aiReply } = await getAssistantResponse(sanitizedInput, language);
+    const { reply: aiReply, escalate, reason } = await getAssistantResponse(sanitizedInput, language);
+
+    if (escalate) {
+      await notifyHotelStaff({
+        guestMessage: sanitizedInput,
+        aiResponse: aiReply,
+        language,
+        reason,
+      });
+    }
 
     return NextResponse.json({
       action: 'speak',

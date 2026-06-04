@@ -2,17 +2,19 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Mic, Volume2, Loader2, Phone, PhoneCall, Settings, ChevronDown, Check, ThumbsUp, ThumbsDown, Sun, Moon, History, Clock3 } from "lucide-react";
+import { Mic, Volume2, Loader2, Phone, PhoneCall, ChevronDown, Check, ThumbsUp, ThumbsDown, Sun, Moon, History, Clock3 } from "lucide-react";
 import CallOverlay, { type CallHistoryRecord } from "@/components/CallOverlay";
 import { StaynepLogo } from "@/components/StaynepLogo";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
+import { useHotelPublicConfig } from "@/hooks/useHotelPublicConfig";
+import { GUEST_STAFF_HANDOFF_MESSAGE } from "@/lib/escalationMessages";
+import {
+  VOICE_MAX_RECORD_MS,
+  VOICE_SILENCE_SUBMIT_MS,
+  VOICE_SILENCE_THRESHOLD,
+  VOICE_SPEECH_MIN_MS,
+} from "@/lib/voiceSilence";
 
-interface BrandingConfig {
-  hotelName: string;
-  tagline: string;
-  accentColor: string;
-  welcomeMessage: string;
-}
 type VoiceStyle = "warm" | "professional" | "energetic";
 
 interface LanguageOption {
@@ -43,6 +45,7 @@ interface UIStrings {
   virtualReceptionist: string;
   poweredByAI: string;
   languagesSupported: string;
+  suggestedQuestions: string;
 }
 
 interface SpeechRecognitionResultLike {
@@ -129,7 +132,7 @@ const ALL_LANGUAGES: LanguageOption[] = [
 
 // UI translations
 const UI_TRANSLATIONS: Record<string, UIStrings> = {
-  en: { tapToSpeak: "Tap to Speak", listening: "Listening...", speaking: "Speaking...", ready: "Ready", configure: "Configure", searchLanguage: "Search language...", welcomeHint: "Tap the microphone and ask me anything.", speakingIn: "Speaking in", footer: "Universal Voice Receptionist", you: "You", errorNetwork: "Network error", errorMicDenied: "Mic access denied", errorNoSpeech: "No speech detected", errorGeneric: "Error", errorUnsupported: "Not supported", errorConnection: "Connection error", virtualReceptionist: "Virtual Receptionist", poweredByAI: "AI Assistant", languagesSupported: "Languages" },
+  en: { tapToSpeak: "Tap to Speak", listening: "Listening...", speaking: "Speaking...", ready: "Ready", configure: "Configure", searchLanguage: "Search language...", welcomeHint: "Tap the microphone and ask me anything.", speakingIn: "Speaking in", footer: "Universal Voice Receptionist", you: "You", errorNetwork: "Network error", errorMicDenied: "Mic access denied", errorNoSpeech: "No speech detected", errorGeneric: "Error", errorUnsupported: "Not supported", errorConnection: "Connection error", virtualReceptionist: "Virtual Receptionist", poweredByAI: "AI Assistant", languagesSupported: "Languages", suggestedQuestions: "Try asking" },
 };
 
 function getUI(langCode: string): UIStrings {
@@ -146,6 +149,7 @@ function pickRecorderMimeType(): string | undefined {
 }
 
 export default function VoiceAssistant() {
+  const { branding, suggestedQuestions, config: hotelConfig } = useHotelPublicConfig();
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -161,22 +165,23 @@ export default function VoiceAssistant() {
   const [callHistory, setCallHistory] = useState<CallHistoryRecord[]>([]);
   const [mounted, setMounted] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [branding, setBranding] = useState<BrandingConfig>({
-    hotelName: "Willow Hotel",
-    tagline: "Premium AI Concierge",
-    accentColor: "#c9a227",
-    welcomeMessage: "Welcome to Willow Hotel. How may I assist you today?",
-  });
   const [voiceStyle, setVoiceStyle] = useState<VoiceStyle>("warm");
-
+  const [aiReady, setAiReady] = useState<boolean | null>(null);
+  const [sttReady, setSttReady] = useState<boolean | null>(null);
+  const [geminiLiveReady, setGeminiLiveReady] = useState<boolean | null>(null);
   const ui = useMemo(() => getUI(selectedLanguage.code), [selectedLanguage]);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const nativeSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nativeDraftTranscriptRef = useRef("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const langMenuRef = useRef<HTMLDivElement>(null);
   const [useServerSTT, setUseServerSTT] = useState(false);
+  const useServerSTTRef = useRef(false);
+  useServerSTTRef.current = useServerSTT;
+  const lastServerSttAtRef = useRef(0);
   const autoListenAfterSpeakRef = useRef(false);
   const cachedVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
   const selectedLanguageRef = useRef(selectedLanguage);
@@ -213,20 +218,19 @@ export default function VoiceAssistant() {
   }, [theme]);
 
   useEffect(() => {
-    fetch("/api/config")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data?.branding) setBranding(data.branding);
-        if (data?.voiceStyle && ["warm", "professional", "energetic"].includes(data.voiceStyle)) {
-          setVoiceStyle(data.voiceStyle as VoiceStyle);
-        }
-        if (data?.language) {
-          const lang = ALL_LANGUAGES.find(l => l.code === data.language || l.code.startsWith(data.language));
-          if (lang) setSelectedLanguage(lang);
-        }
-      })
-      .catch(() => {});
-  }, []);
+    setAiReady(typeof hotelConfig.aiReady === "boolean" ? hotelConfig.aiReady : null);
+    setSttReady(typeof hotelConfig.sttReady === "boolean" ? hotelConfig.sttReady : null);
+    setGeminiLiveReady(typeof hotelConfig.geminiLiveReady === "boolean" ? hotelConfig.geminiLiveReady : null);
+    if (hotelConfig.voiceStyle && ["warm", "professional", "energetic"].includes(hotelConfig.voiceStyle)) {
+      setVoiceStyle(hotelConfig.voiceStyle as VoiceStyle);
+    }
+    if (hotelConfig.language) {
+      const lang = ALL_LANGUAGES.find(
+        (l) => l.code === hotelConfig.language || l.code.startsWith(hotelConfig.language)
+      );
+      if (lang) setSelectedLanguage(lang);
+    }
+  }, [hotelConfig]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -295,38 +299,94 @@ export default function VoiceAssistant() {
     synthRef.current?.cancel();
     setIsSpeaking(false);
 
+    if (aiReady === false && sttReady === false) {
+      setErrorMessage("Configure GOOGLE_GENERATIVE_AI_API_KEY for chat, or WHISPER_MODEL_PATH / WHISPER_STT_ENDPOINT for self-hosted STT.");
+      return;
+    }
+
     const win = window as Window & { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor };
     const SR = win.SpeechRecognition || win.webkitSpeechRecognition;
     if (!SR || useServerSTT) {
+      if (sttReady === false) {
+        setErrorMessage("Speech-to-text not configured. Add GOOGLE_GENERATIVE_AI_API_KEY to .env.local and restart.");
+        return;
+      }
       startServerRecordingRef.current();
       return;
     }
 
     const recognition = new SR();
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = selectedLanguageRef.current.code;
 
-    recognition.onstart = () => setIsListening(true);
+    const clearNativeSilenceTimer = () => {
+      if (nativeSilenceTimerRef.current) {
+        clearTimeout(nativeSilenceTimerRef.current);
+        nativeSilenceTimerRef.current = null;
+      }
+    };
+
+    const scheduleNativeSilenceSubmit = () => {
+      clearNativeSilenceTimer();
+      nativeSilenceTimerRef.current = setTimeout(() => {
+        if (!inConversationRef.current) return;
+        const text = nativeDraftTranscriptRef.current.trim();
+        nativeDraftTranscriptRef.current = "";
+        try {
+          recognition.stop();
+        } catch {
+          /* already stopped */
+        }
+        if (text) {
+          handleUserAudioCompleteRef.current(text);
+        } else if (autoListenAfterSpeakRef.current) {
+          setTimeout(() => startListeningInternalRef.current(), 300);
+        }
+      }, VOICE_SILENCE_SUBMIT_MS);
+    };
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      nativeDraftTranscriptRef.current = "";
+      scheduleNativeSilenceSubmit();
+    };
     recognition.onresult = (event: SpeechRecognitionEventLike) => {
-      let final = "";
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) final += event.results[i][0].transcript;
+      let transcript = "";
+      for (let i = 0; i < event.results.length; ++i) {
+        transcript += event.results[i][0].transcript;
       }
-      if (final) {
-        recognition.stop();
-        handleUserAudioCompleteRef.current(final);
-      }
+      nativeDraftTranscriptRef.current = transcript;
+      if (transcript.trim()) scheduleNativeSilenceSubmit();
     };
     recognition.onerror = (e: { error: string }) => {
-      if (e.error === "network") setUseServerSTT(true);
+      clearNativeSilenceTimer();
+      if (e.error === "network") {
+        if (sttReady !== false) {
+          useServerSTTRef.current = true;
+          setUseServerSTT(true);
+          setErrorMessage(null);
+          setTimeout(() => startServerRecordingRef.current(), 100);
+        } else {
+          setErrorMessage("Browser speech recognition failed. Add GOOGLE_GENERATIVE_AI_API_KEY to .env.local and restart.");
+        }
+      } else if (e.error === "not-allowed") {
+        setErrorMessage(ui.errorMicDenied);
+      } else if (e.error === "no-speech" && autoListenAfterSpeakRef.current) {
+        setTimeout(() => {
+          if (inConversationRef.current) startListeningInternalRef.current();
+        }, 400);
+      }
       setIsListening(false);
-      autoListenAfterSpeakRef.current = false;
+      if (e.error !== "no-speech") autoListenAfterSpeakRef.current = false;
     };
-    recognition.onend = () => setIsListening(false);
+    recognition.onend = () => {
+      clearNativeSilenceTimer();
+      setIsListening(false);
+    };
     recognition.start();
     recognitionRef.current = recognition;
-  }, [useServerSTT]);
+  }, [useServerSTT, aiReady, sttReady]);
 
   // Refs for callbacks used in auto-listen
   const startListeningInternalRef = useRef(startListeningInternal);
@@ -395,17 +455,21 @@ export default function VoiceAssistant() {
         }),
       });
       const data = await response.json();
+      const apiError =
+        typeof data.error === "string" && data.error.trim() ? data.error.trim() : "";
       const reply =
         typeof data.reply === "string" && data.reply.trim()
           ? data.reply.trim()
-          : typeof data.error === "string" && data.error.trim()
-            ? data.error.trim()
+          : apiError
+            ? apiError
             : !response.ok
               ? ui.errorConnection
               : ui.errorGeneric;
+      if (apiError) setErrorMessage(apiError);
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
       if (data.escalated) {
-        setMessages((prev) => [...prev, { role: "assistant", content: "A hotel staff member has been notified and will follow up with you shortly." }]);
+        setMessages((prev) => [...prev, { role: "assistant", content: GUEST_STAFF_HANDOFF_MESSAGE }]);
+        autoListenAfterSpeakRef.current = false;
       }
       autoListenAfterSpeakRef.current = true;
       speakText(reply);
@@ -416,10 +480,39 @@ export default function VoiceAssistant() {
     }
   }, [messages, selectedLanguage, speakText, ui.errorConnection, ui.errorGeneric]);
 
+  const handleSuggestedQuestion = useCallback((question: string) => {
+    if (isProcessing || isListening || isSpeaking || aiReady === false) return;
+    setErrorMessage(null);
+    if (!inConversationRef.current) {
+      inConversationRef.current = true;
+      setInConversation(true);
+      autoListenAfterSpeakRef.current = true;
+    }
+    void handleUserAudioComplete(question);
+  }, [aiReady, handleUserAudioComplete, isListening, isProcessing, isSpeaking]);
+
   // Keep refs up to date for use inside callbacks
   handleUserAudioCompleteRef.current = handleUserAudioComplete;
 
+  const handleSttFailure = useCallback((message: string, status?: number) => {
+    setErrorMessage(message);
+    setIsListening(false);
+    if (status === 429) {
+      setUseServerSTT(false);
+      autoListenAfterSpeakRef.current = false;
+      inConversationRef.current = false;
+      setInConversation(false);
+    }
+  }, []);
+
   const startServerRecording = async () => {
+    const now = Date.now();
+    if (now - lastServerSttAtRef.current < 3000) {
+      setErrorMessage("Please wait a moment before speaking again.");
+      return;
+    }
+    lastServerSttAtRef.current = now;
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = pickRecorderMimeType();
@@ -440,16 +533,18 @@ export default function VoiceAssistant() {
           const res = await fetch('/api/stt', { method: 'POST', body: formData });
           const data = await res.json();
           const transcribed = typeof data.text === "string" ? data.text.trim() : "";
-          if (transcribed) handleUserAudioComplete(transcribed);
-          else {
-            setErrorMessage(
-              typeof data.error === "string" && data.error.trim() ? data.error.trim() : ui.errorNoSpeech
+          if (transcribed) {
+            handleUserAudioComplete(transcribed);
+          } else if (inConversationRef.current && autoListenAfterSpeakRef.current) {
+            setTimeout(() => startListeningInternalRef.current(), 400);
+          } else {
+            handleSttFailure(
+              typeof data.error === "string" && data.error.trim() ? data.error.trim() : ui.errorNoSpeech,
+              res.status
             );
-            setIsListening(false);
           }
         } catch {
-          setErrorMessage(ui.errorNetwork);
-          setIsListening(false);
+          handleSttFailure(ui.errorNetwork);
         } finally {
           stream.getTracks().forEach((t) => t.stop());
         }
@@ -464,9 +559,9 @@ export default function VoiceAssistant() {
       source.connect(analyser);
 
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      const SILENCE_THRESHOLD = 15;      // Audio level below this = silence
-      const SILENCE_DURATION_MS = 5000;   // Stop after 5s of silence
-      const MAX_RECORD_MS = 15000;        // Safety: max 15 seconds
+      const SILENCE_THRESHOLD = VOICE_SILENCE_THRESHOLD;
+      const SILENCE_DURATION_MS = VOICE_SILENCE_SUBMIT_MS;
+      const MAX_RECORD_MS = VOICE_MAX_RECORD_MS;
 
       let silenceStart: number | null = null;
       let hasHeardSpeech = false;
@@ -492,7 +587,12 @@ export default function VoiceAssistant() {
         const elapsed = Date.now() - recordStart;
 
         // Auto-stop: silence detected after speech was heard
-        if (hasHeardSpeech && silenceStart && (Date.now() - silenceStart > SILENCE_DURATION_MS)) {
+        if (
+          hasHeardSpeech &&
+          silenceStart &&
+          Date.now() - silenceStart > SILENCE_DURATION_MS &&
+          elapsed > VOICE_SPEECH_MIN_MS
+        ) {
           stopped = true;
           recorder.stop();
           audioCtx.close();
@@ -528,7 +628,6 @@ export default function VoiceAssistant() {
   // Keep server recording ref in sync
   startServerRecordingRef.current = startServerRecording;
 
-  // ── Master stop: kills everything ──
   const stopEverything = useCallback(() => {
     inConversationRef.current = false;
     setInConversation(false);
@@ -538,6 +637,11 @@ export default function VoiceAssistant() {
       try { mediaRecorderRef.current.stop(); } catch {}
     }
     // Stop recognition
+    if (nativeSilenceTimerRef.current) {
+      clearTimeout(nativeSilenceTimerRef.current);
+      nativeSilenceTimerRef.current = null;
+    }
+    nativeDraftTranscriptRef.current = "";
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
       recognitionRef.current = null;
@@ -599,9 +703,10 @@ export default function VoiceAssistant() {
 
   return (
     <div
-      className={`relative min-h-screen flex flex-col font-sans selection:bg-yellow-600/35 dark:selection:bg-[#e4c449]/35 overflow-hidden transition-colors ${
+      className={`relative min-h-screen flex flex-col font-sans overflow-hidden transition-colors ${
         isDark ? "text-neutral-100" : "text-neutral-900"
       }`}
+      style={{ ["--selection" as string]: `rgba(var(--hotel-accent-rgb), 0.35)` }}
       dir={isRTL ? "rtl" : "ltr"}
     >
       <SiteShellBackdrop isDark={isDark} />
@@ -613,21 +718,35 @@ export default function VoiceAssistant() {
           <StaynepLogo isDark={isDark} size="sm" />
           <div className={`hidden sm:block h-10 w-px shrink-0 ${isDark ? "bg-white/10" : "bg-neutral-200"}`} aria-hidden />
           <div
-            className="h-11 w-11 shrink-0 rounded-2xl flex items-center justify-center shadow-2xl rotate-3 hover:rotate-0 transition-transform duration-500"
+            className="h-11 w-11 shrink-0 rounded-2xl flex items-center justify-center shadow-2xl rotate-3 hover:rotate-0 transition-transform duration-500 overflow-hidden"
             style={{
-              background: `linear-gradient(135deg, ${branding.accentColor}, #fb923c)`,
+              background: branding.logoUrl ? undefined : `linear-gradient(135deg, ${branding.accentColor}, #fb923c)`,
               boxShadow: `0 10px 30px -10px ${branding.accentColor}80`,
             }}
           >
-            <Phone className="w-5 h-5 text-white" />
+            {branding.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={branding.logoUrl} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <span className="text-sm font-black text-white">{branding.hotelName?.charAt(0) || "H"}</span>
+            )}
           </div>
           <div className="flex flex-col min-w-0">
             <h1 className={`text-sm font-bold tracking-tight leading-tight ${isDark ? "text-white" : "text-neutral-900"}`}>{branding.hotelName}</h1>
             <div className="hidden sm:flex items-center gap-2 mt-0.5">
-              <span className={`w-1.5 h-1.5 rounded-full ${useServerSTT ? "bg-cyan-400" : "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.6)]"}`} />
-              <span className={`text-[9px] font-black tracking-widest uppercase ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
-                {useServerSTT ? "AI Mode" : "Native Mode"}
-              </span>
+              <button
+                type="button"
+                onClick={() => setUseServerSTT((v) => !v)}
+                className={`flex items-center gap-2 rounded-full px-2 py-0.5 transition-colors ${
+                  isDark ? "hover:bg-white/10" : "hover:bg-neutral-100"
+                }`}
+                title={useServerSTT ? "Using Gemini STT (uses API quota). Click for Native Mode." : "Using browser speech. Click for AI Mode (Gemini STT)."}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${useServerSTT ? "bg-cyan-400" : "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.6)]"}`} />
+                <span className={`text-[9px] font-black tracking-widest uppercase ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
+                  {useServerSTT ? "AI Mode" : "Native Mode"}
+                </span>
+              </button>
             </div>
           </div>
         </Link>
@@ -698,7 +817,9 @@ export default function VoiceAssistant() {
                         <div className="font-bold truncate">{lang.nativeName}</div>
                         <div className="text-[10px] uppercase font-bold tracking-widest opacity-40 mt-0.5">{lang.name}</div>
                       </div>
-                      {selectedLanguage.code === lang.code && <Check className="w-4 h-4 text-[#c9a227] dark:text-[#e4c449]" />}
+                      {selectedLanguage.code === lang.code && (
+                        <Check className="w-4 h-4" style={{ color: "rgb(var(--hotel-accent-rgb))" }} />
+                      )}
                     </button>
                   ))}
                 </div>
@@ -706,21 +827,20 @@ export default function VoiceAssistant() {
             )}
           </div>
 
-          <Link
-            href="/settings"
-            className={`h-10 w-10 flex items-center justify-center rounded-2xl transition-all active:scale-90 ${
-              isDark
-                ? "glass text-neutral-400 hover:text-white"
-                : "bg-white border border-neutral-200 text-neutral-500 hover:text-neutral-900"
-            }`}
-          >
-            <Settings className="w-5 h-5" />
-          </Link>
         </div>
         </div>
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-8 sm:py-12 max-w-5xl w-full mx-auto relative overflow-y-auto scrollbar-hide">
+        {aiReady === false && (
+          <div
+            role="alert"
+            className="mb-6 w-full max-w-xl rounded-2xl border border-amber-500/30 bg-amber-950/50 px-4 py-3 text-center text-sm text-amber-100"
+          >
+            Gemini API key is missing on the server. Local: add <code className="text-amber-200">GOOGLE_GENERATIVE_AI_API_KEY</code> to{" "}
+            <code className="text-amber-200">.env.local</code> and run <code className="text-amber-200">npm run dev</code> again. Production: set the same variable in Vercel → Environment Variables, then redeploy.
+          </div>
+        )}
         <div className="w-full flex flex-col items-center gap-16">
           {mounted ? (
           <div className="relative group cursor-pointer" onClick={toggleListening}>
@@ -768,19 +888,30 @@ export default function VoiceAssistant() {
 
             <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 whitespace-nowrap">
               <div className="flex flex-col items-center gap-2">
-                <span className={`text-[12px] font-black uppercase tracking-[0.5em] transition-all duration-700 ${isListening ? 'text-[#e4c449]' : isSpeaking ? 'text-[#7eb8e8]' : inConversation ? 'text-neutral-400' : 'text-neutral-600'}`}>
+                <span
+                  className={`text-[12px] font-black uppercase tracking-[0.5em] transition-all duration-700 ${
+                    isListening
+                      ? ""
+                      : isSpeaking
+                        ? "text-[#7eb8e8]"
+                        : inConversation
+                          ? "text-neutral-400"
+                          : "text-neutral-600"
+                  }`}
+                  style={isListening ? { color: "rgb(var(--hotel-accent-bright-rgb))" } : undefined}
+                >
                   {isListening ? ui.listening : isSpeaking ? ui.speaking : isProcessing ? 'Processing' : inConversation ? 'Tap to End' : ui.ready}
                 </span>
                 {!isListening && !isSpeaking && !isProcessing && (
                   <div className={`w-12 h-0.5 rounded-full overflow-hidden ${isDark ? "bg-white/5" : "bg-neutral-300/70"}`}>
-                    <div className="w-full h-full bg-[#c9a227]/25 animate-shimmer" />
+                    <div className="w-full h-full animate-shimmer" style={{ backgroundColor: "rgba(var(--hotel-accent-rgb), 0.25)" }} />
                   </div>
                 )}
               </div>
             </div>
 
-            {errorMessage && (
-              <div role="alert" className="absolute -bottom-36 left-1/2 -translate-x-1/2 max-w-sm px-4 py-2 rounded-2xl text-center text-xs font-medium text-amber-200/90 bg-amber-950/40 border border-amber-500/20">
+            {errorMessage && aiReady !== false && (
+              <div role="alert" className="absolute -bottom-28 left-1/2 z-20 -translate-x-1/2 max-w-sm px-4 py-2 rounded-2xl text-center text-xs font-medium text-amber-200/90 bg-amber-950/40 border border-amber-500/20">
                 {errorMessage}
               </div>
             )}
@@ -795,7 +926,16 @@ export default function VoiceAssistant() {
 
           <div className="flex flex-col items-center gap-6 mt-8">
             <button
-              onClick={() => setInCall(true)}
+              onClick={async () => {
+                try {
+                  await navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+                    stream.getTracks().forEach((track) => track.stop());
+                  });
+                } catch {
+                  /* Call overlay will request mic again and fall back if denied */
+                }
+                setInCall(true);
+              }}
               className={`group flex items-center gap-4 px-8 py-4 rounded-full transition-all active:scale-95 ${
                 isDark
                   ? "glass hover:bg-white/[0.05] border-emerald-500/20 hover:border-emerald-500/40"
@@ -814,7 +954,7 @@ export default function VoiceAssistant() {
             <div className={`w-full max-w-xl rounded-3xl border p-4 sm:p-5 ${isDark ? "glass border-white/10" : "bg-white/90 border-neutral-200 shadow-[0_12px_30px_rgba(15,23,42,0.08)]"}`}>
               <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <History className={`h-4 w-4 ${isDark ? "text-[#e4c449]" : "text-[#163a5f]"}`} />
+                  <History className="h-4 w-4" style={{ color: "rgb(var(--hotel-accent-rgb))" }} />
                   <h3 className={`text-xs font-black uppercase tracking-[0.18em] ${isDark ? "text-neutral-300" : "text-neutral-700"}`}>
                     Call History
                   </h3>
@@ -879,12 +1019,45 @@ export default function VoiceAssistant() {
                 ? "border-white/10"
                 : "border-neutral-200/70 shadow-[0_18px_50px_rgba(15,23,42,0.08)]"
             }`}>
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-gradient mb-4">
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-gradient-brand mb-4">
                 {branding.welcomeMessage}
               </h2>
               <p className={`text-sm font-medium leading-relaxed max-w-sm mx-auto opacity-80 ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
                 {ui.welcomeHint}
               </p>
+              {suggestedQuestions.length > 0 && (
+                <div className="mt-8 text-left">
+                  <p className={`mb-3 text-center text-[10px] font-black uppercase tracking-[0.2em] ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+                    {ui.suggestedQuestions}
+                  </p>
+                  <div className="flex flex-wrap justify-center gap-2.5">
+                    {suggestedQuestions.map((question) => (
+                      <button
+                        key={question}
+                        type="button"
+                        disabled={aiReady === false || isProcessing || isListening || isSpeaking}
+                        onClick={() => handleSuggestedQuestion(question)}
+                        className={`rounded-full border px-4 py-2 text-left text-[13px] font-medium leading-snug transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 ${
+                          isDark
+                            ? "border-white/10 bg-white/[0.04] text-neutral-200 hover:bg-white/[0.08]"
+                            : "border-neutral-200 bg-white text-neutral-700 hover:bg-sky-50/80"
+                        }`}
+                        style={{
+                          ["--tw-border-opacity" as string]: 1,
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = `rgba(var(--hotel-accent-rgb), 0.4)`;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = "";
+                        }}
+                      >
+                        {question}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-4 sm:space-y-6 pb-20">
@@ -902,8 +1075,13 @@ export default function VoiceAssistant() {
                           ? "bg-white/5 text-neutral-200 rounded-tr-none border border-white/10"
                           : "bg-white text-neutral-800 rounded-tr-none border border-neutral-200 shadow-[0_10px_30px_rgba(15,23,42,0.08)]")
                       : (isDark
-                          ? "glass text-white rounded-tl-none border-[#c9a227]/35 shadow-xl shadow-black/35"
-                          : "bg-gradient-to-br from-amber-50 to-sky-50 text-neutral-800 rounded-tl-none border border-[#163a5f]/25 shadow-[0_12px_34px_rgba(22,58,95,0.12)]")}
+                          ? "glass text-white rounded-tl-none shadow-xl shadow-black/35"
+                          : "bg-gradient-to-br from-amber-50 to-sky-50 text-neutral-800 rounded-tl-none shadow-[0_12px_34px_rgba(15,23,42,0.12)]")}
+                    style={
+                      msg.role === "assistant"
+                        ? { borderColor: "rgba(var(--hotel-accent-rgb), 0.35)", borderWidth: 1, borderStyle: "solid" }
+                        : undefined
+                    }
                   `}>
                     {msg.content}
                   </div>
@@ -914,7 +1092,7 @@ export default function VoiceAssistant() {
                     {msg.role === "assistant" && (
                       <div className="flex items-center gap-1 ml-1">
                         {feedbackGiven[i] ? (
-                          <span className={`text-[10px] font-bold ${feedbackGiven[i] === "up" ? "text-emerald-500" : "text-amber-600 dark:text-[#e4c449]"}`}>
+                          <span className={`text-[10px] font-bold ${feedbackGiven[i] === "up" ? "text-emerald-500" : ""}`} style={feedbackGiven[i] === "down" ? { color: "rgb(var(--hotel-accent-rgb))" } : undefined}>
                             {feedbackGiven[i] === "up" ? "👍 Thanks!" : "👎 Noted"}
                           </span>
                         ) : (
@@ -934,7 +1112,10 @@ export default function VoiceAssistant() {
                                 setFeedbackGiven(prev => ({ ...prev, [i]: "down" }));
                                 fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageContent: msg.content, rating: "down" }) });
                               }}
-                              className={`p-1 rounded-lg transition-all ${isDark ? "text-neutral-600 hover:text-[#e4c449] hover:bg-[#163a5f]/30" : "text-neutral-500 hover:text-amber-700 hover:bg-yellow-600/15"}`}
+                              className={`p-1 rounded-lg transition-all ${isDark ? "text-neutral-600 hover:bg-white/[0.06]" : "text-neutral-500 hover:bg-yellow-600/15"}`}
+                              style={{ ["--hover-color" as string]: "rgb(var(--hotel-accent-rgb))" }}
+                              onMouseEnter={(e) => { e.currentTarget.style.color = "rgb(var(--hotel-accent-rgb))"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.color = ""; }}
                               title="Not helpful"
                             >
                               <ThumbsDown className="w-3 h-3" />
@@ -969,6 +1150,8 @@ export default function VoiceAssistant() {
           languageCode={selectedLanguage.code}
           ttsLang={selectedLanguage.ttsLang}
           voiceStyle={voiceStyle}
+          aiReady={aiReady !== false}
+          geminiLiveReady={geminiLiveReady === true}
           onEnd={handleCallEnd}
         />
       )}

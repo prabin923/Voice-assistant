@@ -1,9 +1,17 @@
 import { GoogleGenerativeAI, Content } from "@google/generative-ai";
+import OpenAI from "openai";
+import { getActiveAiProvider } from "@/lib/ai";
+import { getGeminiApiKey } from "@/lib/gemini";
+import { GEMINI_MODEL } from "@/lib/geminiModel";
+import { getOpenAiApiKey } from "@/lib/openai";
+import { resolveEscalation, type EscalationReason } from "@/lib/escalation";
 import { getHotelConfig } from "./hotelConfig";
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "");
+function getGenAI() {
+  return new GoogleGenerativeAI(getGeminiApiKey() || "");
+}
 
-function buildSystemInstruction(): string {
+export function buildSystemInstruction(): string {
   const config = getHotelConfig();
 
   return `You are the Senior AI Receptionist at ${config.branding.hotelName}.
@@ -34,9 +42,11 @@ RESPONSE RULES:
 1. Respond strictly in the language matching this code: the language the guest uses.
 2. Keep responses concise and warm — this is a voice interaction.
 3. If the guest asks about something NOT in the hotel data, OR makes a complaint, OR needs human action (booking changes, billing, emergencies), add [ESCALATE] at the very end of your response.
-4. If the guest asks to speak to a human/staff/manager, add [ESCALATE] at the end.
-5. Do NOT add [ESCALATE] for normal informational questions you can answer.
-6. Give fresh, natural replies. Do not just list facts unless the guest specifically asks for a list.`;
+4. If the guest asks to speak to a human/staff/manager/front desk, add [ESCALATE] at the end.
+5. If the guest's message is unclear, garbled, incomplete, off-topic, or you cannot confidently determine what they need, apologize briefly, say a staff member will help, and add [ESCALATE].
+6. If you cannot answer confidently from HOTEL DATA alone (missing info, ambiguous policy, special requests), do NOT guess — add [ESCALATE] and tell the guest staff will follow up.
+7. Do NOT add [ESCALATE] for normal informational questions you can answer from HOTEL DATA.
+8. Give fresh, natural replies. Do not just list facts unless the guest specifically asks for a list.`;
 }
 
 export interface ChatMessage {
@@ -44,45 +54,79 @@ export interface ChatMessage {
   content: string;
 }
 
+async function getAssistantResponseWithOpenAI(
+  message: string,
+  langCode: string,
+  conversationHistory: ChatMessage[]
+): Promise<{ reply: string; escalate: boolean; reason?: EscalationReason }> {
+  const openai = new OpenAI({ apiKey: getOpenAiApiKey() });
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    { role: "system", content: buildSystemInstruction() },
+    ...conversationHistory.slice(-10).map((msg) => ({
+      role: msg.role as "user" | "assistant",
+      content: msg.content,
+    })),
+    { role: "user", content: `[Guest speaks in ${langCode}]: ${message}` },
+  ];
+
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages,
+    max_tokens: 400,
+    temperature: 0.5,
+  });
+
+  const text = completion.choices[0]?.message?.content?.trim() ?? "";
+  const { reply, escalate, reason } = resolveEscalation(text);
+  return { reply, escalate, reason: escalate ? reason : undefined };
+}
+
+async function getAssistantResponseWithGemini(
+  message: string,
+  langCode: string,
+  conversationHistory: ChatMessage[]
+): Promise<{ reply: string; escalate: boolean; reason?: EscalationReason }> {
+  const model = getGenAI().getGenerativeModel({
+    model: GEMINI_MODEL,
+    systemInstruction: buildSystemInstruction(),
+    generationConfig: {
+      maxOutputTokens: 400,
+      temperature: 0.5,
+    },
+  });
+
+  const history: Content[] = conversationHistory
+    .slice(-10)
+    .map((msg) => ({
+      role: msg.role === "user" ? "user" : "model",
+      parts: [{ text: msg.content }],
+    }));
+
+  const chat = model.startChat({ history });
+  const result = await chat.sendMessage(`[Guest speaks in ${langCode}]: ${message}`);
+  const text = result.response.text().trim();
+  const { reply, escalate, reason } = resolveEscalation(text);
+  return { reply, escalate, reason: escalate ? reason : undefined };
+}
+
 export async function getAssistantResponse(
   message: string,
   language: string,
   conversationHistory: ChatMessage[] = []
-): Promise<{ reply: string; escalate: boolean }> {
+): Promise<{ reply: string; escalate: boolean; reason?: EscalationReason }> {
   const config = getHotelConfig();
   const langCode = language || config.language || "en-US";
+  const provider = getActiveAiProvider();
 
   const MAX_RETRIES = 1;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const model = genAI.getGenerativeModel({
-        model: "gemini-2.5-flash-lite",
-        systemInstruction: buildSystemInstruction(),
-        generationConfig: {
-          maxOutputTokens: 400,
-          temperature: 0.5,
-        },
-      });
+      if (provider === "openai") {
+        return await getAssistantResponseWithOpenAI(message, langCode, conversationHistory);
+      }
 
-      // Build chat history from previous messages
-      const history: Content[] = conversationHistory
-        .slice(-10) // Keep last 10 messages to avoid token overflow
-        .map((msg) => ({
-          role: msg.role === "user" ? "user" : "model",
-          parts: [{ text: msg.content }],
-        }));
-
-      const chat = model.startChat({ history });
-
-      const result = await chat.sendMessage(`[Guest speaks in ${langCode}]: ${message}`);
-      const response = result.response;
-      const text = response.text().trim();
-
-      const escalate = text.includes("[ESCALATE]");
-      const cleanText = text.replace(/\[ESCALATE\]/g, "").trim();
-
-      return { reply: cleanText, escalate };
+      return await getAssistantResponseWithGemini(message, langCode, conversationHistory);
     } catch (error: any) {
       const isRetryable =
         !error?.status || error.status >= 500 || error.message?.includes("fetch");
@@ -95,8 +139,10 @@ export async function getAssistantResponse(
 
       console.error("Response Engine Error:", error);
       return {
-        reply: "I apologize, but I am having trouble right now. Please try again in a moment.",
-        escalate: false,
+        reply:
+          "I apologize — I'm having trouble understanding your request right now. I've alerted our front desk team and a staff member will take over shortly.",
+        escalate: true,
+        reason: "ai_error",
       };
     }
   }

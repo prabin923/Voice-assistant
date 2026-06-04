@@ -1,22 +1,31 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
+import { getGeminiApiKey, mapGeminiApiError } from '@/lib/gemini';
+import { GEMINI_MODEL } from '@/lib/geminiModel';
+import {
+  isSelfHostedSttConfigured,
+  transcribeWithLocalWhisper,
+  transcribeWithWhisperServer,
+} from '@/lib/selfHostedStt';
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+export const dynamic = 'force-dynamic';
 
-// SECURITY: Max audio file size (10MB)
 const MAX_AUDIO_SIZE = 10 * 1024 * 1024;
+const MIN_AUDIO_SIZE = 512;
 const ALLOWED_AUDIO_TYPES = new Set([
   "audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg",
   "audio/wav", "audio/x-wav", "audio/flac"
 ]);
 
+function isSttAvailable(): boolean {
+  return isSelfHostedSttConfigured() || Boolean(getGeminiApiKey());
+}
+
 export async function POST(req: Request) {
   try {
-    // SECURITY: Rate limit STT (expensive Gemini calls) — 15 per minute
     const ip = getClientIP(req);
-    const limit = checkRateLimit(`stt:${ip}`, { maxRequests: 15, windowMs: 60000 });
+    const limit = checkRateLimit(`stt:${ip}`, { maxRequests: 30, windowMs: 60000 });
     if (!limit.allowed) {
       return NextResponse.json(
         { error: "Too many transcription requests. Please wait." },
@@ -32,7 +41,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No audio provided.' }, { status: 400 });
     }
 
-    // SECURITY: Validate file size
+    if (audioBlob.size < MIN_AUDIO_SIZE) {
+      return NextResponse.json(
+        { error: 'Recording too short. Please speak clearly and try again.' },
+        { status: 422 }
+      );
+    }
+
     if (audioBlob.size > MAX_AUDIO_SIZE) {
       return NextResponse.json(
         { error: `Audio file too large. Maximum size is ${MAX_AUDIO_SIZE / 1024 / 1024}MB.` },
@@ -40,7 +55,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // SECURITY: Validate MIME type (strip codec params like ";codecs=opus")
     const mimeType = audioBlob.type || "audio/webm";
     const baseMime = mimeType.split(";")[0].trim();
     if (!ALLOWED_AUDIO_TYPES.has(baseMime)) {
@@ -50,39 +64,68 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY === 'your_gemini_api_key_here') {
-      return NextResponse.json({
-        error: 'Gemini API Key not configured.',
-      }, { status: 501 });
+    if (!isSttAvailable()) {
+      return NextResponse.json(
+        {
+          error: "Speech-to-text not configured.",
+          details: "Set WHISPER_STT_ENDPOINT or WHISPER_MODEL_PATH (local), or GOOGLE_GENERATIVE_AI_API_KEY as fallback.",
+        },
+        { status: 501 }
+      );
     }
 
-    // Convert Blob to Base64 for Gemini
-    const arrayBuffer = await audioBlob.arrayBuffer();
-    const base64Audio = Buffer.from(arrayBuffer).toString('base64');
-
-    // Sanitize language input
     const safeLang = (language || "en-US").replace(/[^a-zA-Z0-9\-]/g, "").slice(0, 10);
+    const audioBuffer = Buffer.from(await audioBlob.arrayBuffer());
 
-    const prompt = `Transcribe this audio strictly. Language is ${safeLang}. Only return the transcribed text, nothing else.`;
+    // 1) Self-hosted Whisper HTTP server (your own STT — no Gemini quota)
+    const serverResult = await transcribeWithWhisperServer(
+      new Blob([audioBuffer], { type: baseMime }),
+      safeLang
+    );
+    if (serverResult.text) {
+      return NextResponse.json({ text: serverResult.text, provider: "whisper-server" });
+    }
+
+    // 2) Local whisper-cpp on dev machine
+    const localResult = await transcribeWithLocalWhisper(audioBuffer);
+    if (localResult.text) {
+      return NextResponse.json({ text: localResult.text, provider: "whisper-local" });
+    }
+
+    // 3) Gemini multimodal fallback (uses API quota)
+    const apiKey = getGeminiApiKey();
+    if (!apiKey) {
+      const err = serverResult.error || localResult.error || "STT unavailable";
+      return NextResponse.json({ error: err }, { status: 502 });
+    }
+
+    const model = new GoogleGenerativeAI(apiKey).getGenerativeModel({ model: GEMINI_MODEL });
+    const base64Audio = audioBuffer.toString("base64");
+    const prompt = `Transcribe this audio strictly. Language is ${safeLang}. Only return the transcribed text, nothing else. If there is no speech, return EMPTY.`;
 
     const result = await model.generateContent([
       prompt,
-      {
-        inlineData: {
-          mimeType,
-          data: base64Audio
-        }
-      }
+      { inlineData: { mimeType: baseMime, data: base64Audio } },
     ]);
 
-    const transcription = result.response.text().trim();
-    return NextResponse.json({ text: transcription });
+    let transcription = "";
+    try {
+      transcription = result.response.text().trim();
+    } catch {
+      return NextResponse.json({ error: 'No speech detected. Please try again.' }, { status: 422 });
+    }
 
-  } catch (error: any) {
-    console.error('Gemini STT API Error:', error.message);
-    return NextResponse.json(
-      { error: 'Failed to transcribe audio.' },
-      { status: 500 }
-    );
+    if (!transcription || transcription.toUpperCase() === "EMPTY") {
+      return NextResponse.json({ error: 'No speech detected. Please try again.' }, { status: 422 });
+    }
+
+    return NextResponse.json({ text: transcription, provider: "gemini" });
+
+  } catch (error) {
+    console.error('STT API Error:', error);
+    const mapped = mapGeminiApiError(error);
+    const headers: Record<string, string> = {};
+    if (mapped.status === 429) headers["Retry-After"] = "60";
+    return NextResponse.json({ error: mapped.error }, { status: mapped.status, headers });
   }
 }

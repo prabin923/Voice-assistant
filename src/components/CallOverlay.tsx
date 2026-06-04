@@ -2,6 +2,14 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Phone, PhoneOff, MicOff, Mic, Volume2, VolumeX } from "lucide-react";
+import { GUEST_STAFF_HANDOFF_MESSAGE } from "@/lib/escalationMessages";
+import { GeminiLiveSession } from "@/lib/geminiLiveSession";
+import {
+  VOICE_MAX_RECORD_MS,
+  VOICE_SILENCE_SUBMIT_MS,
+  VOICE_SILENCE_THRESHOLD,
+  VOICE_SPEECH_MIN_MS,
+} from "@/lib/voiceSilence";
 
 type CallState = "ringing" | "connected" | "ended";
 
@@ -63,10 +71,21 @@ interface CallOverlayProps {
   languageCode: string;
   ttsLang: string;
   voiceStyle: "warm" | "professional" | "energetic";
+  aiReady?: boolean;
+  geminiLiveReady?: boolean;
   onEnd: (record?: CallHistoryRecord) => void;
 }
 
-export default function CallOverlay({ hotelName, accentColor, languageCode, ttsLang, voiceStyle, onEnd }: CallOverlayProps) {
+export default function CallOverlay({
+  hotelName,
+  accentColor,
+  languageCode,
+  ttsLang,
+  voiceStyle,
+  aiReady = true,
+  geminiLiveReady = false,
+  onEnd,
+}: CallOverlayProps) {
   const [callState, setCallState] = useState<CallState>("ringing");
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
@@ -78,8 +97,12 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
   const [callLog, setCallLog] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
   const [audioLevel, setAudioLevel] = useState(0);
   const callStartedAtRef = useRef(Date.now());
+  const callStateRef = useRef<CallState>("ringing");
+  const endingCallRef = useRef(false);
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const nativeSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nativeDraftTranscriptRef = useRef("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -87,6 +110,10 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
   const autoListenRef = useRef(true);
   const logEndRef = useRef<HTMLDivElement>(null);
   const [useServerMode, setUseServerMode] = useState(false);
+  const [liveMode, setLiveMode] = useState(false);
+  const liveSessionRef = useRef<GeminiLiveSession | null>(null);
+  const liveStartedRef = useRef(false);
+  const preAcquiredMicRef = useRef<MediaStream | null>(null);
   const useServerModeRef = useRef(false);
   const startListeningRef = useRef<() => void>(() => {});
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -95,6 +122,35 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
   const audioLevelRef = useRef(0);
   const lastAudioLevelUpdateRef = useRef(0);
   useServerModeRef.current = useServerMode;
+  callStateRef.current = callState;
+
+  // Acquire mic while the user's click gesture is still valid (before the 2s ring delay).
+  useEffect(() => {
+    let cancelled = false;
+
+    const acquireMic = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+        if (!cancelled) preAcquiredMicRef.current = stream;
+      } catch {
+        if (!cancelled) preAcquiredMicRef.current = null;
+      }
+    };
+
+    void acquireMic();
+
+    return () => {
+      cancelled = true;
+      preAcquiredMicRef.current?.getTracks().forEach((track) => track.stop());
+      preAcquiredMicRef.current = null;
+    };
+  }, []);
 
   // Scroll call log
   useEffect(() => {
@@ -196,6 +252,12 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
 
   // Send to chat API
   const sendMessage = useCallback(async (text: string) => {
+    if (!aiReady) {
+      const err = "Gemini API Key not configured on the server.";
+      setCallLog((prev) => [...prev, { role: "assistant", text: err }]);
+      speak(err);
+      return;
+    }
     setIsProcessing(true);
     setCallLog((prev) => [...prev, { role: "user", text }]);
     try {
@@ -212,7 +274,14 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
             ? data.error.trim()
             : "I'm sorry, I'm having trouble right now.";
       setCallLog((prev) => [...prev, { role: "assistant", text: reply }]);
+      if (data.escalated) {
+        setCallLog((prev) => [...prev, { role: "assistant", text: GUEST_STAFF_HANDOFF_MESSAGE }]);
+        autoListenRef.current = false;
+      }
       speak(reply);
+      if (data.escalated) {
+        window.setTimeout(() => speak(GUEST_STAFF_HANDOFF_MESSAGE), 400);
+      }
     } catch {
       const err = "I'm sorry, I'm having trouble right now.";
       setCallLog((prev) => [...prev, { role: "assistant", text: err }]);
@@ -220,7 +289,7 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
     } finally {
       setIsProcessing(false);
     }
-  }, [languageCode, speak]);
+  }, [aiReady, languageCode, speak]);
 
   // Stop server listening
   const stopServerListening = useCallback(() => {
@@ -238,9 +307,17 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
   }, []);
 
   const endCall = useCallback(() => {
+    endingCallRef.current = true;
     autoListenRef.current = false;
+    if (nativeSilenceTimerRef.current) {
+      clearTimeout(nativeSilenceTimerRef.current);
+      nativeSilenceTimerRef.current = null;
+    }
+    nativeDraftTranscriptRef.current = "";
     if (recognitionRef.current) try { recognitionRef.current.stop(); } catch {}
     stopServerListening();
+    liveSessionRef.current?.disconnect();
+    liveSessionRef.current = null;
     synthRef.current?.cancel();
     if (audioContextRef.current && audioContextRef.current.state !== "closed") {
       audioContextRef.current.close().catch(() => {});
@@ -257,12 +334,108 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
       endedAt,
       durationSec: duration,
       languageCode,
-      mode: useServerModeRef.current ? "server" : "native",
+      mode: liveMode ? "server" : useServerModeRef.current ? "server" : "native",
       transcriptPreview,
       totalTurns: callLog.length,
     };
     setTimeout(() => onEnd(record), 1200);
-  }, [callLog, duration, languageCode, onEnd, stopServerListening]);
+  }, [callLog, duration, languageCode, liveMode, onEnd, stopServerListening]);
+
+  const fallbackToStandardCall = useCallback(() => {
+    liveStartedRef.current = false;
+    setLiveMode(false);
+    liveSessionRef.current?.disconnect();
+    liveSessionRef.current = null;
+    const greeting = "Hello! Thank you for calling. How may I assist you today?";
+    setCallLog([{ role: "assistant", text: greeting }]);
+    speak(greeting);
+  }, [speak]);
+
+  const startGeminiLiveCall = useCallback(async () => {
+    if (liveStartedRef.current || !geminiLiveReady) return;
+    liveStartedRef.current = true;
+
+    const attachLiveMic = async (session: GeminiLiveSession) => {
+      let stream = preAcquiredMicRef.current;
+      if (!stream?.active) {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+        preAcquiredMicRef.current = stream;
+      }
+      await session.startMic(stream);
+      setIsListening(true);
+      setLiveTranscript("");
+    };
+
+    try {
+      const res = await fetch("/api/gemini/live-token", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.token || !data.model) {
+        throw new Error(data.error || "Live token unavailable");
+      }
+
+      const session = new GeminiLiveSession();
+      liveSessionRef.current = session;
+      setLiveMode(true);
+      autoListenRef.current = true;
+
+      let pendingUser = "";
+      let pendingAssistant = "";
+
+      await session.connect(data.token, data.model, {
+        onOpen: () => {
+          void (async () => {
+            try {
+              await attachLiveMic(session);
+              session.sendGreeting(
+                `A guest just connected to ${hotelName} front desk. Greet them warmly in ${languageCode} and ask how you can help.`
+              );
+            } catch {
+              fallbackToStandardCall();
+            }
+          })();
+        },
+        onInputTranscript: (text) => {
+          pendingUser = text;
+          setLiveTranscript(text);
+        },
+        onOutputTranscript: (text) => {
+          pendingAssistant = text;
+          setCallLog((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.role === "assistant" && liveMode) {
+              return [...prev.slice(0, -1), { role: "assistant", text }];
+            }
+            return [...prev, { role: "assistant", text }];
+          });
+        },
+        onSpeakingChange: (speaking) => {
+          setIsSpeaking(speaking);
+          if (!speaking && pendingUser) {
+            setCallLog((prev) => [...prev, { role: "user", text: pendingUser }]);
+            pendingUser = "";
+            setLiveTranscript("");
+          }
+          if (!speaking && pendingAssistant) {
+            pendingAssistant = "";
+          }
+        },
+        onError: (message) => {
+          setCallLog((prev) => [...prev, { role: "assistant", text: message }]);
+          if (!endingCallRef.current && callStateRef.current === "connected") {
+            fallbackToStandardCall();
+          }
+        },
+      });
+    } catch {
+      fallbackToStandardCall();
+    }
+  }, [fallbackToStandardCall, geminiLiveReady, hotelName, languageCode]);
 
   const pickCallRecorderMimeType = (): string | undefined => {
     if (typeof MediaRecorder === "undefined") return undefined;
@@ -323,10 +496,10 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
       analyserRef.current = analyser;
 
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      const SILENCE_THRESHOLD = 15;
-      const SILENCE_DURATION_MS = 5000;
-      const SPEECH_MIN_MS = 500;
-      const MAX_RECORD_MS = 15000;
+      const SILENCE_THRESHOLD = VOICE_SILENCE_THRESHOLD;
+      const SILENCE_DURATION_MS = VOICE_SILENCE_SUBMIT_MS;
+      const SPEECH_MIN_MS = VOICE_SPEECH_MIN_MS;
+      const MAX_RECORD_MS = VOICE_MAX_RECORD_MS;
 
       let silenceStart: number | null = null;
       let hasHeardSpeech = false;
@@ -382,7 +555,6 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
 
       recorder.start(250);
       setIsListening(true);
-      setLiveTranscript("Listening...");
 
       // Wait before starting silence detection to let mic warm up
       setTimeout(() => {
@@ -412,27 +584,56 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
     }
 
     const rec = new SR();
-    rec.continuous = false;
+    rec.continuous = true;
     rec.interimResults = true;
     rec.lang = languageCode;
 
-    rec.onstart = () => setIsListening(true);
-
-    rec.onresult = (e: SpeechRecognitionEventLike) => {
-      let interim = "";
-      let final = "";
-      for (let i = 0; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript;
-        else interim += e.results[i][0].transcript;
-      }
-      if (interim) setLiveTranscript(interim);
-      if (final) {
-        setLiveTranscript("");
-        sendMessage(final);
+    const clearNativeSilenceTimer = () => {
+      if (nativeSilenceTimerRef.current) {
+        clearTimeout(nativeSilenceTimerRef.current);
+        nativeSilenceTimerRef.current = null;
       }
     };
 
+    const scheduleNativeSilenceSubmit = () => {
+      clearNativeSilenceTimer();
+      nativeSilenceTimerRef.current = setTimeout(() => {
+        if (!autoListenRef.current) return;
+        const text = nativeDraftTranscriptRef.current.trim();
+        nativeDraftTranscriptRef.current = "";
+        try {
+          rec.stop();
+        } catch {
+          /* already stopped */
+        }
+        setLiveTranscript("");
+        if (text) {
+          sendMessage(text);
+        } else {
+          setTimeout(() => startListeningRef.current(), 300);
+        }
+      }, VOICE_SILENCE_SUBMIT_MS);
+    };
+
+    rec.onstart = () => {
+      setIsListening(true);
+      nativeDraftTranscriptRef.current = "";
+      setLiveTranscript("");
+      scheduleNativeSilenceSubmit();
+    };
+
+    rec.onresult = (e: SpeechRecognitionEventLike) => {
+      let transcript = "";
+      for (let i = 0; i < e.results.length; i++) {
+        transcript += e.results[i][0].transcript;
+      }
+      nativeDraftTranscriptRef.current = transcript;
+      setLiveTranscript(transcript);
+      if (transcript.trim()) scheduleNativeSilenceSubmit();
+    };
+
     rec.onerror = (e: { error: string }) => {
+      clearNativeSilenceTimer();
       setIsListening(false);
       if (e.error === "network") {
         useServerModeRef.current = true;
@@ -443,7 +644,10 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
       }
     };
 
-    rec.onend = () => setIsListening(false);
+    rec.onend = () => {
+      clearNativeSilenceTimer();
+      setIsListening(false);
+    };
 
     try {
       rec.start();
@@ -459,25 +663,49 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
     if (callState === "ringing") {
       const t = setTimeout(() => {
         setCallState("connected");
-        // Greeting
-        const greeting = "Hello! Thank you for calling. How may I assist you today?";
-        setCallLog([{ role: "assistant", text: greeting }]);
-        speak(greeting);
+        if (geminiLiveReady) {
+          setCallLog([]);
+          startGeminiLiveCall();
+        } else {
+          const greeting = "Hello! Thank you for calling. How may I assist you today?";
+          setCallLog([{ role: "assistant", text: greeting }]);
+          speak(greeting);
+        }
       }, 2000);
       return () => clearTimeout(t);
     }
-  }, [callState, speak]);
+  }, [callState, geminiLiveReady, speak, startGeminiLiveCall]);
 
   // Toggle mute
   const toggleMute = () => {
-    if (!isMuted) {
+    const nextMuted = !isMuted;
+    if (nextMuted) {
       recognitionRef.current?.stop();
       stopServerListening();
-      setIsListening(false);
-    } else {
-      if (callState === "connected" && !isSpeaking && !isProcessing) startListening();
+      if (liveMode && preAcquiredMicRef.current) {
+        preAcquiredMicRef.current.getTracks().forEach((track) => {
+          track.enabled = false;
+        });
+        setIsListening(false);
+      } else {
+        liveSessionRef.current?.disconnect();
+        liveSessionRef.current = null;
+        setLiveMode(false);
+        setIsListening(false);
+      }
+    } else if (callState === "connected" && !isSpeaking && !isProcessing) {
+      if (liveMode && preAcquiredMicRef.current) {
+        preAcquiredMicRef.current.getTracks().forEach((track) => {
+          track.enabled = true;
+        });
+        setIsListening(true);
+      } else if (geminiLiveReady && liveStartedRef.current) {
+        startGeminiLiveCall();
+      } else {
+        startListening();
+      }
     }
-    setIsMuted(!isMuted);
+    setIsMuted(nextMuted);
   };
 
   // Audio-reactive wave bars
@@ -522,7 +750,7 @@ export default function CallOverlay({ hotelName, accentColor, languageCode, ttsL
               <div className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]" />
                 <span className="text-[9px] font-bold tracking-widest text-neutral-500 uppercase">
-                  {useServerMode ? "AI Speech" : "Native Speech"}
+                  {liveMode ? "Live voice" : useServerMode ? "AI Speech" : "Native Speech"}
                 </span>
               </div>
             </div>

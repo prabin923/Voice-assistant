@@ -13,47 +13,93 @@ import {
   Hotel,
   Mic,
   Moon,
+  PhoneCall,
   ShieldCheck,
   Sparkles,
   Sun,
+  Zap,
 } from "lucide-react";
 import { Reveal } from "@/components/Reveal";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 import { StaynepLogo } from "@/components/StaynepLogo";
+import { VoicePipelineDemo } from "@/components/VoicePipelineDemo";
 
 const STAYNEP_SITE = "https://staynep.com";
 
-const STORY_STEPS = [
+const STATS = [
+  { value: "34+", label: "Languages supported" },
+  { value: "24/7", label: "Guest coverage" },
+  { value: "<300ms", label: "Real-time STT target" },
+];
+
+const HOW_IT_WORKS = [
   {
-    kicker: "Listen",
-    title: "A guest asks in the language they already use.",
-    body: "The assistant waits through natural pauses, catches intent, and keeps the conversation calm instead of forcing a form-like script.",
-    stat: "34+",
-    label: "languages",
-    flow: ["Speech", "Intent", "Reply"],
+    step: "01",
+    title: "Capture",
+    body: "Guests speak naturally — tap-to-talk, browser speech, or a live concierge call. Any accent, any channel.",
+    bullets: ["Mic, call, and AI Mode", "Pause-aware listening", "Hotel-branded welcome"],
     accent: "#8ee8ff",
+    icon: Mic,
+  },
+  {
+    step: "02",
+    title: "Transcribe",
+    body: "Speech becomes a clean transcript with intent detection — even when guests switch languages mid-sentence.",
+    bullets: ["Whisper or cloud STT", "Partial live transcripts", "Intent + policy matching"],
+    accent: "#f8d36a",
     icon: Globe2,
   },
   {
-    kicker: "Reason",
-    title: "Policies, room context, and escalation rules shape every reply.",
-    body: "Answers stay inside the hotel playbook: check-in windows, amenities, cancellations, transfers, and handoff paths.",
-    stat: "24/7",
-    label: "coverage",
-    flow: ["Policy", "Context", "Guardrail"],
-    accent: "#f8d36a",
-    icon: ShieldCheck,
+    step: "03",
+    title: "Reply",
+    body: "Answers stay inside your hotel playbook: check-in windows, amenities, cancellations, and room context.",
+    bullets: ["AI voice replies", "Custom FAQ + policies", "Suggested question chips"],
+    accent: "#c9b7ff",
+    icon: Sparkles,
   },
   {
-    kicker: "Act",
-    title: "Staff see what matters, not a pile of transcripts.",
-    body: "Requests, unresolved questions, and guest sentiment flow into admin views so operations can move without hunting.",
-    stat: "1",
-    label: "desk",
-    flow: ["Summary", "Priority", "Handoff"],
-    accent: "#c9b7ff",
-    icon: BarChart3,
+    step: "04",
+    title: "Escalate",
+    body: "When automation stops, staff get structured handoffs — not a pile of raw transcripts.",
+    bullets: ["Concierge call routing", "Support ticket creation", "Email alerts to front desk"],
+    accent: "#7dffb2",
+    icon: PhoneCall,
   },
+];
+
+const FEATURES = [
+  {
+    title: "Built for global guests",
+    body: "Real conversations rarely stay in one language. The assistant handles accents and code-switching without a separate stack per market.",
+    icon: Globe2,
+    accent: "from-cyan-400/20 to-sky-500/5",
+  },
+  {
+    title: "Policy-aware by default",
+    body: "Every reply is shaped by your hotel config — policies, amenities, room types, and escalation rules configured once in settings.",
+    icon: ShieldCheck,
+    accent: "from-amber-400/20 to-yellow-500/5",
+  },
+  {
+    title: "Voice that feels live",
+    body: "Low-latency spoken replies through AI Mode, with browser speech fallback when needed.",
+    icon: Zap,
+    accent: "from-violet-400/20 to-purple-500/5",
+  },
+  {
+    title: "Operations-ready handoffs",
+    body: "Unresolved requests, sentiment, and call history flow into admin views so your team moves without hunting through logs.",
+    icon: BarChart3,
+    accent: "from-emerald-400/20 to-green-500/5",
+  },
+];
+
+const COMPARISON = [
+  { feature: "Multilingual voice (34+)", staynep: true, generic: false, phoneTree: false },
+  { feature: "Hotel-branded UI + policies", staynep: true, generic: false, phoneTree: false },
+  { feature: "Live concierge call", staynep: true, generic: false, phoneTree: true },
+  { feature: "AI Mode voice + text", staynep: true, generic: true, phoneTree: false },
+  { feature: "Staff escalation + tickets", staynep: true, generic: false, phoneTree: false },
 ];
 
 const SERVICE_LINKS = [
@@ -74,7 +120,7 @@ const SERVICE_LINKS = [
   {
     title: "Voice demo",
     body: "Try the multilingual receptionist experience in this app.",
-    href: "/assistant",
+    href: "/demo",
     icon: Mic,
     external: false,
   },
@@ -86,27 +132,6 @@ const TRUST_POINTS = [
   "Rate limited API routes",
   "Policy-safe handoffs",
 ];
-
-function AssistantOrb({ isDark }: { isDark: boolean }) {
-  return (
-    <div className="kiddo-stage" aria-hidden="true">
-      <div className="kiddo-particle kiddo-particle-1" />
-      <div className="kiddo-particle kiddo-particle-2" />
-      <div className="kiddo-particle kiddo-particle-3" />
-      <div className="kiddo-particle kiddo-particle-4" />
-      <div className="kiddo-orbit kiddo-orbit-one" />
-      <div className="kiddo-orbit kiddo-orbit-two" />
-      <div className={`kiddo-core ${isDark ? "kiddo-core-dark" : "kiddo-core-light"}`}>
-        <div className="kiddo-face">
-          <span />
-          <span />
-        </div>
-        <div className="kiddo-mouth" />
-      </div>
-      <div className="kiddo-shadow" />
-    </div>
-  );
-}
 
 export default function MarketingHomePage() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -124,46 +149,11 @@ export default function MarketingHomePage() {
     window.localStorage.setItem("theme", theme);
   }, [theme]);
 
-  useEffect(() => {
-    let frame = 0;
-
-    const updateScrollMotion = () => {
-      frame = 0;
-      const root = document.documentElement;
-      const maxScroll = Math.max(1, root.scrollHeight - window.innerHeight);
-      const pageProgress = Math.min(1, Math.max(0, window.scrollY / maxScroll));
-      const story = document.getElementById("story");
-      let storyProgress = 0;
-
-      if (story) {
-        const rect = story.getBoundingClientRect();
-        const distance = window.innerHeight + rect.height;
-        storyProgress = Math.min(1, Math.max(0, (window.innerHeight - rect.top) / distance));
-      }
-
-      root.style.setProperty("--kiddo-page-progress", pageProgress.toFixed(4));
-      root.style.setProperty("--kiddo-story-progress", storyProgress.toFixed(4));
-    };
-
-    const requestUpdate = () => {
-      if (frame) return;
-      frame = window.requestAnimationFrame(updateScrollMotion);
-    };
-
-    updateScrollMotion();
-    window.addEventListener("scroll", requestUpdate, { passive: true });
-    window.addEventListener("resize", requestUpdate);
-
-    return () => {
-      if (frame) window.cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", requestUpdate);
-      window.removeEventListener("resize", requestUpdate);
-    };
-  }, []);
-
   const isDark = theme === "dark";
   const muted = isDark ? "text-white/62" : "text-slate-600";
   const panel = isDark ? "border-white/10 bg-white/[0.045]" : "border-slate-200 bg-white/82";
+  const accentText = isDark ? "text-[#8ee8ff]" : "text-[#163a5f]";
+  const kickerText = isDark ? "text-[#f8d36a]" : "text-[#9f7b1d]";
 
   return (
     <main className={`va-noise relative min-h-screen overflow-x-hidden ${isDark ? "bg-[#05070d] text-white" : "bg-[#f5f7fb] text-slate-950"}`}>
@@ -176,9 +166,14 @@ export default function MarketingHomePage() {
             <StaynepLogo isDark={isDark} size="md" priority />
           </Link>
           <nav className={`hidden items-center rounded-full border p-1 text-sm font-semibold md:flex ${isDark ? "border-white/10 bg-black/28 text-white/68" : "border-slate-200 bg-white/70 text-slate-600"}`}>
-            {["story", "services", "system"].map((item) => (
-              <a key={item} href={`#${item}`} className="kiddo-nav-link rounded-full px-4 py-2 capitalize">
-                {item}
+            {[
+              { id: "how-it-works", label: "How it works" },
+              { id: "features", label: "Features" },
+              { id: "paths", label: "Guest paths" },
+              { id: "platform", label: "Platform" },
+            ].map((item) => (
+              <a key={item.id} href={`#${item.id}`} className="kiddo-nav-link rounded-full px-4 py-2">
+                {item.label}
               </a>
             ))}
           </nav>
@@ -191,7 +186,7 @@ export default function MarketingHomePage() {
             >
               {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
-            <Link href="/assistant" className="kiddo-button kiddo-button-primary">
+            <Link href="/demo" className="kiddo-button kiddo-button-primary">
               Demo
               <ArrowRight className="h-4 w-4" />
             </Link>
@@ -199,90 +194,87 @@ export default function MarketingHomePage() {
         </div>
       </header>
 
-      <section className="relative min-h-[calc(92vh-68px)] overflow-hidden">
-        <div className="kiddo-hero-grid mx-auto grid min-h-[calc(92vh-68px)] max-w-7xl items-center gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[0.92fr_1.08fr] lg:py-16">
-          <div className="relative z-10 max-w-3xl">
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+        <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[0.95fr_1.05fr] lg:py-20">
+          <div className="relative z-10 max-w-2xl">
             <div className={`hero-intro hero-intro-delay-1 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-[0.2em] ${isDark ? "border-cyan-300/20 bg-cyan-300/8 text-cyan-100" : "border-[#163a5f]/18 bg-white text-[#163a5f]"}`}>
               <Sparkles className="h-3.5 w-3.5" />
               AI voice receptionist
             </div>
-            <h1 className="hero-intro hero-intro-delay-2 va-display mt-6 max-w-3xl text-balance text-[clamp(2.35rem,5.35vw,5rem)] leading-[0.94]">
-              The hotel assistant guests actually want to talk to.
+            <h1 className="hero-intro hero-intro-delay-2 va-display mt-6 text-balance text-[clamp(2.35rem,5.35vw,4.6rem)] leading-[0.94]">
+              Turn guest questions into{" "}
+              <span className={isDark ? "text-[#8ee8ff]" : "text-[#163a5f]"}>reliable answers</span>
             </h1>
             <p className={`hero-intro hero-intro-delay-3 mt-6 max-w-xl text-[15px] leading-7 sm:text-base ${muted}`}>
-              A StayNEP voice layer with the charm of a visible AI companion and the discipline of a front desk system: multilingual listening, policy-aware replies, and clean staff escalation.
+              StayNEP voice assistant is the end-to-end concierge layer — capture speech, transcribe intent, reply with hotel policy, and escalate to staff through a single branded experience.
             </p>
             <div className="hero-intro hero-intro-delay-4 mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href="/assistant" className="kiddo-button kiddo-button-primary kiddo-button-large">
-                Try voice demo
+              <Link href="/demo" className="kiddo-button kiddo-button-primary kiddo-button-large">
+                Start voice demo
                 <Mic className="h-5 w-5" />
               </Link>
-              <a href={STAYNEP_SITE} target="_blank" rel="noopener noreferrer" className={`kiddo-button kiddo-button-large ${isDark ? "kiddo-button-dark" : "kiddo-button-light"}`}>
-                View StayNEP
-                <ExternalLink className="h-4 w-4" />
-              </a>
+              <Link href="/admin/register" className={`kiddo-button kiddo-button-large ${isDark ? "kiddo-button-dark" : "kiddo-button-light"}`}>
+                Register your hotel
+                <ArrowRight className="h-4 w-4" />
+              </Link>
             </div>
           </div>
 
-          <div className="hero-intro hero-intro-delay-5 relative min-h-[360px] lg:min-h-[540px]">
-            <div className="kiddo-pin-card kiddo-pin-card-top">
-              <span>Guest asks</span>
-              <strong>Late check-in?</strong>
-            </div>
-            <AssistantOrb isDark={isDark} />
-            <div className="kiddo-pin-card kiddo-pin-card-bottom">
-              <span>Assistant replies</span>
-              <strong>Policy-safe handoff</strong>
-            </div>
+          <div className="hero-intro hero-intro-delay-5 relative">
+            <VoicePipelineDemo isDark={isDark} />
+          </div>
+        </div>
+
+        <div className="mx-auto max-w-7xl px-4 pb-14 sm:px-6">
+          <div className="landing-stat-grid">
+            {STATS.map((stat, index) => (
+              <Reveal key={stat.label} delayMs={index * 60}>
+                <div className={`landing-stat-card ${panel}`}>
+                  <p className={`va-display text-3xl font-bold ${accentText}`}>{stat.value}</p>
+                  <p className={`mt-1 text-sm font-semibold ${muted}`}>{stat.label}</p>
+                </div>
+              </Reveal>
+            ))}
           </div>
         </div>
       </section>
 
-      <section id="story" className="relative scroll-mt-24 py-10 sm:py-14">
-        <div className="mx-auto grid max-w-7xl gap-12 px-4 sm:px-6 lg:grid-cols-[0.78fr_1.08fr]">
-          <div className="sticky top-28 hidden h-[calc(82vh-8rem)] items-center lg:flex">
-            <AssistantOrb isDark={isDark} />
-          </div>
-          <div className="space-y-5 lg:space-y-7">
-            {STORY_STEPS.map((step, index) => (
-              <Reveal key={step.title} delayMs={index * 80}>
+      {/* How it works */}
+      <section id="how-it-works" className="scroll-mt-24 border-t border-white/6 py-14 sm:py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+          <Reveal className="max-w-3xl">
+            <p className={`text-xs font-black uppercase tracking-[0.24em] ${kickerText}`}>How it works</p>
+            <h2 className="va-display mt-4 max-w-4xl text-balance text-[clamp(2rem,4vw,3.6rem)] leading-[0.94]">
+              The foundation of every voice concierge
+            </h2>
+            <p className={`mt-5 max-w-2xl text-[15px] leading-7 ${muted}`}>
+              Bad speech-to-text doesn&apos;t just stay in the transcript — it corrupts everything downstream. StayNEP keeps the rest of your guest experience reliable.
+            </p>
+          </Reveal>
+
+          <div className="mt-12 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {HOW_IT_WORKS.map((step, index) => (
+              <Reveal key={step.title} delayMs={index * 70}>
                 <article
-                  className={`kiddo-story-panel min-h-[340px] rounded-[1.35rem] border ${panel}`}
+                  className={`landing-step-card h-full border ${panel}`}
                   style={{ "--story-accent": step.accent } as CSSProperties}
                 >
-                  <div className="kiddo-story-rail" aria-hidden="true">
-                    <span>{String(index + 1).padStart(2, "0")}</span>
+                  <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--story-accent)] to-transparent opacity-60" />
+                  <p className="landing-step-number">Step {step.step}</p>
+                  <div className={`landing-feature-icon mt-4 ${isDark ? "bg-white/8 text-white" : "bg-slate-100 text-[#163a5f]"}`}>
+                    <step.icon className="h-5 w-5" />
                   </div>
-
-                  <div className="kiddo-story-content">
-                    <div className="flex items-start justify-between gap-5">
-                      <div className="flex items-center gap-3">
-                        <div className="kiddo-story-icon">
-                          <step.icon className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <p className="kiddo-story-kicker">{step.kicker}</p>
-                          <p className={`mt-1 text-xs font-semibold ${muted}`}>Voice system step</p>
-                        </div>
-                      </div>
-                      <div className="kiddo-story-metric">
-                        <p className="kiddo-stat">{step.stat}</p>
-                        <p className={muted}>{step.label}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-8">
-                      <div>
-                        <h2 className="va-display max-w-xl text-balance text-[clamp(1.72rem,2.65vw,2.85rem)] leading-[1]">{step.title}</h2>
-                        <p className={`mt-4 max-w-xl text-sm leading-7 ${muted}`}>{step.body}</p>
-                      </div>
-                      <div className="kiddo-story-flow mt-6" aria-label={`${step.kicker} workflow`}>
-                        {step.flow.map((item) => (
-                          <span key={item}>{item}</span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                  <h3 className="mt-5 text-xl font-bold tracking-tight">{step.title}</h3>
+                  <p className={`mt-3 text-sm leading-7 ${muted}`}>{step.body}</p>
+                  <ul className={`mt-5 space-y-2 text-sm font-semibold ${isDark ? "text-white/72" : "text-slate-700"}`}>
+                    {step.bullets.map((bullet) => (
+                      <li key={bullet} className="flex items-start gap-2">
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                        {bullet}
+                      </li>
+                    ))}
+                  </ul>
                 </article>
               </Reveal>
             ))}
@@ -290,12 +282,86 @@ export default function MarketingHomePage() {
         </div>
       </section>
 
-      <section id="services" className="scroll-mt-24 py-12 sm:py-18">
+      {/* Features */}
+      <section id="features" className="scroll-mt-24 py-14 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <Reveal className="max-w-3xl">
-            <p className={`text-xs font-black uppercase tracking-[0.24em] ${isDark ? "text-[#f8d36a]" : "text-[#9f7b1d]"}`}>Guest paths</p>
-            <h2 className="va-display mt-4 max-w-4xl text-balance text-[clamp(2.05rem,4vw,4.2rem)] leading-[0.94]">Not a mascot. A working front desk interface.</h2>
+            <p className={`text-xs font-black uppercase tracking-[0.24em] ${kickerText}`}>Why StayNEP</p>
+            <h2 className="va-display mt-4 max-w-4xl text-balance text-[clamp(2rem,4vw,3.6rem)] leading-[0.94]">
+              Accurate, multilingual, and built for hotel operations
+            </h2>
           </Reveal>
+
+          <div className="mt-12 grid gap-4 md:grid-cols-2">
+            {FEATURES.map((feature, index) => (
+              <Reveal key={feature.title} delayMs={index * 70}>
+                <article className={`group relative overflow-hidden rounded-[1.35rem] border p-6 sm:p-7 ${panel}`}>
+                  <div className={`pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-gradient-to-br ${feature.accent} blur-2xl transition group-hover:scale-110`} />
+                  <div className={`landing-feature-icon ${isDark ? "bg-white/8 text-white" : "bg-slate-100 text-[#163a5f]"}`}>
+                    <feature.icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-5 text-xl font-bold tracking-tight">{feature.title}</h3>
+                  <p className={`mt-3 max-w-xl text-sm leading-7 ${muted}`}>{feature.body}</p>
+                </article>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Comparison */}
+      <section className="py-14 sm:py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+          <Reveal className="max-w-3xl">
+            <p className={`text-xs font-black uppercase tracking-[0.24em] ${kickerText}`}>Comparison</p>
+            <h2 className="va-display mt-4 max-w-3xl text-balance text-[clamp(1.85rem,3.5vw,3rem)] leading-[0.96]">
+              See the difference at a glance
+            </h2>
+          </Reveal>
+
+          <Reveal delayMs={80}>
+            <div className={`mt-10 overflow-hidden rounded-[1.35rem] border ${panel}`}>
+              <div className={`landing-comparison-row text-xs font-black uppercase tracking-[0.14em] ${isDark ? "bg-white/[0.03] text-white/45" : "bg-slate-50 text-slate-500"}`}>
+                <span>Capability</span>
+                <span className={accentText}>StayNEP</span>
+                <span>Generic chatbot</span>
+                <span>Phone tree</span>
+              </div>
+              {COMPARISON.map((row) => (
+                <div key={row.feature} className={`landing-comparison-row border-t text-sm ${isDark ? "border-white/8" : "border-slate-200"}`}>
+                  <span className="font-semibold">{row.feature}</span>
+                  {[row.staynep, row.generic, row.phoneTree].map((value, index) => (
+                    <span key={index} className="flex items-center gap-2">
+                      {value ? (
+                        <>
+                          <Check className="h-4 w-4 text-emerald-500" />
+                          <span className={index === 0 ? accentText : muted}>Included</span>
+                        </>
+                      ) : (
+                        <span className={muted}>—</span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* Guest paths */}
+      <section id="paths" className="scroll-mt-24 py-14 sm:py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+          <Reveal className="max-w-3xl">
+            <p className={`text-xs font-black uppercase tracking-[0.24em] ${kickerText}`}>Guest paths</p>
+            <h2 className="va-display mt-4 max-w-4xl text-balance text-[clamp(2rem,4vw,3.6rem)] leading-[0.94]">
+              Ship in hours, not weeks
+            </h2>
+            <p className={`mt-5 max-w-2xl text-[15px] leading-7 ${muted}`}>
+              Plug the assistant into the flows your guests already use — voice demo, room booking, and concierge handoff from one branded surface.
+            </p>
+          </Reveal>
+
           <div className="mt-10 grid gap-4 md:grid-cols-3">
             {SERVICE_LINKS.map((item, index) => (
               <Reveal key={item.title} delayMs={index * 70}>
@@ -314,7 +380,7 @@ export default function MarketingHomePage() {
                     <h3 className="mt-9 text-xl font-bold tracking-tight">{item.title}</h3>
                     <p className={`mt-3 text-sm leading-7 ${muted}`}>{item.body}</p>
                   </div>
-                  <span className={`mt-8 text-sm font-bold ${isDark ? "text-[#8ee8ff]" : "text-[#163a5f]"}`}>{item.external ? "Open flow" : "Launch demo"}</span>
+                  <span className={`mt-8 text-sm font-bold ${accentText}`}>{item.external ? "Open flow" : "Launch demo"}</span>
                 </a>
               </Reveal>
             ))}
@@ -322,17 +388,20 @@ export default function MarketingHomePage() {
         </div>
       </section>
 
-      <section id="system" className="scroll-mt-24 px-4 pb-16 sm:px-6 sm:pb-22">
+      {/* Platform / CTA */}
+      <section id="platform" className="scroll-mt-24 px-4 pb-16 sm:px-6 sm:pb-22">
         <Reveal>
-          <div className={`kiddo-system mx-auto grid max-w-7xl gap-8 rounded-[1.75rem] border p-6 sm:p-8 lg:grid-cols-[1fr_0.8fr] ${panel}`}>
+          <div className={`kiddo-system mx-auto grid max-w-7xl gap-8 rounded-[1.75rem] border p-6 sm:p-8 lg:grid-cols-[1fr_0.92fr] ${panel}`}>
             <div>
               <div className="flex items-center gap-3">
                 <Hotel className={isDark ? "text-[#f8d36a]" : "text-[#163a5f]"} />
-                <p className={`text-xs font-black uppercase tracking-[0.24em] ${muted}`}>StayNEP system</p>
+                <p className={`text-xs font-black uppercase tracking-[0.24em] ${muted}`}>StayNEP platform</p>
               </div>
-              <h2 className="va-display mt-5 max-w-3xl text-balance text-[clamp(1.9rem,3.7vw,3.8rem)] leading-[0.94]">Hospitality-grade motion, restrained enough for work.</h2>
+              <h2 className="va-display mt-5 max-w-3xl text-balance text-[clamp(1.9rem,3.7vw,3.4rem)] leading-[0.94]">
+                Ready to build with StayNEP?
+              </h2>
               <p className={`mt-5 max-w-2xl text-[15px] leading-7 ${muted}`}>
-                The visual language borrows the reference&apos;s friendly 3D brain and particle motion, then grounds it in a hotel product surface: clear CTAs, direct service paths, and operational credibility.
+                Configure your hotel brand, policies, and escalation paths in settings. Guests get a polished voice concierge; staff get structured handoffs when automation stops.
               </p>
               <div className="mt-8 grid gap-3 sm:grid-cols-2">
                 {TRUST_POINTS.map((point) => (
@@ -342,27 +411,15 @@ export default function MarketingHomePage() {
                   </div>
                 ))}
               </div>
-            </div>
-            <div className="kiddo-console">
-              <div className="kiddo-console-header">
-                <span />
-                <span />
-                <span />
-              </div>
-              <div className="space-y-4 p-5">
-                <div className="kiddo-wave-row">
-                  {Array.from({ length: 18 }).map((_, index) => (
-                    <span key={index} style={{ "--wave-delay": `${index * 42}ms` } as CSSProperties} />
-                  ))}
-                </div>
-                <div className="rounded-2xl bg-white/[0.07] p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/45">Detected intent</p>
-                  <p className="mt-2 text-lg font-semibold">Airport pickup after midnight</p>
-                </div>
-                <div className="rounded-2xl bg-[#8ee8ff]/12 p-4 text-[#dffbff]">
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#8ee8ff]/70">Action</p>
-                  <p className="mt-2 text-lg font-semibold">Escalate to concierge with room context</p>
-                </div>
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <Link href="/demo" className="kiddo-button kiddo-button-primary kiddo-button-large">
+                  Try voice demo
+                  <Mic className="h-5 w-5" />
+                </Link>
+                <a href={STAYNEP_SITE} target="_blank" rel="noopener noreferrer" className={`kiddo-button kiddo-button-large ${isDark ? "kiddo-button-dark" : "kiddo-button-light"}`}>
+                  View StayNEP
+                  <ExternalLink className="h-4 w-4" />
+                </a>
               </div>
             </div>
           </div>

@@ -6,11 +6,13 @@ import {
   Settings, Hotel, Phone, Clock, Utensils, Dumbbell,
   Save, RotateCcw, Plus, Trash2, ChevronLeft, CheckCircle2,
   AlertCircle, MessageSquare, LogOut, User, BarChart3, Inbox, X,
-  Crown, Sparkles, Sun, Moon
+  Crown, Sparkles, Sun, Moon, Bell,
 } from "lucide-react";
 import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
+import { applyHotelBrandTheme, notifyHotelConfigUpdated } from "@/lib/hotelBrand";
 import { StaynepLogo } from "@/components/StaynepLogo";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
+import { StaffNotificationCenter } from "@/components/StaffNotificationCenter";
 
 interface RoomType { name: string; pricePerNight: number; currency: string; description: string; maxOccupancy: number; }
 interface DiningVenue { name: string; cuisine: string; hours: string; description: string; }
@@ -18,7 +20,7 @@ interface Amenity { name: string; description: string; hours?: string; }
 interface FAQ { question: string; answer: string; }
 
 interface HotelConfig {
-  branding: { hotelName: string; tagline: string; accentColor: string; welcomeMessage: string; farewellMessage: string; };
+  branding: { hotelName: string; tagline: string; accentColor: string; welcomeMessage: string; farewellMessage: string; logoUrl?: string; };
   contact: { phone: string; email: string; website?: string; address: string; city: string; country: string; };
   policies: { checkInTime: string; checkOutTime: string; cancellationPolicy: string; petPolicy: string; smokingPolicy: string; extraBedPolicy: string; childPolicy: string; };
   rooms: RoomType[];
@@ -30,7 +32,7 @@ interface HotelConfig {
   language: string;
 }
 
-type Tab = "branding" | "contact" | "policies" | "rooms" | "dining" | "amenities" | "faq" | "persona";
+type Tab = "notifications" | "branding" | "contact" | "policies" | "rooms" | "dining" | "amenities" | "faq" | "persona";
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<HotelConfig | null>(null);
@@ -41,6 +43,7 @@ export default function SettingsPage() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "delete" | "info" } | null>(null);
   const [loadError, setLoadError] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [openHandoffCount, setOpenHandoffCount] = useState(0);
 
   const showToast = useCallback((message: string, type: "success" | "delete" | "info" = "success") => {
     setToast({ message, type });
@@ -61,6 +64,10 @@ export default function SettingsPage() {
       .then((data) => {
         if (data.name && data.email) setHotelUser({ name: data.name, email: data.email });
       })
+      .catch(() => {});
+
+    fetchJsonWithAuth<{ openCount: number }>("/api/support?status=open")
+      .then((data) => setOpenHandoffCount(data.openCount))
       .catch(() => {});
   }, []);
 
@@ -83,6 +90,10 @@ export default function SettingsPage() {
     window.localStorage.setItem("theme", theme);
   }, [theme]);
 
+  useEffect(() => {
+    if (config?.branding) applyHotelBrandTheme(config.branding);
+  }, [config?.branding]);
+
   const handleLogout = async () => {
     await fetchJsonWithAuth<{ success: boolean }>("/api/auth/logout", { method: "POST" });
     window.location.href = "/admin/login";
@@ -99,6 +110,7 @@ export default function SettingsPage() {
         body: JSON.stringify(config),
       });
       setSaveStatus("success");
+      notifyHotelConfigUpdated();
     } catch { setSaveStatus("error"); }
     finally { setSaving(false); setTimeout(() => setSaveStatus("idle"), 3000); }
   };
@@ -107,6 +119,7 @@ export default function SettingsPage() {
     try {
       const data = await fetchJsonWithAuth<{ config?: HotelConfig }>("/api/config", { method: "DELETE" });
       if (data.config) setConfig(data.config);
+      notifyHotelConfigUpdated();
     } catch {
       // Redirect is handled by shared auth helper on 401.
     }
@@ -132,7 +145,8 @@ export default function SettingsPage() {
     );
   }
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  const tabs: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
+    { id: "notifications", label: "Notifications", icon: <Bell className="w-4 h-4" />, badge: openHandoffCount },
     { id: "branding", label: "Branding", icon: <Hotel className="w-4 h-4" /> },
     { id: "contact", label: "Contact", icon: <Phone className="w-4 h-4" /> },
     { id: "policies", label: "Policies", icon: <Clock className="w-4 h-4" /> },
@@ -219,10 +233,15 @@ export default function SettingsPage() {
                 <span>{hotelUser.name}</span>
               </div>
             )}
-            <Link href="/admin/support" className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm border transition-all ${
+            <Link href="/admin/support" className={`relative flex items-center gap-2 px-3 py-2 rounded-xl text-sm border transition-all ${
               isDark ? "text-neutral-400 border-neutral-800 hover:border-amber-500/30 hover:text-amber-400" : "text-neutral-600 border-neutral-300 hover:border-amber-400/40 hover:text-amber-600 bg-white"
             }`}>
               <Inbox className="w-4 h-4" /><span className="hidden sm:inline">Support</span>
+              {openHandoffCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-[10px] font-bold text-black flex items-center justify-center">
+                  {openHandoffCount > 9 ? "9+" : openHandoffCount}
+                </span>
+              )}
             </Link>
             <Link href="/admin/analytics" className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm border transition-all ${
               isDark ? "text-neutral-400 border-neutral-800 hover:border-sky-500/35 hover:text-sky-300" : "text-neutral-600 border-neutral-300 hover:border-[#285a82]/45 hover:text-[#163a5f] bg-white"
@@ -270,7 +289,13 @@ export default function SettingsPage() {
                     : "text-neutral-400 hover:text-white hover:bg-neutral-900/50"
                 }`}
               >
-                {tab.icon} {tab.label}
+                {tab.icon}
+                <span className="flex-1 text-left">{tab.label}</span>
+                {tab.badge != null && tab.badge > 0 && (
+                  <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-amber-500 text-[10px] font-bold text-black flex items-center justify-center">
+                    {tab.badge > 9 ? "9+" : tab.badge}
+                  </span>
+                )}
               </button>
             ))}
           </nav>
@@ -278,6 +303,17 @@ export default function SettingsPage() {
 
         {/* Main Content */}
         <main className="flex-1 min-w-0">
+          {activeTab === "notifications" && (
+            <StaffNotificationCenter
+              isDark={isDark}
+              cardCls={cardCls}
+              inputCls={inputCls}
+              labelCls={labelCls}
+              onToast={showToast}
+              onOpenCountChange={setOpenHandoffCount}
+            />
+          )}
+
           {/* BRANDING — PREMIUM */}
           {activeTab === "branding" && (
             <div className="space-y-6">
@@ -293,6 +329,7 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-2 gap-5">
                   <div><label className={labelCls}>Hotel Name</label><input className={inputCls} value={config.branding.hotelName} onChange={e => updateBranding("hotelName", e.target.value)} /></div>
                   <div><label className={labelCls}>Tagline</label><input className={inputCls} value={config.branding.tagline} onChange={e => updateBranding("tagline", e.target.value)} /></div>
+                  <div className="col-span-2"><label className={labelCls}>Logo URL (optional)</label><input className={inputCls} value={config.branding.logoUrl || ""} onChange={e => updateBranding("logoUrl", e.target.value)} placeholder="https://your-hotel.com/logo.png" /></div>
                 </div>
               </div>
 

@@ -18,6 +18,7 @@ interface Ticket {
   language: string;
   status: string;
   staff_reply: string | null;
+  escalation_reason?: string | null;
   created_at: string;
   resolved_at: string | null;
 }

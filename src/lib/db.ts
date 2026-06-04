@@ -51,10 +51,16 @@ function getDb(): Database.Database {
       language TEXT NOT NULL,
       status TEXT DEFAULT 'open',
       staff_reply TEXT,
+      escalation_reason TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       resolved_at TEXT
     )
   `);
+
+  const ticketColumns = db.prepare("PRAGMA table_info(support_tickets)").all() as Array<{ name: string }>;
+  if (!ticketColumns.some((col) => col.name === "escalation_reason")) {
+    db.exec("ALTER TABLE support_tickets ADD COLUMN escalation_reason TEXT");
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS feedback (
@@ -237,16 +243,22 @@ export interface SupportTicket {
   language: string;
   status: string;
   staff_reply: string | null;
+  escalation_reason: string | null;
   created_at: string;
   resolved_at: string | null;
 }
 
 export const supportTickets = {
-  create(data: { guestMessage: string; aiResponse: string; language: string }): SupportTicket {
+  create(data: {
+    guestMessage: string;
+    aiResponse: string;
+    language: string;
+    escalationReason?: string;
+  }): SupportTicket {
     const id = generateId();
     db.prepare(
-      "INSERT INTO support_tickets (id, guest_message, ai_response, language) VALUES (?, ?, ?, ?)"
-    ).run(id, data.guestMessage, data.aiResponse, data.language);
+      "INSERT INTO support_tickets (id, guest_message, ai_response, language, escalation_reason) VALUES (?, ?, ?, ?, ?)"
+    ).run(id, data.guestMessage, data.aiResponse, data.language, data.escalationReason ?? null);
     return db.prepare("SELECT * FROM support_tickets WHERE id = ?").get(id) as SupportTicket;
   },
 

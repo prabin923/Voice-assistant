@@ -8,13 +8,22 @@ import { NextResponse } from 'next/server';
 import { getHotelConfig, updateHotelConfig, resetHotelConfig } from '@/lib/hotelConfig';
 import { requireAuth } from '@/lib/auth';
 import { validateCsrf } from "@/lib/csrf";
+import { isAiConfigured } from "@/lib/ai";
+import { isGeminiConfigured, isSttConfigured } from "@/lib/gemini";
+
+export const dynamic = "force-dynamic";
 
 // Public: frontend needs branding/config to render
 export async function GET() {
   const config = getHotelConfig();
   // Strip sensitive fields for public access
   const { telephony, ...publicConfig } = config;
-  return NextResponse.json(publicConfig);
+  return NextResponse.json({
+    ...publicConfig,
+    aiReady: isAiConfigured(),
+    geminiLiveReady: isGeminiConfigured(),
+    sttReady: isSttConfigured(),
+  });
 }
 
 // Protected: only authenticated hotel admins can update config
