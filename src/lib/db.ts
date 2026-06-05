@@ -63,6 +63,37 @@ function getDb(): Database.Database {
   }
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS room_inventory_defaults (
+      room_type TEXT PRIMARY KEY,
+      count INTEGER NOT NULL CHECK(count >= 0)
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS room_inventory_overrides (
+      room_type TEXT NOT NULL,
+      date TEXT NOT NULL,
+      count INTEGER NOT NULL CHECK(count >= 0),
+      PRIMARY KEY (room_type, date)
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bookings (
+      id TEXT PRIMARY KEY,
+      room_type TEXT NOT NULL,
+      check_in TEXT NOT NULL,
+      check_out TEXT NOT NULL,
+      rooms INTEGER NOT NULL CHECK(rooms > 0),
+      guest_name TEXT NOT NULL,
+      guest_phone TEXT NOT NULL,
+      guest_email TEXT,
+      status TEXT NOT NULL DEFAULT 'confirmed',
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS feedback (
       id TEXT PRIMARY KEY,
       message_content TEXT NOT NULL,
@@ -117,6 +148,30 @@ export const db = getDb();
 
 function generateId(): string {
   return randomUUID();
+}
+
+function parseIsoDateOnly(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+function formatIsoDateOnly(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
+function listNights(checkIn: string, checkOut: string): string[] {
+  const start = parseIsoDateOnly(checkIn);
+  const end = parseIsoDateOnly(checkOut);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
+    return [];
+  }
+
+  const dates: string[] = [];
+  const cursor = new Date(start);
+  while (cursor < end) {
+    dates.push(formatIsoDateOnly(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return dates;
 }
 
 function cleanupOldAuthRecords() {
@@ -281,6 +336,170 @@ export const supportTickets = {
 
   openCount(): number {
     return (db.prepare("SELECT COUNT(*) as count FROM support_tickets WHERE status = 'open'").get() as { count: number }).count;
+  },
+};
+
+export interface Booking {
+  id: string;
+  room_type: string;
+  check_in: string;
+  check_out: string;
+  rooms: number;
+  guest_name: string;
+  guest_phone: string;
+  guest_email: string | null;
+  status: string;
+  created_at: string;
+}
+
+export interface RoomAvailability {
+  roomType: string;
+  checkIn: string;
+  checkOut: string;
+  available: number;
+  defaultInventory: number;
+}
+
+export const availability = {
+  getNight(roomType: string, date: string) {
+    const defaultInventory = this.getDefault(roomType);
+    const override = this.getOverride(roomType, date);
+    const capacity = override ?? defaultInventory;
+    const booked = (
+      db
+        .prepare(
+          `
+          SELECT COALESCE(SUM(rooms), 0) AS count
+          FROM bookings
+          WHERE room_type = ?
+            AND status = 'confirmed'
+            AND check_in <= ?
+            AND check_out > ?
+        `
+        )
+        .get(roomType, date, date) as { count: number }
+    ).count;
+    const free = Math.max(0, capacity - booked);
+
+    return {
+      roomType,
+      date,
+      defaultInventory,
+      override,
+      capacity,
+      booked,
+      free,
+    };
+  },
+
+  getDefault(roomType: string): number {
+    const row = db
+      .prepare("SELECT count FROM room_inventory_defaults WHERE room_type = ?")
+      .get(roomType) as { count: number } | undefined;
+    return row?.count ?? 1;
+  },
+
+  setDefault(roomType: string, count: number) {
+    db.prepare(`
+      INSERT INTO room_inventory_defaults (room_type, count)
+      VALUES (?, ?)
+      ON CONFLICT(room_type) DO UPDATE SET count = excluded.count
+    `).run(roomType, Math.max(0, Math.floor(count)));
+  },
+
+  getOverride(roomType: string, date: string): number | null {
+    const row = db
+      .prepare("SELECT count FROM room_inventory_overrides WHERE room_type = ? AND date = ?")
+      .get(roomType, date) as { count: number } | undefined;
+    return typeof row?.count === "number" ? row.count : null;
+  },
+
+  setOverride(roomType: string, date: string, count: number) {
+    db.prepare(`
+      INSERT INTO room_inventory_overrides (room_type, date, count)
+      VALUES (?, ?, ?)
+      ON CONFLICT(room_type, date) DO UPDATE SET count = excluded.count
+    `).run(roomType, date, Math.max(0, Math.floor(count)));
+  },
+
+  clearOverride(roomType: string, date: string) {
+    db.prepare("DELETE FROM room_inventory_overrides WHERE room_type = ? AND date = ?").run(roomType, date);
+  },
+
+  get(roomType: string, checkIn: string, checkOut: string): RoomAvailability {
+    const nights = listNights(checkIn, checkOut);
+    const defaultInventory = this.getDefault(roomType);
+    if (!nights.length) {
+      return { roomType, checkIn, checkOut, available: 0, defaultInventory };
+    }
+
+    let minAvailable = Number.POSITIVE_INFINITY;
+    for (const night of nights) {
+      const nightly = this.getNight(roomType, night);
+      minAvailable = Math.min(minAvailable, nightly.free);
+    }
+
+    return {
+      roomType,
+      checkIn,
+      checkOut,
+      available: Number.isFinite(minAvailable) ? minAvailable : 0,
+      defaultInventory,
+    };
+  },
+};
+
+export const bookings = {
+  create(data: {
+    roomType: string;
+    checkIn: string;
+    checkOut: string;
+    rooms: number;
+    guestName: string;
+    guestPhone: string;
+    guestEmail?: string | null;
+    status?: "confirmed" | "cancelled";
+  }): Booking {
+    const id = generateId();
+    const normalizedRooms = Math.max(1, Math.floor(data.rooms));
+    const status = data.status ?? "confirmed";
+
+    db.prepare(`
+      INSERT INTO bookings (
+        id, room_type, check_in, check_out, rooms, guest_name, guest_phone, guest_email, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      data.roomType,
+      data.checkIn,
+      data.checkOut,
+      normalizedRooms,
+      data.guestName.trim(),
+      data.guestPhone.trim(),
+      data.guestEmail?.trim() || null,
+      status
+    );
+
+    return db.prepare("SELECT * FROM bookings WHERE id = ?").get(id) as Booking;
+  },
+
+  list(limit: number = 100): Booking[] {
+    return db
+      .prepare("SELECT * FROM bookings ORDER BY created_at DESC LIMIT ?")
+      .all(Math.max(1, Math.floor(limit))) as Booking[];
+  },
+
+  upcoming(limit: number = 100): Booking[] {
+    return db
+      .prepare(`
+        SELECT *
+        FROM bookings
+        WHERE status = 'confirmed'
+          AND check_out > date('now')
+        ORDER BY check_in ASC
+        LIMIT ?
+      `)
+      .all(Math.max(1, Math.floor(limit))) as Booking[];
   },
 };
 

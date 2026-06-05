@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Mic, Volume2, Loader2, Phone, PhoneCall, ChevronDown, Check, ThumbsUp, ThumbsDown, Sun, Moon, History, Clock3 } from "lucide-react";
+import { Mic, Volume2, Loader2, Phone, PhoneCall, ChevronDown, ChevronLeft, ChevronRight, Check, ThumbsUp, ThumbsDown, Sun, Moon, History, Clock3 } from "lucide-react";
 import CallOverlay, { type CallHistoryRecord } from "@/components/CallOverlay";
+import { BookingSummaryCard, type BookingSummary } from "@/components/BookingSummaryCard";
 import { StaynepLogo } from "@/components/StaynepLogo";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 import { useHotelPublicConfig } from "@/hooks/useHotelPublicConfig";
@@ -46,6 +47,84 @@ interface UIStrings {
   poweredByAI: string;
   languagesSupported: string;
   suggestedQuestions: string;
+}
+
+function RoomImageCarousel({ images, isDark }: { images: string[]; isDark: boolean }) {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    setIndex(0);
+  }, [images.join("|")]);
+
+  if (!images.length) return null;
+
+  const hasMultiple = images.length > 1;
+  const current = images[index];
+
+  return (
+    <div className={`mt-3 mb-1 ${isDark ? "bg-black/10" : "bg-white"}`}>
+      <img
+        src={current}
+        alt="Room image"
+        loading="lazy"
+        decoding="async"
+        className="w-full max-w-[240px] rounded-xl border border-white/10 bg-black/10"
+      />
+
+      {hasMultiple && (
+        <div className="flex items-center justify-between gap-3 mt-2">
+          <button
+            type="button"
+            onClick={() => setIndex((v) => Math.max(0, v - 1))}
+            disabled={index === 0}
+            className={`p-1 rounded-lg ${
+              isDark
+                ? "text-neutral-300 hover:bg-white/[0.06] disabled:opacity-30 disabled:hover:bg-transparent"
+                : "text-neutral-600 hover:bg-neutral-200/70 disabled:opacity-40 disabled:hover:bg-transparent"
+            }`}
+            aria-label="Previous room image"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          <div className="flex items-center gap-1">
+            {images.map((_, i) => (
+              <button
+                // eslint-disable-next-line react/no-array-index-key
+                key={i}
+                type="button"
+                onClick={() => setIndex(i)}
+                aria-label={`Room image ${i + 1}`}
+                className={`h-1.5 w-6 rounded-full ${
+                  i === index
+                    ? isDark
+                      ? "bg-amber-300"
+                      : "bg-[#163a5f]"
+                    : isDark
+                      ? "bg-white/15"
+                      : "bg-neutral-300"
+                }`}
+              />
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIndex((v) => Math.min(images.length - 1, v + 1))}
+            disabled={index === images.length - 1}
+            className={`p-1 rounded-lg ${
+              isDark
+                ? "text-neutral-300 hover:bg-white/[0.06] disabled:opacity-30 disabled:hover:bg-transparent"
+                : "text-neutral-600 hover:bg-neutral-200/70 disabled:opacity-40 disabled:hover:bg-transparent"
+            }`}
+            aria-label="Next room image"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface SpeechRecognitionResultLike {
@@ -153,7 +232,9 @@ export default function VoiceAssistant() {
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [messages, setMessages] = useState<
+    { role: "user" | "assistant"; content: string; booking?: BookingSummary }[]
+  >([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [inConversation, setInConversation] = useState(false);
   const inConversationRef = useRef(false);
@@ -284,6 +365,9 @@ export default function VoiceAssistant() {
 
   const toHumanSpeechText = useCallback((text: string) => {
     return text
+      // Hide image markup from TTS
+      .replace(/^IMAGE:\s*\S+\s*$/gim, "")
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, "$1")
       .replace(/\*\*(.*?)\*\*/g, "$1")
       .replace(/\*(.*?)\*/g, "$1")
       .replace(/`([^`]+)`/g, "$1")
@@ -292,6 +376,90 @@ export default function VoiceAssistant() {
       .replace(/([a-z])\s*-\s*([a-z])/gi, "$1 $2")
       .trim();
   }, []);
+
+  const renderAssistantMessageContent = (content: string) => {
+    const lines = content.split("\n");
+
+    const isSafeImageUrl = (url: string) => {
+      const trimmed = url.trim();
+      if (!trimmed) return false;
+      // Allow local paths and http(s) URLs; block other schemes for safety.
+      return (
+        trimmed.startsWith("/") ||
+        trimmed.startsWith("http://") ||
+        trimmed.startsWith("https://")
+      );
+    };
+
+    const IMAGE_PREFIX = "IMAGE:";
+    const mdImageRegex = /^!\[([^\]]*)\]\(([^)]+)\)\s*$/;
+
+    const safeImages: string[] = [];
+    const safeImageLineIndices = new Set<number>();
+    let firstSafeImageLineIndex: number | null = null;
+
+    // Collect safe image URLs first, so we can render a single carousel.
+    for (let i = 0; i < lines.length; i++) {
+      const trimmed = lines[i].trim();
+
+      if (trimmed.toUpperCase().startsWith(IMAGE_PREFIX)) {
+        const url = trimmed.slice(IMAGE_PREFIX.length).trim();
+        if (isSafeImageUrl(url)) {
+          if (firstSafeImageLineIndex === null) firstSafeImageLineIndex = i;
+          safeImages.push(url);
+          safeImageLineIndices.add(i);
+        }
+        continue;
+      }
+
+      const mdMatch = trimmed.match(mdImageRegex);
+      if (mdMatch) {
+        const url = mdMatch[2];
+        if (isSafeImageUrl(url)) {
+          if (firstSafeImageLineIndex === null) firstSafeImageLineIndex = i;
+          safeImages.push(url);
+          safeImageLineIndices.add(i);
+        }
+        continue;
+      }
+    }
+
+    const shouldInsertCarouselAt = firstSafeImageLineIndex ?? -1;
+    let carouselInserted = false;
+
+    const rendered: React.ReactNode[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      if (!carouselInserted && shouldInsertCarouselAt === i && safeImages.length > 0) {
+        carouselInserted = true;
+        rendered.push(<RoomImageCarousel key={`carousel-${safeImages.join("|")}`} images={safeImages} isDark={isDark} />);
+        continue;
+      }
+
+      // Skip safe image lines; they get represented by the carousel instead.
+      if (safeImageLineIndices.has(i)) continue;
+
+      const trimmed = lines[i].trim();
+      if (!trimmed) {
+        rendered.push(<br key={`br-${i}`} />);
+        continue;
+      }
+
+      rendered.push(
+        <span key={`t-${i}`}>
+          {lines[i]}
+          {i < lines.length - 1 ? <br /> : null}
+        </span>
+      );
+    }
+
+    // If images exist but the carousel line got skipped (unlikely), append at the end.
+    if (!carouselInserted && safeImages.length > 0) {
+      rendered.push(<RoomImageCarousel key={`carousel-end-${safeImages.join("|")}`} images={safeImages} isDark={isDark} />);
+    }
+
+    return <>{rendered}</>;
+  };
 
   // Start listening (extracted so it can be called from auto-listen)
   const startListeningInternal = useCallback(() => {
@@ -466,7 +634,16 @@ export default function VoiceAssistant() {
               ? ui.errorConnection
               : ui.errorGeneric;
       if (apiError) setErrorMessage(apiError);
-      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+      const booking =
+        data.booking &&
+        typeof data.booking === "object" &&
+        typeof data.booking.id === "string"
+          ? (data.booking as BookingSummary)
+          : undefined;
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: reply, ...(booking ? { booking } : {}) },
+      ]);
       if (data.escalated) {
         setMessages((prev) => [...prev, { role: "assistant", content: GUEST_STAFF_HANDOFF_MESSAGE }]);
         autoListenAfterSpeakRef.current = false;
@@ -1083,8 +1260,15 @@ export default function VoiceAssistant() {
                         : undefined
                     }
                   `}>
-                    {msg.content}
+                    {renderAssistantMessageContent(msg.content)}
                   </div>
+                  {msg.role === "assistant" && msg.booking ? (
+                    <BookingSummaryCard
+                      booking={msg.booking}
+                      hotelName={branding.hotelName}
+                      isDark={isDark}
+                    />
+                  ) : null}
                   <div className="flex items-center gap-2 px-1">
                     <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>
                       {msg.role === "user" ? ui.you : branding.hotelName}

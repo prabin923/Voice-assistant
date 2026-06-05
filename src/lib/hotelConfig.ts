@@ -12,6 +12,10 @@ export interface RoomType {
   currency: string;
   description: string;
   maxOccupancy: number;
+  /** Grouping used when guests ask for "categories" of rooms. */
+  category?: string;
+  /** Public URL (or local path like /icon.svg) used when rendering room images. */
+  imageUrl?: string;
 }
 
 export interface DiningVenue {
@@ -61,7 +65,11 @@ export interface HotelConfig {
   telephony?: {
     webhookUrl: string;
     enabled: boolean;
-    provider: 'generic' | 'twilio';
+    provider: 'generic' | 'twilio' | 'telnyx';
+    /** Telnyx TeXML voice string, e.g. "Telnyx.NaturalHD", "Polly.Amy-Neural" */
+    telnyxVoice?: string;
+    /** Phone number(s) associated with this app in Telnyx dashboard */
+    telnyxPhoneNumber?: string;
   };
   policies: HotelPolicy;
   rooms: RoomType[];
@@ -87,9 +95,11 @@ export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
     farewellMessage: "Thank you for choosing Willow Hotel. Have a wonderful day!",
   },
   telephony: {
-    webhookUrl: "/api/telephony/webhook",
+    webhookUrl: "/api/telephony/telnyx",
     enabled: true,
-    provider: 'generic',
+    provider: 'telnyx',
+    telnyxVoice: "Telnyx.NaturalHD",
+    telnyxPhoneNumber: "",
   },
   contact: {
     phone: "+977-9811002233", // Customizable phone number
@@ -109,9 +119,33 @@ export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
     childPolicy: "Children under 12 stay free when using existing bedding. Cribs are available upon request.",
   },
   rooms: [
-    { name: "Standard Room", pricePerNight: 120, currency: "USD", description: "Comfortable room with all essential amenities.", maxOccupancy: 2 },
-    { name: "Deluxe Room", pricePerNight: 200, currency: "USD", description: "Spacious room with premium furnishings and a view.", maxOccupancy: 3 },
-    { name: "Suite", pricePerNight: 350, currency: "USD", description: "Luxury suite with separate living area and premium amenities.", maxOccupancy: 4 },
+    {
+      name: "Standard Room",
+      category: "Classic",
+      imageUrl: "https://picsum.photos/seed/willow-standard-room/600/400",
+      pricePerNight: 120,
+      currency: "USD",
+      description: "Comfortable room with all essential amenities.",
+      maxOccupancy: 2,
+    },
+    {
+      name: "Deluxe Room",
+      category: "Premium",
+      imageUrl: "https://picsum.photos/seed/willow-deluxe-room/600/400",
+      pricePerNight: 200,
+      currency: "USD",
+      description: "Spacious room with premium furnishings and a view.",
+      maxOccupancy: 3,
+    },
+    {
+      name: "Suite",
+      category: "Luxury",
+      imageUrl: "https://picsum.photos/seed/willow-suite-room/600/400",
+      pricePerNight: 350,
+      currency: "USD",
+      description: "Luxury suite with separate living area and premium amenities.",
+      maxOccupancy: 4,
+    },
   ],
   dining: [
     { name: "Main Restaurant", cuisine: "International", hours: "Breakfast 6:30 AM - 10:30 AM, Dinner 6:00 PM - 10:00 PM", description: "Our signature dining experience." },
@@ -164,7 +198,39 @@ export function getHotelConfig(): HotelConfig {
 
 export function updateHotelConfig(updates: Partial<HotelConfig>): HotelConfig {
   const config = getHotelConfig();
+
+  const prevHotelName = config.branding.hotelName;
+  const nextHotelName = updates.branding?.hotelName ?? prevHotelName;
+
   const updated = { ...config, ...updates };
+
+  // If the user only changed the hotel name (and left default welcome/farewell intact),
+  // regenerate those templates so the assistant UI reflects the new name.
+  if (updates.branding?.hotelName && nextHotelName !== prevHotelName) {
+    const prevWelcome = config.branding.welcomeMessage;
+    const prevFarewell = config.branding.farewellMessage;
+
+    const defaultWelcomePrev = `Welcome to ${prevHotelName}! How can I assist you with your stay today?`;
+    const defaultFarewellPrev = `Thank you for choosing ${prevHotelName}. Have a wonderful day!`;
+
+    const defaultWelcomeNext = `Welcome to ${nextHotelName}! How can I assist you with your stay today?`;
+    const defaultFarewellNext = `Thank you for choosing ${nextHotelName}. Have a wonderful day!`;
+
+    if (prevWelcome === defaultWelcomePrev) {
+      updated.branding = {
+        ...updated.branding,
+        welcomeMessage: defaultWelcomeNext,
+      };
+    }
+
+    if (prevFarewell === defaultFarewellPrev) {
+      updated.branding = {
+        ...updated.branding,
+        farewellMessage: defaultFarewellNext,
+      };
+    }
+  }
+
   currentConfig = updated;
 
   // Persist to DB (for the first hotel found)

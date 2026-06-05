@@ -36,7 +36,12 @@ HOTEL DATA:
 - Check-out: ${config.policies.checkOutTime}
 - Cancellation: ${config.policies.cancellationPolicy}
 - Amenities: ${config.amenities.map(a => `${a.name} (${a.description})`).join(", ")}
-- Room Types: ${config.rooms.map(r => `${r.name}: ${r.currency}${r.pricePerNight}/night, max ${r.maxOccupancy} guests`).join("; ")}
+- Room Types: ${config.rooms
+      .map(
+        (r) =>
+          `${r.name} (category: ${r.category || "General"}): ${r.currency}${r.pricePerNight}/night, max ${r.maxOccupancy} guests. Image: ${r.imageUrl || "none"}`,
+      )
+      .join("; ")}
 
 RESPONSE RULES:
 1. Respond strictly in the language matching this code: the language the guest uses.
@@ -46,7 +51,19 @@ RESPONSE RULES:
 5. If the guest's message is unclear, garbled, incomplete, off-topic, or you cannot confidently determine what they need, apologize briefly, say a staff member will help, and add [ESCALATE].
 6. If you cannot answer confidently from HOTEL DATA alone (missing info, ambiguous policy, special requests), do NOT guess — add [ESCALATE] and tell the guest staff will follow up.
 7. Do NOT add [ESCALATE] for normal informational questions you can answer from HOTEL DATA.
-8. Give fresh, natural replies. Do not just list facts unless the guest specifically asks for a list.`;
+8. Give fresh, natural replies. Do not just list facts unless the guest specifically asks for a list.
+
+ROOM IMAGES:
+- If (and only if) you include a room image, add a standalone line using this exact format:
+  IMAGE: <imageUrl>
+- Only use imageUrl values provided in HOTEL DATA (do not invent new image links).
+- If a room has no imageUrl, do not output an IMAGE line for it.
+- When the guest asks about room types (e.g. "what room types are available/offer"), list the relevant rooms and include IMAGE lines for each room with imageUrl.
+
+AVAILABILITY QUESTIONS:
+- If the guest asks what room types are available, you may safely say which room types the hotel offers.
+- Do NOT claim exact date-by-date inventory unless the guest provides dates and you can answer using HOTEL DATA.
+- Ask for check-in/check-out dates if you want to confirm availability.`;
 }
 
 export interface ChatMessage {

@@ -6,15 +6,24 @@ import {
   Settings, Hotel, Phone, Clock, Utensils, Dumbbell,
   Save, RotateCcw, Plus, Trash2, ChevronLeft, CheckCircle2,
   AlertCircle, MessageSquare, LogOut, User, BarChart3, Inbox, X,
-  Crown, Sparkles, Sun, Moon, Bell,
+  Crown, Sparkles, Sun, Moon, Bell, CalendarDays,
 } from "lucide-react";
 import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
 import { applyHotelBrandTheme, notifyHotelConfigUpdated } from "@/lib/hotelBrand";
 import { StaynepLogo } from "@/components/StaynepLogo";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 import { StaffNotificationCenter } from "@/components/StaffNotificationCenter";
+import { CalendarInventoryCenter } from "@/components/CalendarInventoryCenter";
 
-interface RoomType { name: string; pricePerNight: number; currency: string; description: string; maxOccupancy: number; }
+interface RoomType {
+  name: string;
+  pricePerNight: number;
+  currency: string;
+  description: string;
+  maxOccupancy: number;
+  category?: string;
+  imageUrl?: string;
+}
 interface DiningVenue { name: string; cuisine: string; hours: string; description: string; }
 interface Amenity { name: string; description: string; hours?: string; }
 interface FAQ { question: string; answer: string; }
@@ -30,9 +39,16 @@ interface HotelConfig {
   receptionistPersona: string;
   voiceStyle?: "warm" | "professional" | "energetic";
   language: string;
+  telephony?: {
+    webhookUrl: string;
+    enabled: boolean;
+    provider: "generic" | "twilio" | "telnyx";
+    telnyxVoice?: string;
+    telnyxPhoneNumber?: string;
+  };
 }
 
-type Tab = "notifications" | "branding" | "contact" | "policies" | "rooms" | "dining" | "amenities" | "faq" | "persona";
+type Tab = "notifications" | "calendar" | "branding" | "contact" | "policies" | "rooms" | "dining" | "amenities" | "faq" | "persona" | "telephony";
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<HotelConfig | null>(null);
@@ -147,6 +163,7 @@ export default function SettingsPage() {
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: "notifications", label: "Notifications", icon: <Bell className="w-4 h-4" />, badge: openHandoffCount },
+    { id: "calendar", label: "Calendar", icon: <CalendarDays className="w-4 h-4" /> },
     { id: "branding", label: "Branding", icon: <Hotel className="w-4 h-4" /> },
     { id: "contact", label: "Contact", icon: <Phone className="w-4 h-4" /> },
     { id: "policies", label: "Policies", icon: <Clock className="w-4 h-4" /> },
@@ -155,6 +172,7 @@ export default function SettingsPage() {
     { id: "amenities", label: "Amenities", icon: <Dumbbell className="w-4 h-4" /> },
     { id: "faq", label: "Custom FAQ", icon: <MessageSquare className="w-4 h-4" /> },
     { id: "persona", label: "AI Persona", icon: <Settings className="w-4 h-4" /> },
+    { id: "telephony", label: "Telnyx Voice", icon: <Phone className="w-4 h-4" /> },
   ];
   const isDark = theme === "dark";
 
@@ -311,6 +329,17 @@ export default function SettingsPage() {
               labelCls={labelCls}
               onToast={showToast}
               onOpenCountChange={setOpenHandoffCount}
+            />
+          )}
+
+          {activeTab === "calendar" && (
+            <CalendarInventoryCenter
+              rooms={config.rooms}
+              isDark={isDark}
+              cardCls={cardCls}
+              inputCls={inputCls}
+              labelCls={labelCls}
+              onToast={showToast}
             />
           )}
 
@@ -544,11 +573,13 @@ export default function SettingsPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div><label className={labelCls}>Name</label><input className={inputCls} value={room.name} onChange={e => { const r = [...config.rooms]; r[i] = { ...r[i], name: e.target.value }; setConfig({ ...config, rooms: r }); }} /></div>
+                    <div><label className={labelCls}>Category</label><input className={inputCls} value={room.category || ""} onChange={e => { const r = [...config.rooms]; r[i] = { ...r[i], category: e.target.value }; setConfig({ ...config, rooms: r }); }} /></div>
                     <div><label className={labelCls}>Price/Night</label><input type="number" className={inputCls} value={room.pricePerNight} onChange={e => { const r = [...config.rooms]; r[i] = { ...r[i], pricePerNight: Number(e.target.value) }; setConfig({ ...config, rooms: r }); }} /></div>
                     <div><label className={labelCls}>Currency</label><input className={inputCls} value={room.currency} onChange={e => { const r = [...config.rooms]; r[i] = { ...r[i], currency: e.target.value }; setConfig({ ...config, rooms: r }); }} /></div>
                     <div><label className={labelCls}>Max Occupancy</label><input type="number" className={inputCls} value={room.maxOccupancy} onChange={e => { const r = [...config.rooms]; r[i] = { ...r[i], maxOccupancy: Number(e.target.value) }; setConfig({ ...config, rooms: r }); }} /></div>
                   </div>
                   <div><label className={labelCls}>Description</label><input className={inputCls} value={room.description} onChange={e => { const r = [...config.rooms]; r[i] = { ...r[i], description: e.target.value }; setConfig({ ...config, rooms: r }); }} /></div>
+                  <div><label className={labelCls}>Image URL</label><input className={inputCls} value={room.imageUrl || ""} onChange={e => { const r = [...config.rooms]; r[i] = { ...r[i], imageUrl: e.target.value }; setConfig({ ...config, rooms: r }); }} placeholder="https://... or /icon.svg" /></div>
                 </div>
               ))}
             </div>
@@ -633,6 +664,143 @@ export default function SettingsPage() {
                   <div><label className={labelCls}>Response</label><textarea className={inputCls + " h-20 resize-none"} value={faq.answer} onChange={e => { const f = [...config.customFAQ]; f[i] = { ...f[i], answer: e.target.value }; setConfig({ ...config, customFAQ: f }); }} /></div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* TELNYX VOICE */}
+          {activeTab === "telephony" && (
+            <div className="space-y-6">
+              <div className={cardCls}>
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <Phone className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" />
+                  Telnyx Programmable Voice
+                </h2>
+                <p className={`text-sm ${isDark ? "text-neutral-400" : "text-neutral-600"}`}>
+                  Configure Telnyx to handle inbound phone calls with a natural AI voice. Point your Telnyx phone number to{" "}
+                  <code className="px-1 py-0.5 rounded text-[11px] bg-neutral-800/60 text-amber-300">{typeof window !== "undefined" ? `${window.location.origin}/api/telephony/telnyx` : "/api/telephony/telnyx"}</code>{" "}
+                  in your Telnyx Mission Control Portal.
+                </p>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className={labelCls}>Provider</label>
+                    <select
+                      className={inputCls}
+                      value={config.telephony?.provider ?? "telnyx"}
+                      onChange={(e) =>
+                        setConfig({
+                          ...config,
+                          telephony: {
+                            webhookUrl: config.telephony?.webhookUrl ?? "/api/telephony/telnyx",
+                            enabled: config.telephony?.enabled ?? true,
+                            telnyxVoice: config.telephony?.telnyxVoice ?? "Telnyx.NaturalHD",
+                            telnyxPhoneNumber: config.telephony?.telnyxPhoneNumber ?? "",
+                            ...config.telephony,
+                            provider: e.target.value as "generic" | "twilio" | "telnyx",
+                          },
+                        })
+                      }
+                    >
+                      <option value="telnyx">Telnyx (recommended)</option>
+                      <option value="twilio">Twilio</option>
+                      <option value="generic">Generic webhook</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={labelCls}>Phone number (display only)</label>
+                    <input
+                      className={inputCls}
+                      placeholder="+1 555 000 0000"
+                      value={config.telephony?.telnyxPhoneNumber ?? ""}
+                      onChange={(e) =>
+                        setConfig({
+                          ...config,
+                          telephony: {
+                            webhookUrl: "/api/telephony/telnyx",
+                            enabled: true,
+                            provider: "telnyx",
+                            ...config.telephony,
+                            telnyxPhoneNumber: e.target.value,
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelCls}>TTS Voice</label>
+                  <select
+                    className={inputCls}
+                    value={config.telephony?.telnyxVoice ?? "Telnyx.NaturalHD"}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        telephony: {
+                          webhookUrl: "/api/telephony/telnyx",
+                          enabled: true,
+                          provider: "telnyx",
+                          ...config.telephony,
+                          telnyxVoice: e.target.value,
+                        },
+                      })
+                    }
+                  >
+                    <optgroup label="Telnyx Native">
+                      <option value="Telnyx.NaturalHD">Telnyx NaturalHD (best quality)</option>
+                      <option value="Telnyx.Natural">Telnyx Natural (budget, high-volume)</option>
+                    </optgroup>
+                    <optgroup label="AWS Polly — Neural">
+                      <option value="Polly.Joanna-Neural">Polly Joanna — Neural (en-US female)</option>
+                      <option value="Polly.Matthew-Neural">Polly Matthew — Neural (en-US male)</option>
+                      <option value="Polly.Amy-Neural">Polly Amy — Neural (en-GB female)</option>
+                      <option value="Polly.Brian-Neural">Polly Brian — Neural (en-GB male)</option>
+                    </optgroup>
+                    <optgroup label="Azure Neural">
+                      <option value="Azure.en-US-EmmaNeural">Azure Emma — Neural (en-US female)</option>
+                      <option value="Azure.en-US-AndrewNeural">Azure Andrew — Neural (en-US male)</option>
+                      <option value="Azure.en-US-BrianMultilingualNeural">Azure Brian — Multilingual Neural</option>
+                      <option value="Azure.en-US-Ava:DragonHDLatestNeural">Azure Ava — Dragon HD (en-US)</option>
+                    </optgroup>
+                  </select>
+                  <p className={`mt-1.5 text-[11px] ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+                    This value is also controlled by the <code className="bg-neutral-800/60 text-amber-300 px-1 rounded text-[10px]">TELNYX_TTS_VOICE</code> environment variable. The env var overrides this setting.
+                  </p>
+                </div>
+
+                <div className={`rounded-xl border p-4 text-sm ${isDark ? "border-neutral-800 bg-neutral-900/40" : "border-neutral-200 bg-neutral-50"}`}>
+                  <p className="font-semibold mb-1">Debug with webhook.site</p>
+                  <p className={isDark ? "text-neutral-400" : "text-neutral-600"}>
+                    Set <code className={`px-1 rounded text-[11px] ${isDark ? "bg-neutral-800 text-amber-300" : "bg-neutral-100"}`}>TELNYX_DEBUG_WEBHOOK_URL</code> in your environment to mirror every Telnyx payload while testing. Your production Voice URL should still point to <code className={`px-1 rounded text-[11px] ${isDark ? "bg-neutral-800 text-amber-300" : "bg-neutral-100"}`}>/api/telephony/telnyx</code>.
+                  </p>
+                  <p className={`mt-2 text-[11px] ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+                    Preview sample TeXML:{" "}
+                    <a
+                      href="/api/telephony/telnyx?preview=1"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-amber-400 underline underline-offset-2"
+                    >
+                      /api/telephony/telnyx?preview=1
+                    </a>
+                  </p>
+                </div>
+              </div>
+
+              <div className={cardCls}>
+                <h3 className="font-semibold flex items-center gap-2">
+                  <span className="text-[11px] font-black uppercase tracking-widest opacity-60">Setup guide</span>
+                </h3>
+                <ol className={`space-y-2 text-sm list-decimal list-inside ${isDark ? "text-neutral-300" : "text-neutral-700"}`}>
+                  <li>Create a free account at <a href="https://telnyx.com" target="_blank" rel="noreferrer" className="text-amber-400 underline underline-offset-2">telnyx.com</a> and buy a phone number.</li>
+                  <li>Go to <strong>Mission Control → TeXML Applications → Create new</strong>.</li>
+                  <li>Set <strong>Voice URL</strong> to your webhook URL above, method <strong>POST</strong>.</li>
+                  <li>Assign your phone number to this TeXML Application.</li>
+                  <li>Add <code className={`px-1 rounded text-[11px] ${isDark ? "bg-neutral-800 text-amber-300" : "bg-neutral-100 text-neutral-800"}`}>TELNYX_TTS_VOICE</code> and optionally <code className={`px-1 rounded text-[11px] ${isDark ? "bg-neutral-800 text-amber-300" : "bg-neutral-100 text-neutral-800"}`}>TELNYX_PUBLIC_KEY</code> to your environment variables.</li>
+                  <li>Call your number — the AI receptionist will answer with a NaturalHD voice!</li>
+                </ol>
+              </div>
             </div>
           )}
 

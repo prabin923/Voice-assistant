@@ -48,7 +48,15 @@ export const DEFAULT_PUBLIC_HOTEL_CONFIG: PublicHotelConfig = {
     { name: "Fitness Center", description: "Fully equipped gym.", hours: "24/7" },
   ],
   rooms: [
-    { name: "Standard Room", pricePerNight: 120, currency: "USD", description: "Comfortable room with essential amenities.", maxOccupancy: 2 },
+    {
+      name: "Standard Room",
+      category: "Classic",
+      imageUrl: "https://picsum.photos/seed/willow-standard-room/600/400",
+      pricePerNight: 120,
+      currency: "USD",
+      description: "Comfortable room with essential amenities.",
+      maxOccupancy: 2,
+    },
   ],
   voiceStyle: "warm",
   language: "en-US",
