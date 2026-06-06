@@ -3,10 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, UserPlus, Moon, Sun } from "lucide-react";
-import { StaynepLogo } from "@/components/StaynepLogo";
+import { Loader2, UserPlus } from "lucide-react";
+import { VapiAuthShell, VapiAuthHeading, VapiAuthAlert, VapiAuthField, vapiInputCls } from "@/components/VapiAuthShell";
 import { getSafeRedirect } from "@/lib/safeRedirect";
-import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 
 function getCookie(name: string): string | null {
   const parts = document.cookie.split(";").map((entry) => entry.trim());
@@ -23,29 +22,14 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [redirectTo, setRedirectTo] = useState("/settings");
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
     void fetch("/api/auth/csrf", { credentials: "include" });
-
     const params = new URLSearchParams(window.location.search);
     const emailParam = params.get("email");
     if (emailParam) setEmail(emailParam.trim().toLowerCase());
     setRedirectTo(getSafeRedirect(params.get("redirect")));
-
-    const savedTheme = window.localStorage.getItem("theme");
-    const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const nextTheme = savedTheme === "light" || savedTheme === "dark"
-      ? savedTheme
-      : (systemPrefersDark ? "dark" : "light");
-    setTheme(nextTheme);
   }, []);
-
-  useEffect(() => {
-    document.documentElement.classList.remove("light", "dark");
-    document.documentElement.classList.add(theme);
-    window.localStorage.setItem("theme", theme);
-  }, [theme]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -55,7 +39,6 @@ export default function RegisterPage() {
       setError("Passwords do not match");
       return;
     }
-
     if (password.length < 8) {
       setError("Password must be at least 8 characters");
       return;
@@ -94,153 +77,72 @@ export default function RegisterPage() {
     }
   }
 
-  const isDark = theme === "dark";
-
   return (
-    <div className="relative min-h-screen overflow-hidden">
-      <SiteShellBackdrop isDark={isDark} />
-      <div className="relative z-10 flex min-h-screen flex-col">
-        <header className={`sticky top-0 z-20 border-b backdrop-blur-xl ${siteHeaderChrome(isDark)}`}>
-          <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
-            <Link href="/" className="-ml-0.5 flex shrink-0 items-center" aria-label="StayNEP home">
-              <StaynepLogo isDark={isDark} size="md" priority />
-            </Link>
-            <Link href="/assistant" className={`text-xs font-semibold uppercase tracking-wider hover:text-yellow-700 dark:hover:text-[#e4c449] ${isDark ? "text-neutral-400" : "text-neutral-600"}`}>
-              Voice assistant
-            </Link>
-          </div>
-        </header>
+    <VapiAuthShell>
+      <VapiAuthHeading title="Create account" subtitle="Register your hotel to get started" />
 
-        <div className="flex flex-1 items-center justify-center px-4 py-10">
-      <div className="w-full max-w-md">
-        <div className="flex justify-end mb-4">
-          <button
-            type="button"
-            onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-            className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold transition-colors bg-transparent ${
-              isDark
-                ? "border-white/15 text-neutral-200 hover:bg-white/[0.06]"
-                : "border-neutral-300 text-neutral-700 hover:bg-neutral-900/5"
-            }`}
-            aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
-          >
-            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            {isDark ? "Light Mode" : "Dark Mode"}
-          </button>
-        </div>
-        <div className="flex flex-col items-center mb-8">
-          <h1 className={`text-2xl font-bold ${isDark ? "text-white" : "text-neutral-900"}`}>Create Account</h1>
-          <p className={`text-sm mt-1 ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>Register your hotel to get started</p>
-        </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error ? <VapiAuthAlert>{error}</VapiAuthAlert> : null}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-4">
+        <VapiAuthField label="Hotel name">
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            className={vapiInputCls}
+            placeholder="The Grand Hotel"
+          />
+        </VapiAuthField>
 
-            {error && (
-              <div className="px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-                {error}
-              </div>
-            )}
+        <VapiAuthField label="Email">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className={vapiInputCls}
+            placeholder="admin@grandhotel.com"
+          />
+        </VapiAuthField>
 
-            <div>
-              <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
-                Hotel Name
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:border-[#c9a227]/65 focus:ring-1 focus:ring-[#c9a227]/22 transition-all text-sm ${
-                  isDark
-                    ? "bg-white/[0.04] border-white/[0.08] text-white placeholder-neutral-600"
-                    : "bg-white border-neutral-300 text-neutral-900 placeholder-neutral-400"
-                }`}
-                placeholder="The Grand Hotel"
-              />
-            </div>
+        <VapiAuthField label="Password">
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            className={vapiInputCls}
+            placeholder="Min. 8 characters"
+          />
+        </VapiAuthField>
 
-            <div>
-              <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:border-[#c9a227]/65 focus:ring-1 focus:ring-[#c9a227]/22 transition-all text-sm ${
-                  isDark
-                    ? "bg-white/[0.04] border-white/[0.08] text-white placeholder-neutral-600"
-                    : "bg-white border-neutral-300 text-neutral-900 placeholder-neutral-400"
-                }`}
-                placeholder="admin@grandhotel.com"
-              />
-            </div>
+        <VapiAuthField label="Confirm password">
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+            className={vapiInputCls}
+            placeholder="Repeat your password"
+          />
+        </VapiAuthField>
 
-            <div>
-              <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:border-[#c9a227]/65 focus:ring-1 focus:ring-[#c9a227]/22 transition-all text-sm ${
-                  isDark
-                    ? "bg-white/[0.04] border-white/[0.08] text-white placeholder-neutral-600"
-                    : "bg-white border-neutral-300 text-neutral-900 placeholder-neutral-400"
-                }`}
-                placeholder="Min. 8 characters"
-              />
-            </div>
+        <button type="submit" disabled={loading} className="vapi-btn-mint w-full justify-center disabled:opacity-50">
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+          {loading ? "Creating account..." : "Create account"}
+        </button>
+      </form>
 
-            <div>
-              <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
-                Confirm Password
-              </label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                className={`w-full px-4 py-3 rounded-xl border focus:outline-none focus:border-[#c9a227]/65 focus:ring-1 focus:ring-[#c9a227]/22 transition-all text-sm ${
-                  isDark
-                    ? "bg-white/[0.04] border-white/[0.08] text-white placeholder-neutral-600"
-                    : "bg-white border-neutral-300 text-neutral-900 placeholder-neutral-400"
-                }`}
-                placeholder="Repeat your password"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 rounded-xl bg-[#163a5f] hover:bg-[#1e5278] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm flex items-center justify-center gap-2 transition-colors"
-            >
-              {loading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <UserPlus className="w-4 h-4" />
-              )}
-              {loading ? "Creating account..." : "Create Account"}
-            </button>
-          </div>
-        </form>
-
-        <p className={`text-center text-sm mt-6 ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>
-          Already have an account?{" "}
-          <Link
-            href={`/admin/login?email=${encodeURIComponent(email)}&redirect=${encodeURIComponent(redirectTo)}`}
-            className="text-[#163a5f] dark:text-[#e4c449] underline-offset-4 hover:underline transition-colors dark:hover:text-[#fce878]"
-          >
-            Sign in
-          </Link>
-        </p>
-      </div>
-        </div>
-      </div>
-    </div>
+      <p className="mt-6 text-center text-sm text-zinc-mute">
+        Already have an account?{" "}
+        <Link
+          href={`/admin/login?email=${encodeURIComponent(email)}&redirect=${encodeURIComponent(redirectTo)}`}
+          className="text-mint-pulse hover:underline underline-offset-4"
+        >
+          Sign in
+        </Link>
+      </p>
+    </VapiAuthShell>
   );
 }

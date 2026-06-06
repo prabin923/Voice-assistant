@@ -188,7 +188,7 @@ export function forwardTelnyxDebugPayload(
   }
 ): void {
   const debugUrl = process.env.TELNYX_DEBUG_WEBHOOK_URL?.trim();
-  if (!debugUrl) return;
+  if (!debugUrl || process.env.NODE_ENV === "production") return;
 
   void fetch(debugUrl, {
     method: "POST",

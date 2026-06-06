@@ -18,6 +18,7 @@ interface AnalyticsData {
   dailyCounts: { date: string; count: number }[];
   languageDistribution: { language: string; count: number }[];
   peakHours: { hour: number; count: number }[];
+  topQuestions?: { message: string; count: number }[];
   recent: { id: string; guest_message: string; ai_response: string; language: string; created_at: string }[];
   openTickets: number;
   totalTickets: number;
@@ -327,6 +328,25 @@ export default function AnalyticsPage() {
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+
+          {/* Top guest questions */}
+          <div className={`rounded-2xl p-6 ${isDark ? "bg-neutral-900/50 border border-neutral-800/60" : "bg-white border border-neutral-200 shadow-[0_10px_30px_rgba(15,23,42,0.06)]"}`}>
+            <h2 className={`text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2 ${isDark ? "text-neutral-300" : "text-neutral-700"}`}>
+              <MessageSquare className="h-4 w-4 text-[#163a5f] dark:text-[#e4c449]" /> Top Guest Questions
+            </h2>
+            {!data.topQuestions?.length ? (
+              <EmptyState text="No question data yet" isDark={isDark} />
+            ) : (
+              <ul className="space-y-2">
+                {data.topQuestions.map((item, i) => (
+                  <li key={`${item.message}-${i}`} className={`flex items-start justify-between gap-3 rounded-xl px-3 py-2 text-sm ${isDark ? "bg-white/[0.03]" : "bg-neutral-50"}`}>
+                    <span className={`line-clamp-2 ${isDark ? "text-neutral-300" : "text-neutral-700"}`}>{item.message}</span>
+                    <span className={`shrink-0 tabular-nums text-xs font-bold ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>{item.count}×</span>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
 

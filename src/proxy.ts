@@ -14,7 +14,11 @@ async function verifySession(token: string) {
   try {
     if (!hasProductionJwtSecret() && process.env.NODE_ENV === "production") return null;
     const { payload } = await jwtVerify(token, getJwtSecretBytes());
-    return payload as unknown as { hotelId: string; email: string };
+    const p = payload as Record<string, unknown>;
+    if (p.typ === "guest") return null;
+    if (typeof p.hotelId !== "string" || !p.hotelId) return null;
+    if (typeof p.email !== "string" || !p.email) return null;
+    return { hotelId: p.hotelId, email: p.email };
   } catch {
     return null;
   }

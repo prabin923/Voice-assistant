@@ -15,6 +15,7 @@ export async function GET() {
     const languageDistribution = interactions.languageDistribution();
     const peakHours = interactions.peakHours();
     const recent = interactions.recent(20);
+    const topQuestions = interactions.topGuestMessages(8);
 
     // Support & escalation metrics
     const openTickets = supportTickets.openCount();
@@ -42,6 +43,7 @@ export async function GET() {
       languageDistribution,
       peakHours,
       recent,
+      topQuestions,
       openTickets,
       totalTickets,
       resolvedTickets,

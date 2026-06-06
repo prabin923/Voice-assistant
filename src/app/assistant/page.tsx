@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Mic, Volume2, Loader2, PhoneCall, ChevronDown, ChevronLeft, ChevronRight, Check, ThumbsUp, ThumbsDown, Sun, Moon, History, Sparkles, Bot, ChevronUp, Send, MessageSquare, Globe2, X } from "lucide-react";
+import { Mic, Volume2, Loader2, PhoneCall, ChevronDown, ChevronLeft, ChevronRight, Check, ThumbsUp, ThumbsDown, History, Sparkles, Bot, ChevronUp, Send, MessageSquare, Globe2, X } from "lucide-react";
 import CallOverlay, { type CallHistoryRecord } from "@/components/CallOverlay";
 import { BookingSummaryCard, type BookingSummary } from "@/components/BookingSummaryCard";
 import { GuestAuthPanel, loadGuestProfile } from "@/components/GuestAuthPanel";
 import type { GuestProfile } from "@/lib/clientGuestAuth";
-import { StaynepLogo } from "@/components/StaynepLogo";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
+import { vapiPanelShell } from "@/lib/vapiUi";
 import { useHotelPublicConfig } from "@/hooks/useHotelPublicConfig";
 import { GUEST_STAFF_HANDOFF_MESSAGE } from "@/lib/escalationMessages";
 import {
@@ -248,7 +248,6 @@ export default function VoiceAssistant() {
   const [inCall, setInCall] = useState(false);
   const [callHistory, setCallHistory] = useState<CallHistoryRecord[]>([]);
   const [mounted, setMounted] = useState(false);
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [voiceStyle, setVoiceStyle] = useState<VoiceStyle>("warm");
   const [aiReady, setAiReady] = useState<boolean | null>(null);
   const [sttReady, setSttReady] = useState<boolean | null>(null);
@@ -299,19 +298,17 @@ export default function VoiceAssistant() {
   }, []);
 
   useEffect(() => {
-    const savedTheme = window.localStorage.getItem("theme");
-    const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const nextTheme = savedTheme === "light" || savedTheme === "dark"
-      ? savedTheme
-      : (systemPrefersDark ? "dark" : "light");
-    setTheme(nextTheme);
-  }, []);
+    const savedInputMode = window.localStorage.getItem("assistant-input-mode");
+    if (savedInputMode === "voice" || savedInputMode === "text") {
+      setInputMode(savedInputMode);
+    }
 
-  useEffect(() => {
-    document.documentElement.classList.remove("light", "dark");
-    document.documentElement.classList.add(theme);
-    window.localStorage.setItem("theme", theme);
-  }, [theme]);
+    const savedLang = window.localStorage.getItem("assistant-language");
+    if (savedLang) {
+      const lang = ALL_LANGUAGES.find((l) => l.code === savedLang);
+      if (lang) setSelectedLanguage(lang);
+    }
+  }, []);
 
   useEffect(() => {
     setAiReady(typeof hotelConfig.aiReady === "boolean" ? hotelConfig.aiReady : null);
@@ -659,6 +656,7 @@ export default function VoiceAssistant() {
         typeof data.error === "string" && data.error.trim() ? data.error.trim() : "";
       if (data.requiresGuestAuth) {
         setShowGuestAuth(true);
+        setErrorMessage(apiError || "Sign in for higher limits and saved bookings.");
       }
       const reply =
         typeof data.reply === "string" && data.reply.trim()
@@ -668,7 +666,7 @@ export default function VoiceAssistant() {
             : !response.ok
               ? ui.errorConnection
               : ui.errorGeneric;
-      if (apiError) setErrorMessage(apiError);
+      if (apiError && !data.requiresGuestAuth) setErrorMessage(apiError);
       if (data.guest && guestProfile) {
         setGuestProfile((prev) =>
           prev
@@ -895,6 +893,7 @@ export default function VoiceAssistant() {
 
   const switchInputMode = useCallback((mode: InputMode) => {
     setInputMode(mode);
+    window.localStorage.setItem("assistant-input-mode", mode);
     if (mode === "text") {
       stopEverything();
       setTimeout(() => chatInputRef.current?.focus(), 100);
@@ -918,6 +917,7 @@ export default function VoiceAssistant() {
 
   const changeLanguage = (lang: LanguageOption) => {
     setSelectedLanguage(lang);
+    window.localStorage.setItem("assistant-language", lang.code);
     setShowLanguageMenu(false);
     setLanguageSearch("");
   };
@@ -928,7 +928,7 @@ export default function VoiceAssistant() {
   );
 
   const isRTL = ["ar", "he"].includes(selectedLanguage.code.split("-")[0]);
-  const isDark = theme === "dark";
+  const isDark = true;
   const persistCallHistory = useCallback((next: CallHistoryRecord[]) => {
     setCallHistory(next);
     window.localStorage.setItem(CALL_HISTORY_STORAGE_KEY, JSON.stringify(next));
@@ -952,9 +952,7 @@ export default function VoiceAssistant() {
   const voiceStatusLabel =
     isListening ? ui.listening : isSpeaking ? ui.speaking : isProcessing ? "Processing" : inConversation ? "Tap to end" : ui.ready;
 
-  const panelShell = isDark
-    ? "border-white/10 bg-white/[0.03] backdrop-blur-xl"
-    : "border-neutral-200/80 bg-white/90 shadow-[0_12px_40px_rgba(15,23,42,0.06)]";
+  const panelShell = vapiPanelShell;
 
   const renderVoiceOrb = (compact = false) => {
     const size = compact ? "w-28 h-28" : "w-36 h-36 lg:w-40 lg:h-40";
@@ -1088,7 +1086,7 @@ export default function VoiceAssistant() {
       <>
         <button
           type="button"
-          className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-[2px]"
+          className="fixed inset-0 z-[60] bg-void-canvas/80"
           aria-label="Close language menu"
           onClick={() => {
             setShowLanguageMenu(false);
@@ -1096,24 +1094,20 @@ export default function VoiceAssistant() {
           }}
         />
         <div
-          className={`fixed z-[70] flex flex-col overflow-hidden rounded-2xl border shadow-2xl inset-x-4 top-[4.25rem] max-h-[min(72vh,32rem)] sm:inset-x-auto sm:right-6 sm:w-[22rem] lg:right-[calc(340px+1.5rem)] ${
-            isDark ? "border-white/10 bg-neutral-950" : "border-neutral-200 bg-white"
-          }`}
+          className="fixed z-[70] flex max-h-[min(72vh,32rem)] flex-col overflow-hidden rounded-[5.6px] border border-iron-border bg-carbon-surface inset-x-4 top-[4.25rem] sm:inset-x-auto sm:right-6 sm:w-[22rem] lg:right-[calc(340px+1.5rem)]"
           dir="ltr"
           role="dialog"
           aria-modal="true"
           aria-label="Choose language"
         >
-          <div className={`flex items-center justify-between gap-3 px-4 py-3.5 border-b shrink-0 ${isDark ? "border-white/10" : "border-neutral-200"}`}>
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div
-                className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 ${isDark ? "bg-white/[0.06]" : "bg-neutral-100"}`}
-              >
-                <Globe2 className="w-4 h-4" style={{ color: "rgb(var(--hotel-accent-rgb))" }} />
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-iron-border px-4 py-3.5">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[5.6px] border border-iron-border bg-slab-elevated">
+                <Globe2 className="h-4 w-4 text-ice-border" strokeWidth={1.5} />
               </div>
               <div className="min-w-0">
-                <p className={`text-sm font-bold truncate ${isDark ? "text-white" : "text-neutral-900"}`}>Language</p>
-                <p className={`text-[10px] uppercase tracking-wider ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+                <p className="truncate text-sm font-medium text-cream-text">Language</p>
+                <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-mute">
                   {ALL_LANGUAGES.length} supported
                 </p>
               </div>
@@ -1124,31 +1118,27 @@ export default function VoiceAssistant() {
                 setShowLanguageMenu(false);
                 setLanguageSearch("");
               }}
-              className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${isDark ? "text-neutral-400 hover:bg-white/10 hover:text-white" : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"}`}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5.6px] text-zinc-mute transition-colors hover:bg-slab-elevated hover:text-cream-text"
               aria-label="Close"
             >
-              <X className="w-4 h-4" />
+              <X className="h-4 w-4" strokeWidth={1.5} />
             </button>
           </div>
 
-          <div className={`px-4 py-3 border-b shrink-0 ${isDark ? "border-white/10" : "border-neutral-200"}`}>
+          <div className="shrink-0 border-b border-iron-border px-4 py-3">
             <input
               type="text"
               placeholder="Search language..."
               value={languageSearch}
               onChange={(e) => setLanguageSearch(e.target.value)}
-              className={`w-full px-3.5 py-2.5 rounded-xl text-sm outline-none ${
-                isDark
-                  ? "bg-white/[0.06] border border-white/10 text-white placeholder-neutral-500 focus:border-white/20"
-                  : "bg-neutral-50 border border-neutral-200 text-neutral-900 placeholder-neutral-400 focus:border-neutral-300"
-              }`}
+              className="w-full rounded-[5.6px] border border-iron-border bg-slab-elevated px-3.5 py-2.5 text-sm text-cream-text outline-none placeholder-zinc-mute focus:border-steel-border"
               autoFocus
             />
           </div>
 
-          <div className="flex-1 overflow-y-auto scrollbar-premium p-2 min-h-0">
+          <div className="min-h-0 flex-1 overflow-y-auto p-2 scrollbar-premium">
             {filteredLanguages.length === 0 ? (
-              <p className={`px-3 py-6 text-center text-sm ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+              <p className="px-3 py-6 text-center text-sm text-zinc-mute">
                 No languages match your search.
               </p>
             ) : (
@@ -1160,23 +1150,19 @@ export default function VoiceAssistant() {
                       key={lang.code}
                       type="button"
                       onClick={() => changeLanguage(lang)}
-                      className={`w-full px-3 py-2.5 flex items-center gap-3 rounded-xl text-sm transition-all ${
+                      className={`flex w-full items-center gap-3 rounded-[5.6px] px-3 py-2.5 text-sm transition-colors ${
                         selected
-                          ? isDark
-                            ? "bg-white/10 text-white ring-1 ring-white/15"
-                            : "bg-neutral-100 text-neutral-900 ring-1 ring-neutral-200"
-                          : isDark
-                            ? "text-neutral-300 hover:bg-white/[0.05]"
-                            : "text-neutral-700 hover:bg-neutral-50"
+                          ? "border border-steel-border bg-slab-elevated text-cream-text"
+                          : "text-bone-text hover:bg-slab-elevated/60"
                       }`}
                     >
-                      <span className="text-xl shrink-0 leading-none">{lang.flag}</span>
-                      <div className="flex-1 text-left min-w-0">
-                        <div className="font-semibold truncate leading-snug">{lang.nativeName}</div>
-                        <div className={`text-[10px] truncate ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>{lang.name}</div>
+                      <span className="shrink-0 text-xl leading-none">{lang.flag}</span>
+                      <div className="min-w-0 flex-1 text-left">
+                        <div className="truncate font-medium leading-snug">{lang.nativeName}</div>
+                        <div className="truncate text-[10px] text-zinc-mute">{lang.name}</div>
                       </div>
                       {selected ? (
-                        <Check className="w-4 h-4 shrink-0" style={{ color: "rgb(var(--hotel-accent-rgb))" }} />
+                        <Check className="h-4 w-4 shrink-0 text-mint-pulse" strokeWidth={2} />
                       ) : (
                         <span className="w-4 shrink-0" aria-hidden />
                       )}
@@ -1187,8 +1173,8 @@ export default function VoiceAssistant() {
             )}
           </div>
 
-          <div className={`shrink-0 px-4 py-2.5 border-t text-center ${isDark ? "border-white/10 bg-black/20" : "border-neutral-200 bg-neutral-50"}`}>
-            <p className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+          <div className="shrink-0 border-t border-iron-border bg-slab-elevated px-4 py-2.5 text-center">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-mute">
               Speaking: {selectedLanguage.flag} {selectedLanguage.nativeName}
             </p>
           </div>
@@ -1198,38 +1184,35 @@ export default function VoiceAssistant() {
 
   return (
     <div
-      className={`relative min-h-screen flex flex-col font-sans overflow-hidden transition-colors ${
-        isDark ? "text-neutral-100" : "text-neutral-900"
-      }`}
+      className="relative flex min-h-screen flex-col overflow-hidden bg-void-canvas font-sans text-cream-text transition-colors"
       style={{ ["--selection" as string]: `rgba(var(--hotel-accent-rgb), 0.35)` }}
       dir={isRTL ? "rtl" : "ltr"}
     >
-      <SiteShellBackdrop isDark={isDark} />
+      <SiteShellBackdrop />
 
-      <header className={`sticky top-0 z-30 shrink-0 border-b backdrop-blur-xl ${siteHeaderChrome(isDark)}`}>
-        <div className="mx-auto flex min-h-14 max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <Link href="/" className="flex items-center gap-3 min-w-0" aria-label="Back to StayNEP home">
-            <StaynepLogo isDark={isDark} size="sm" />
-            <div className={`hidden sm:block h-9 w-px shrink-0 ${isDark ? "bg-white/10" : "bg-neutral-200"}`} aria-hidden />
+      <header className={`sticky top-0 z-30 shrink-0 border-b ${siteHeaderChrome()}`}>
+        <div className="mx-auto flex min-h-14 max-w-[1200px] items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <Link href="/" className="flex min-w-0 items-center gap-3" aria-label="Back to StayNEP home">
+            <span className="hidden text-sm font-semibold text-cream-text sm:inline">STAYNEP</span>
+            <div className={`hidden h-9 w-px shrink-0 bg-iron-border sm:block`} aria-hidden />
             <div
-              className="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center overflow-hidden shadow-lg"
+              className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[5.6px] border border-iron-border"
               style={{
-                background: branding.logoUrl ? undefined : `linear-gradient(135deg, ${branding.accentColor}, #fb923c)`,
-                boxShadow: `0 8px 24px -8px ${branding.accentColor}80`,
+                background: branding.logoUrl ? undefined : branding.accentColor,
               }}
             >
               {branding.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={branding.logoUrl} alt="" className="h-full w-full object-cover" />
               ) : (
-                <span className="text-sm font-black text-white">{branding.hotelName?.charAt(0) || "H"}</span>
+                <span className="text-sm font-semibold text-cream-text">{branding.hotelName?.charAt(0) || "H"}</span>
               )}
             </div>
             <div className="min-w-0">
-              <h1 className={`truncate text-sm font-bold tracking-tight ${isDark ? "text-white" : "text-neutral-900"}`}>
+              <h1 className="truncate text-sm font-medium text-cream-text">
                 {branding.hotelName}
               </h1>
-              <p className={`hidden sm:block text-[10px] font-semibold uppercase tracking-[0.16em] ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+              <p className="hidden font-mono text-[10px] uppercase tracking-[0.08em] text-zinc-mute sm:block">
                 AI Concierge
               </p>
             </div>
@@ -1237,7 +1220,6 @@ export default function VoiceAssistant() {
 
           <div className="flex items-center gap-2 sm:gap-3">
             <GuestAuthPanel
-              isDark={isDark}
               guest={guestProfile}
               onGuestChange={setGuestProfile}
               preferredLanguage={selectedLanguage.code}
@@ -1245,32 +1227,21 @@ export default function VoiceAssistant() {
               onOpenChange={setShowGuestAuth}
             />
 
-            <button
-              type="button"
-              onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-              className={`h-10 w-10 flex items-center justify-center rounded-xl transition-all active:scale-90 ${
-                isDark ? "glass text-neutral-400 hover:text-white" : "bg-white border border-neutral-200 text-neutral-500 hover:text-neutral-900"
-              }`}
-              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-            >
-              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
-
             <div className="relative" ref={langMenuRef}>
               <button
                 type="button"
                 onClick={() => setShowLanguageMenu((open) => !open)}
-                className={`px-3 py-2 rounded-xl text-[13px] font-medium transition-all flex items-center gap-2 active:scale-95 ${
+                className={`flex items-center gap-2 rounded-[5.6px] border px-3 py-2 text-[13px] font-medium transition-all active:scale-95 ${
                   showLanguageMenu
-                    ? isDark ? "bg-white/10 text-white ring-1 ring-white/15" : "bg-neutral-100 text-neutral-900 ring-1 ring-neutral-200"
-                    : isDark ? "glass text-neutral-300 hover:text-white" : "bg-white border border-neutral-200 text-neutral-700 hover:text-neutral-900"
+                    ? "border-steel-border bg-slab-elevated text-cream-text"
+                    : "border-iron-border bg-carbon-surface text-bone-text hover:border-steel-border"
                 }`}
                 aria-expanded={showLanguageMenu}
                 aria-haspopup="dialog"
               >
                 <span className="text-base">{selectedLanguage.flag}</span>
-                <span className="hidden sm:inline max-w-[5.5rem] truncate">{selectedLanguage.nativeName}</span>
-                <ChevronDown className={`w-3.5 h-3.5 opacity-40 transition-transform ${showLanguageMenu ? "rotate-180" : ""}`} />
+                <span className="hidden max-w-[5.5rem] truncate sm:inline">{selectedLanguage.nativeName}</span>
+                <ChevronDown className={`h-3.5 w-3.5 opacity-40 transition-transform ${showLanguageMenu ? "rotate-180" : ""}`} />
               </button>
             </div>
           </div>
@@ -1289,12 +1260,12 @@ export default function VoiceAssistant() {
         </div>
       )}
 
-      <div className="flex-1 flex flex-col lg:flex-row min-h-0 max-w-7xl w-full mx-auto lg:min-h-[calc(100vh-3.5rem-2.5rem)]">
+      <div className="mx-auto flex min-h-0 w-full max-w-[1200px] flex-1 flex-col lg:min-h-[calc(100vh-3.5rem-2.5rem)] lg:flex-row">
         {/* ── Conversation column ── */}
-        <main className={`flex-1 flex flex-col min-h-0 min-w-0 px-4 sm:px-6 pt-4 lg:pb-6 lg:pt-6 lg:h-full ${inputMode === "voice" ? "pb-28" : "pb-4"}`}>
-          <div className={`flex-1 flex flex-col min-h-0 rounded-[1.75rem] border overflow-hidden ${panelShell}`}>
+        <main className={`flex min-h-0 min-w-0 flex-1 flex-col px-4 pt-4 sm:px-6 lg:h-full lg:pb-6 lg:pt-6 ${inputMode === "voice" ? "pb-28" : "pb-4"}`}>
+          <div className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-[5.6px] ${panelShell}`}>
             {/* Chat header strip */}
-            <div className={`shrink-0 flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 border-b ${isDark ? "border-white/10" : "border-neutral-200/80"}`}>
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-iron-border px-4 py-3.5 sm:px-5">
               <div className="flex items-center gap-3 min-w-0">
                 <div
                   className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0"
@@ -1303,18 +1274,16 @@ export default function VoiceAssistant() {
                   <Sparkles className="w-4 h-4" style={{ color: "rgb(var(--hotel-accent-bright-rgb))" }} />
                 </div>
                 <div className="min-w-0">
-                  <p className={`text-sm font-bold truncate ${isDark ? "text-white" : "text-neutral-900"}`}>
+                  <p className="truncate text-sm font-medium text-cream-text">
                     {messages.length === 0 ? welcomeHeadline : "Conversation"}
                   </p>
-                  <p className={`text-[11px] truncate ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+                  <p className="truncate text-[11px] text-zinc-mute">
                     {selectedLanguage.flag} {selectedLanguage.nativeName} · {messages.length === 0 ? welcomeSubtext : ui.welcomeHint}
                   </p>
                 </div>
               </div>
               {guestProfile ? (
-                <span className={`hidden sm:inline shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
-                  isDark ? "bg-white/10 text-neutral-300" : "bg-neutral-100 text-neutral-600"
-                }`}>
+                <span className="hidden shrink-0 rounded-full border border-iron-border bg-slab-elevated px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-zinc-mute sm:inline">
                   {guestProfile.loyaltyTier} guest
                 </span>
               ) : null}
@@ -1446,10 +1415,10 @@ export default function VoiceAssistant() {
         </main>
 
         {/* ── Voice control sidebar (desktop) ── */}
-        <aside className={`hidden lg:flex w-[340px] shrink-0 flex-col gap-4 px-4 sm:px-6 py-6 border-l ${isDark ? "border-white/10" : "border-neutral-200/80"}`}>
-          <div className={`rounded-[1.5rem] border p-5 flex flex-col items-center gap-4 ${panelShell}`}>
-            <div className="w-full flex items-center justify-between">
-              <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+        <aside className="hidden w-[340px] shrink-0 flex-col gap-4 border-l border-iron-border px-4 py-6 sm:px-6 lg:flex">
+          <div className={`flex flex-col items-center gap-4 rounded-[5.6px] p-5 ${panelShell}`}>
+            <div className="flex w-full items-center justify-between">
+              <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-zinc-mute">
                 Voice
               </span>
               <button
@@ -1510,7 +1479,7 @@ export default function VoiceAssistant() {
             </div>
           </button>
 
-          <div className={`rounded-[1.25rem] border overflow-hidden ${panelShell}`}>
+          <div className={`overflow-hidden rounded-[5.6px] ${panelShell}`}>
             <button
               type="button"
               onClick={() => setShowCallHistory((v) => !v)}

@@ -12,6 +12,7 @@ import { getAssistantResponse } from "@/lib/responseEngine";
 import { notifyHotelStaff } from "@/lib/escalation";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
 import { getHotelConfig } from "@/lib/hotelConfig";
+import { verify as ed25519Verify } from "@noble/ed25519";
 import {
   buildTelnyxConversationXml,
   buildTelnyxHangupXml,
@@ -42,11 +43,12 @@ function gatherActionUrl(req: Request): string {
 
 function verifyTelnyxSignature(req: Request, rawBody: string): boolean {
   const publicKey = process.env.TELNYX_PUBLIC_KEY?.trim();
+  const isProd = process.env.NODE_ENV === "production";
+
   if (!publicKey) {
-    if (process.env.NODE_ENV === "production") {
-      console.warn(
-        "[Telnyx Webhook] TELNYX_PUBLIC_KEY not set — skipping signature verification in production."
-      );
+    if (isProd) {
+      console.error("[Telnyx Webhook] TELNYX_PUBLIC_KEY is required in production");
+      return false;
     }
     return true;
   }
@@ -66,20 +68,13 @@ function verifyTelnyxSignature(req: Request, rawBody: string): boolean {
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const ed = require("@noble/ed25519") as {
-      verify: (sig: Uint8Array, msg: Uint8Array, pub: Uint8Array) => boolean;
-    };
-    return ed.verify(
-      Buffer.from(signature, "base64"),
-      Buffer.from(`${timestamp}|${rawBody}`),
-      Buffer.from(publicKey, "base64")
-    );
-  } catch {
-    console.warn(
-      "[Telnyx Webhook] @noble/ed25519 not installed; skipping signature verification. Run: npm i @noble/ed25519"
-    );
-    return true;
+    const sigBytes = Buffer.from(signature, "base64");
+    const msgBytes = Buffer.from(`${timestamp}|${rawBody}`);
+    const pubBytes = Buffer.from(publicKey, "base64");
+    return ed25519Verify(sigBytes, msgBytes, pubBytes);
+  } catch (err) {
+    console.error("[Telnyx Webhook] Signature verification failed:", err);
+    return false;
   }
 }
 

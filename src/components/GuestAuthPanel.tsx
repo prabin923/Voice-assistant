@@ -9,19 +9,18 @@ import {
   guestRegister,
   type GuestProfile,
 } from "@/lib/clientGuestAuth";
+import { vapiInputCls } from "@/lib/vapiUi";
 
 interface Props {
-  isDark: boolean;
+  /** @deprecated Vapi theme is dark-only; kept for call-site compatibility */
+  isDark?: boolean;
   guest: GuestProfile | null;
   onGuestChange: (guest: GuestProfile | null) => void;
   preferredLanguage?: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** Hide the header trigger button (modal-only mode). */
   hideTrigger?: boolean;
-  /** Called after successful sign-in or registration. */
   onAuthenticated?: (guest: GuestProfile) => void;
-  /** Show a skip/continue-without-account action. */
   allowSkip?: boolean;
   skipLabel?: string;
   onSkip?: () => void;
@@ -30,7 +29,6 @@ interface Props {
 }
 
 export function GuestAuthPanel({
-  isDark,
   guest,
   onGuestChange,
   preferredLanguage = "en-US",
@@ -56,19 +54,12 @@ export function GuestAuthPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const cardCls = isDark
-    ? "bg-neutral-950 border border-neutral-800 text-neutral-100"
-    : "bg-white border border-neutral-200 text-neutral-900";
-  const inputCls = isDark
-    ? "bg-neutral-900 border border-neutral-700 text-neutral-100 placeholder-neutral-500"
-    : "bg-neutral-50 border border-neutral-300 text-neutral-900 placeholder-neutral-400";
-
   const tierBadge =
     guest?.loyaltyTier === "loyal"
-      ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+      ? "border-ember-orange/30 bg-ember-orange/10 text-ember-orange"
       : guest?.loyaltyTier === "returning"
-        ? "bg-sky-500/15 text-sky-300 border-sky-500/30"
-        : "bg-neutral-500/10 text-neutral-400 border-neutral-600/30";
+        ? "border-mint-pulse/30 bg-mint-pulse/10 text-mint-pulse"
+        : "border-iron-border bg-slab-elevated text-zinc-mute";
 
   const submit = async () => {
     setLoading(true);
@@ -109,31 +100,27 @@ export function GuestAuthPanel({
   return (
     <>
       {!hideTrigger ? (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className={`flex items-center gap-2 rounded-2xl px-3 py-2 text-[12px] font-semibold transition-all active:scale-95 ${
-          isDark
-            ? "glass text-neutral-300 hover:text-white"
-            : "bg-white border border-neutral-200 text-neutral-700 hover:text-neutral-900"
-        }`}
-      >
-        <User className="h-4 w-4" />
-        {guest ? guest.name.split(" ")[0] : "Sign in"}
-      </button>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center gap-2 rounded-[5.6px] border border-iron-border bg-carbon-surface px-3 py-2 font-mono text-xs uppercase tracking-widest text-bone-text transition-colors hover:border-steel-border hover:text-cream-text"
+        >
+          <User className="h-4 w-4" strokeWidth={1.5} />
+          {guest ? guest.name.split(" ")[0] : "Sign in"}
+        </button>
       ) : null}
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className={`w-full max-w-md rounded-3xl p-6 shadow-2xl ${cardCls}`}>
-            <div className="flex items-start justify-between gap-3 mb-5">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-void-canvas/80 p-4">
+          <div className="w-full max-w-md rounded-[5.6px] border border-iron-border bg-carbon-surface p-6">
+            <div className="mb-5 flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold">
+                <h2 className="text-lg font-medium text-cream-text">
                   {guest
                     ? "Guest profile"
                     : title ?? (mode === "login" ? "Guest sign in" : "Create guest account")}
                 </h2>
-                <p className={`text-sm mt-1 ${isDark ? "text-neutral-400" : "text-neutral-600"}`}>
+                <p className="mt-1 text-sm text-zinc-mute">
                   {guest
                     ? "Your visits and bookings are saved for a smoother stay."
                     : description ?? "Sign in for higher limits and loyalty tracking."}
@@ -142,44 +129,40 @@ export function GuestAuthPanel({
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className={`p-2 rounded-xl ${isDark ? "hover:bg-white/10" : "hover:bg-neutral-100"}`}
+                className="rounded-[5.6px] p-2 text-zinc-mute transition-colors hover:bg-slab-elevated hover:text-cream-text"
               >
-                <X className="h-4 w-4" />
+                <X className="h-4 w-4" strokeWidth={1.5} />
               </button>
             </div>
 
             {guest ? (
               <div className="space-y-4">
-                <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${tierBadge}`}>
+                <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-wider ${tierBadge}`}>
                   {guest.loyaltyLabel}
                 </div>
-                <div className="grid grid-cols-3 gap-3 text-center">
-                  <div className={`rounded-2xl p-3 ${isDark ? "bg-neutral-900" : "bg-neutral-50"}`}>
-                    <p className="text-lg font-bold">{guest.visitCount}</p>
-                    <p className={`text-[10px] uppercase tracking-wider ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>Visits</p>
-                  </div>
-                  <div className={`rounded-2xl p-3 ${isDark ? "bg-neutral-900" : "bg-neutral-50"}`}>
-                    <p className="text-lg font-bold">{guest.messageCount}</p>
-                    <p className={`text-[10px] uppercase tracking-wider ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>Messages</p>
-                  </div>
-                  <div className={`rounded-2xl p-3 ${isDark ? "bg-neutral-900" : "bg-neutral-50"}`}>
-                    <p className="text-lg font-bold">{guest.bookingCount}</p>
-                    <p className={`text-[10px] uppercase tracking-wider ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>Bookings</p>
-                  </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  {[
+                    { label: "Visits", value: guest.visitCount },
+                    { label: "Messages", value: guest.messageCount },
+                    { label: "Bookings", value: guest.bookingCount },
+                  ].map((stat) => (
+                    <div key={stat.label} className="rounded-[5.6px] border border-iron-border bg-slab-elevated p-3">
+                      <p className="text-lg font-medium text-cream-text">{stat.value}</p>
+                      <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-mute">{stat.label}</p>
+                    </div>
+                  ))}
                 </div>
-                <div className={`rounded-2xl p-4 text-sm space-y-1 ${isDark ? "bg-neutral-900" : "bg-neutral-50"}`}>
-                  <p><span className="opacity-60">Email:</span> {guest.email}</p>
-                  {guest.phone ? <p><span className="opacity-60">Phone:</span> {guest.phone}</p> : null}
+                <div className="rounded-[5.6px] border border-iron-border bg-slab-elevated p-4 text-sm text-bone-text">
+                  <p><span className="text-zinc-mute">Email:</span> {guest.email}</p>
+                  {guest.phone ? <p className="mt-1"><span className="text-zinc-mute">Phone:</span> {guest.phone}</p> : null}
                 </div>
                 <button
                   type="button"
                   onClick={() => void logout()}
                   disabled={loading}
-                  className={`w-full flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold ${
-                    isDark ? "bg-white/10 hover:bg-white/15" : "bg-neutral-100 hover:bg-neutral-200"
-                  }`}
+                  className="vapi-ghost-btn w-full justify-center"
                 >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" strokeWidth={1.5} />}
                   Sign out
                 </button>
               </div>
@@ -191,14 +174,10 @@ export function GuestAuthPanel({
                       key={tab}
                       type="button"
                       onClick={() => setMode(tab)}
-                      className={`flex-1 rounded-xl py-2 text-sm font-semibold ${
+                      className={`flex-1 rounded-[5.6px] border py-2 font-mono text-xs uppercase tracking-widest transition-colors ${
                         mode === tab
-                          ? isDark
-                            ? "bg-white/10 text-white"
-                            : "bg-neutral-900 text-white"
-                          : isDark
-                            ? "text-neutral-400"
-                            : "text-neutral-600"
+                          ? "border-steel-border bg-slab-elevated text-cream-text"
+                          : "border-iron-border text-zinc-mute hover:text-cream-text"
                       }`}
                     >
                       {tab === "login" ? "Sign in" : "Register"}
@@ -207,33 +186,17 @@ export function GuestAuthPanel({
                 </div>
 
                 {mode === "register" ? (
-                  <input
-                    className={`w-full rounded-xl px-4 py-3 text-sm outline-none ${inputCls}`}
-                    placeholder="Full name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
+                  <input className={vapiInputCls} placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} />
                 ) : null}
 
-                <input
-                  className={`w-full rounded-xl px-4 py-3 text-sm outline-none ${inputCls}`}
-                  placeholder="Email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
+                <input className={vapiInputCls} placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
 
                 {mode === "register" ? (
-                  <input
-                    className={`w-full rounded-xl px-4 py-3 text-sm outline-none ${inputCls}`}
-                    placeholder="Phone (optional)"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                  />
+                  <input className={vapiInputCls} placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} />
                 ) : null}
 
                 <input
-                  className={`w-full rounded-xl px-4 py-3 text-sm outline-none ${inputCls}`}
+                  className={vapiInputCls}
                   placeholder="Password (min 8 characters)"
                   type="password"
                   value={password}
@@ -246,10 +209,9 @@ export function GuestAuthPanel({
                   type="button"
                   onClick={() => void submit()}
                   disabled={loading}
-                  className="w-full flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white"
-                  style={{ background: "rgb(var(--hotel-accent-rgb))" }}
+                  className={`w-full justify-center ${mode === "login" ? "vapi-btn-ember" : "vapi-btn-mint"}`}
                 >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" strokeWidth={1.5} />}
                   {mode === "login" ? "Sign in" : "Create account"}
                 </button>
 
@@ -260,9 +222,7 @@ export function GuestAuthPanel({
                       setOpen(false);
                       onSkip();
                     }}
-                    className={`w-full rounded-2xl px-4 py-3 text-sm font-medium ${
-                      isDark ? "text-neutral-400 hover:text-neutral-200" : "text-neutral-600 hover:text-neutral-900"
-                    }`}
+                    className="w-full py-2 text-sm text-zinc-mute transition-colors hover:text-cream-text"
                   >
                     {skipLabel}
                   </button>

@@ -11,7 +11,7 @@ const PIPELINE_LINES = [
 
 const STEPS = ["Capture", "Transcribe", "Reply", "Escalate"] as const;
 
-export function VoicePipelineDemo({ isDark }: { isDark: boolean }) {
+export function VoicePipelineDemo() {
   const [activeStep, setActiveStep] = useState(0);
   const [lineIndex, setLineIndex] = useState(0);
   const [typedChars, setTypedChars] = useState(0);
@@ -41,29 +41,17 @@ export function VoicePipelineDemo({ isDark }: { isDark: boolean }) {
 
   const currentLine = PIPELINE_LINES[lineIndex]?.text ?? "";
   const visibleText = currentLine.slice(0, typedChars);
-  const panel = isDark ? "border-white/10 bg-[#0a1020]/88" : "border-slate-200 bg-white/92";
-  const subpanel = isDark ? "bg-white/[0.04] border-white/8" : "bg-slate-50 border-slate-200";
 
   return (
-    <div className={`voice-pipeline relative overflow-hidden rounded-[1.5rem] border shadow-2xl ${panel}`}>
-      <div className="voice-pipeline-glow" aria-hidden />
-
-      <div className="flex items-center justify-between gap-3 border-b border-white/8 px-4 py-3 sm:px-5">
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
-          </span>
-          <span className={`text-xs font-bold uppercase tracking-[0.18em] ${isDark ? "text-white/70" : "text-slate-600"}`}>
-            Live concierge pipeline
-          </span>
-        </div>
-        <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${isDark ? "bg-cyan-400/10 text-cyan-200" : "bg-sky-100 text-sky-700"}`}>
+    <div className="vapi-code-block relative overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b border-iron-border pb-4">
+        <span className="vapi-nav-label text-zinc-mute">Live concierge pipeline</span>
+        <span className="rounded-[5.6px] border border-iron-border px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest text-mercury-text">
           EN · 284ms
         </span>
       </div>
 
-      <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[1fr_0.92fr]">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.92fr]">
         <div className="space-y-3">
           <div className="flex flex-wrap gap-2">
             {[
@@ -71,72 +59,63 @@ export function VoicePipelineDemo({ isDark }: { isDark: boolean }) {
               { icon: PhoneCall, label: "Concierge call" },
               { icon: Globe2, label: "34+ languages" },
             ].map(({ icon: Icon, label }) => (
-              <div key={label} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${subpanel}`}>
-                <Icon className="h-3.5 w-3.5 opacity-70" />
+              <div
+                key={label}
+                className="flex items-center gap-2 rounded-[5.6px] border border-iron-border bg-slab-elevated px-3 py-2 font-mono text-xs text-bone-text"
+              >
+                <Icon className="h-3.5 w-3.5 text-ice-border" strokeWidth={1.5} />
                 {label}
               </div>
             ))}
           </div>
 
-          <div className={`rounded-2xl border p-4 ${subpanel}`}>
-            <p className={`text-[10px] font-black uppercase tracking-[0.16em] ${isDark ? "text-white/45" : "text-slate-500"}`}>
-              Live transcript
-            </p>
+          <div className="rounded-[5.6px] border border-iron-border bg-carbon-surface p-4">
+            <p className="vapi-nav-label text-zinc-mute">Live transcript</p>
             <div className="mt-3 space-y-2 font-mono text-[12px] leading-relaxed">
               {PIPELINE_LINES.slice(0, lineIndex).map((line) => (
-                <p key={line.time} className={isDark ? "text-white/55" : "text-slate-600"}>
-                  <span className="opacity-50">{line.time}</span> {line.text}
+                <p key={line.time} className="text-mercury-text">
+                  <span className="text-zinc-mute">{line.time}</span> {line.text}
                 </p>
               ))}
-              <p className={isDark ? "text-white" : "text-slate-900"}>
-                <span className="opacity-50">{PIPELINE_LINES[lineIndex]?.time}</span> {visibleText}
+              <p className="text-cream-text">
+                <span className="text-zinc-mute">{PIPELINE_LINES[lineIndex]?.time}</span> {visibleText}
                 <span className="voice-pipeline-cursor" />
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <div className={`rounded-2xl border p-3 ${subpanel}`}>
-              <p className={`text-[10px] font-black uppercase tracking-[0.14em] ${isDark ? "text-[#f8d36a]/80" : "text-amber-700"}`}>
-                Intent
-              </p>
-              <p className="mt-1.5 text-sm font-semibold">Late check-in</p>
+            <div className="rounded-[5.6px] border border-iron-border bg-carbon-surface p-3">
+              <p className="vapi-nav-label text-zinc-mute">Intent</p>
+              <p className="mt-1.5 text-sm font-medium text-cream-text">Late check-in</p>
             </div>
-            <div className={`rounded-2xl border p-3 ${subpanel}`}>
-              <p className={`text-[10px] font-black uppercase tracking-[0.14em] ${isDark ? "text-emerald-300/80" : "text-emerald-700"}`}>
-                Policy match
-              </p>
-              <p className="mt-1.5 text-sm font-semibold">Check-in 3 PM</p>
+            <div className="rounded-[5.6px] border border-iron-border bg-carbon-surface p-3">
+              <p className="vapi-nav-label text-zinc-mute">Policy match</p>
+              <p className="mt-1.5 text-sm font-medium text-cream-text">Check-in 3 PM</p>
             </div>
           </div>
         </div>
 
         <div className="space-y-3">
-          <div className="voice-pipeline-steps grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-4 gap-1.5">
             {STEPS.map((step, index) => (
               <div
                 key={step}
-                className={`rounded-xl border px-2 py-2 text-center transition-all duration-500 ${
+                className={`rounded-[5.6px] border px-2 py-2 text-center transition-colors duration-500 ${
                   index === activeStep
-                    ? isDark
-                      ? "border-cyan-300/35 bg-cyan-300/10 text-cyan-100"
-                      : "border-[#163a5f]/25 bg-sky-50 text-[#163a5f]"
-                    : isDark
-                      ? "border-white/8 bg-white/[0.02] text-white/45"
-                      : "border-slate-200 bg-white text-slate-500"
+                    ? "border-steel-border bg-slab-elevated text-cream-text"
+                    : "border-iron-border bg-carbon-surface text-zinc-mute"
                 }`}
               >
-                <p className="text-[9px] font-black uppercase tracking-wider">Step {index + 1}</p>
-                <p className="mt-0.5 text-[11px] font-bold">{step}</p>
+                <p className="font-mono text-[9px] uppercase tracking-wider">Step {index + 1}</p>
+                <p className="mt-0.5 text-[11px] font-medium">{step}</p>
               </div>
             ))}
           </div>
 
-          <div className={`rounded-2xl border p-4 ${subpanel}`}>
-            <p className={`text-[10px] font-black uppercase tracking-[0.14em] ${isDark ? "text-[#8ee8ff]/75" : "text-sky-700"}`}>
-              Assistant reply
-            </p>
-            <p className={`mt-2 text-sm leading-6 ${isDark ? "text-white/88" : "text-slate-800"}`}>
+          <div className="rounded-[5.6px] border border-iron-border bg-carbon-surface p-4">
+            <p className="vapi-nav-label text-zinc-mute">Assistant reply</p>
+            <p className="mt-2 text-sm leading-6 text-bone-text">
               We can note a late arrival and arrange airport pickup through the front desk team.
             </p>
           </div>
@@ -149,26 +128,22 @@ export function VoicePipelineDemo({ isDark }: { isDark: boolean }) {
             ].map((item, index) => (
               <div
                 key={item.label}
-                className={`flex items-center justify-between rounded-xl border px-3 py-2.5 transition-all duration-500 ${subpanel} ${
+                className={`flex items-center justify-between rounded-[5.6px] border border-iron-border bg-carbon-surface px-3 py-2.5 transition-opacity duration-500 ${
                   index <= activeStep - 2 ? "opacity-100" : "opacity-55"
                 }`}
               >
                 <div>
-                  <p className="text-xs font-semibold">{item.label}</p>
-                  <p className={`text-[11px] ${isDark ? "text-white/45" : "text-slate-500"}`}>{item.detail}</p>
+                  <p className="text-xs font-medium text-cream-text">{item.label}</p>
+                  <p className="text-[11px] text-zinc-mute">{item.detail}</p>
                 </div>
                 {index <= activeStep - 2 ? (
-                  <Check className="h-4 w-4 text-emerald-400" />
+                  <Check className="h-4 w-4 text-mint-pulse" strokeWidth={1.5} />
                 ) : (
                   <span className="voice-pipeline-dot" />
                 )}
               </div>
             ))}
           </div>
-
-          <p className={`text-center text-[11px] font-semibold ${isDark ? "text-white/40" : "text-slate-500"}`}>
-            Pipeline complete · powered by StayNEP voice assistant
-          </p>
         </div>
       </div>
     </div>

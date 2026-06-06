@@ -3,39 +3,21 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Hotel, Loader2, Mic, Moon, Sun, UserRound } from "lucide-react";
-import { StaynepLogo } from "@/components/StaynepLogo";
+import { ArrowLeft, ArrowRight, Hotel, Loader2, Mic, UserRound } from "lucide-react";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 import { GuestAuthPanel, loadGuestProfile } from "@/components/GuestAuthPanel";
 import type { GuestProfile } from "@/lib/clientGuestAuth";
 
 export default function DemoPage() {
   const router = useRouter();
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [loadingHotel, setLoadingHotel] = useState(false);
   const [loadingGuest, setLoadingGuest] = useState(false);
   const [showGuestAuth, setShowGuestAuth] = useState(false);
   const [guestProfile, setGuestProfile] = useState<GuestProfile | null>(null);
 
   useEffect(() => {
-    const savedTheme = window.localStorage.getItem("theme");
-    const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const nextTheme = savedTheme === "light" || savedTheme === "dark"
-      ? savedTheme
-      : (systemPrefersDark ? "dark" : "light");
-    setTheme(nextTheme);
     void fetch("/api/auth/csrf", { credentials: "include" });
   }, []);
-
-  useEffect(() => {
-    document.documentElement.classList.remove("light", "dark");
-    document.documentElement.classList.add(theme);
-    window.localStorage.setItem("theme", theme);
-  }, [theme]);
-
-  const isDark = theme === "dark";
-  const muted = isDark ? "text-white/62" : "text-slate-600";
-  const panel = isDark ? "border-white/10 bg-white/[0.045]" : "border-slate-200 bg-white/82";
 
   function goToAssistant() {
     router.push("/assistant");
@@ -58,7 +40,6 @@ export default function DemoPage() {
 
   async function chooseHotel() {
     setLoadingHotel(true);
-
     try {
       const meRes = await fetch("/api/auth/me", { credentials: "include" });
       if (meRes.ok) {
@@ -71,65 +52,51 @@ export default function DemoPage() {
     } catch {
       // Continue to login
     }
-
     router.push("/admin/login?redirect=%2Fsettings");
   }
 
   return (
-    <main className={`relative min-h-screen overflow-x-hidden ${isDark ? "bg-[#05070d] text-white" : "bg-[#f5f7fb] text-slate-950"}`}>
-      <SiteShellBackdrop isDark={isDark} />
+    <main className="relative min-h-screen overflow-x-hidden bg-void-canvas text-cream-text">
+      <SiteShellBackdrop />
 
-      <header className={`sticky top-0 z-20 border-b backdrop-blur-xl ${siteHeaderChrome(isDark)}`}>
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4 sm:px-6">
-          <Link href="/" className="flex shrink-0 items-center gap-2 text-sm font-semibold opacity-80 hover:opacity-100">
-            <ArrowLeft className="h-4 w-4" />
+      <header className={`sticky top-0 z-20 border-b ${siteHeaderChrome()}`}>
+        <div className="mx-auto flex h-14 max-w-[1200px] items-center justify-between px-4 sm:px-6">
+          <Link href="/" className="vapi-nav-label inline-flex items-center gap-2 text-zinc-mute hover:text-cream-text">
+            <ArrowLeft className="h-4 w-4" strokeWidth={1.5} />
             Home
           </Link>
-          <StaynepLogo isDark={isDark} size="sm" />
-          <button
-            type="button"
-            aria-label={`Switch to ${isDark ? "light" : "dark"} theme`}
-            onClick={() => setTheme((value) => (value === "dark" ? "light" : "dark"))}
-            className={`grid h-10 w-10 place-items-center rounded-full border transition ${isDark ? "border-white/10 bg-white/[0.05] text-white" : "border-slate-200 bg-white text-slate-700"}`}
-          >
-            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
+          <span className="text-lg font-semibold tracking-tight">STAYNEP</span>
+          <Link href="/admin/login" className="vapi-btn-mint vapi-btn-compact hidden sm:inline-flex">
+            Sign in
+          </Link>
         </div>
       </header>
 
-      <div className="mx-auto flex min-h-[calc(100vh-3.5rem)] max-w-3xl items-center px-4 py-12 sm:px-6">
-        <div className={`w-full rounded-[1.5rem] border p-6 sm:p-8 ${panel}`}>
-          <p className={`text-xs font-black uppercase tracking-[0.24em] ${isDark ? "text-[#f8d36a]" : "text-[#9f7b1d]"}`}>
-            Request a demo
-          </p>
-          <h1 className="va-display mt-4 text-balance text-[clamp(1.8rem,4vw,2.6rem)] leading-[0.95]">
+      <div className="mx-auto flex min-h-[calc(100vh-3.5rem)] max-w-[1200px] flex-col items-center justify-center px-4 py-12 sm:px-6">
+        <div className="w-full max-w-lg rounded-[5.6px] border border-iron-border bg-carbon-surface p-6 sm:p-8">
+          <p className="vapi-nav-label text-zinc-mute">Request a demo</p>
+          <h1 className="vapi-headline mt-4 text-balance text-[clamp(1.75rem,4vw,2.25rem)]">
             Who is trying the demo?
           </h1>
-          <p className={`mt-3 text-sm leading-7 ${muted}`}>
+          <p className="mt-3 text-sm leading-relaxed text-zinc-mute">
             Guests try the voice assistant. Hotels sign in to manage their receptionist settings.
           </p>
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-2">
+          <div className="mt-8 grid gap-3 sm:grid-cols-2">
             <button
               type="button"
               onClick={() => void chooseGuest()}
               disabled={loadingHotel || loadingGuest}
-              className={`group rounded-[1.2rem] border p-5 text-left transition hover:-translate-y-0.5 ${
-                isDark ? "border-white/10 bg-black/20 hover:border-cyan-300/30" : "border-slate-200 bg-white hover:border-[#163a5f]/25"
-              }`}
+              className="group rounded-[5.6px] border border-iron-border bg-slab-elevated p-5 text-left transition-colors hover:border-steel-border disabled:opacity-50"
             >
-              <div className={`mb-4 grid h-12 w-12 place-items-center rounded-2xl ${isDark ? "bg-cyan-300/10 text-cyan-100" : "bg-slate-100 text-[#163a5f]"}`}>
-                {loadingGuest ? (
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                ) : (
-                  <UserRound className="h-6 w-6" />
-                )}
+              <div className="mb-4 grid h-10 w-10 place-items-center rounded-[5.6px] border border-iron-border bg-carbon-surface text-ice-border">
+                {loadingGuest ? <Loader2 className="h-5 w-5 animate-spin" /> : <UserRound className="h-5 w-5" strokeWidth={1.5} />}
               </div>
-              <h2 className="text-lg font-bold">Guest / user</h2>
-              <p className={`mt-2 text-sm leading-6 ${muted}`}>Try the multilingual voice receptionist.</p>
-              <span className={`mt-5 inline-flex items-center gap-2 text-sm font-bold ${isDark ? "text-[#8ee8ff]" : "text-[#163a5f]"}`}>
+              <h2 className="text-base font-medium text-cream-text">Guest / user</h2>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-mute">Try the multilingual voice receptionist.</p>
+              <span className="mt-4 inline-flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-mint-pulse">
                 Open assistant
-                <Mic className="h-4 w-4 transition group-hover:translate-x-0.5" />
+                <Mic className="h-3.5 w-3.5" strokeWidth={1.5} />
               </span>
             </button>
 
@@ -137,22 +104,16 @@ export default function DemoPage() {
               type="button"
               onClick={chooseHotel}
               disabled={loadingHotel}
-              className={`group rounded-[1.2rem] border p-5 text-left transition hover:-translate-y-0.5 ${
-                isDark ? "border-white/10 bg-black/20 hover:border-[#f8d36a]/30" : "border-slate-200 bg-white hover:border-[#163a5f]/25"
-              }`}
+              className="group rounded-[5.6px] border border-iron-border bg-slab-elevated p-5 text-left transition-colors hover:border-steel-border disabled:opacity-50"
             >
-              <div className={`mb-4 grid h-12 w-12 place-items-center rounded-2xl ${isDark ? "bg-[#f8d36a]/10 text-[#f8d36a]" : "bg-slate-100 text-[#163a5f]"}`}>
-                {loadingHotel ? (
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                ) : (
-                  <Hotel className="h-6 w-6" />
-                )}
+              <div className="mb-4 grid h-10 w-10 place-items-center rounded-[5.6px] border border-iron-border bg-carbon-surface text-ice-border">
+                {loadingHotel ? <Loader2 className="h-5 w-5 animate-spin" /> : <Hotel className="h-5 w-5" strokeWidth={1.5} />}
               </div>
-              <h2 className="text-lg font-bold">Hotel</h2>
-              <p className={`mt-2 text-sm leading-6 ${muted}`}>Sign in to configure branding, policies, and concierge settings.</p>
-              <span className={`mt-5 inline-flex items-center gap-2 text-sm font-bold ${isDark ? "text-[#f8d36a]" : "text-[#163a5f]"}`}>
+              <h2 className="text-base font-medium text-cream-text">Hotel</h2>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-mute">Sign in to configure branding, policies, and concierge settings.</p>
+              <span className="mt-4 inline-flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-ember-orange">
                 Sign in
-                <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+                <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.5} />
               </span>
             </button>
           </div>
@@ -160,7 +121,6 @@ export default function DemoPage() {
       </div>
 
       <GuestAuthPanel
-        isDark={isDark}
         guest={guestProfile}
         onGuestChange={setGuestProfile}
         open={showGuestAuth}

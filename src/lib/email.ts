@@ -16,6 +16,40 @@ interface PasswordResetEmailData {
   resetUrl: string;
 }
 
+export interface BookingConfirmationEmailData {
+  toEmail: string;
+  hotelName: string;
+  booking: {
+    id: string;
+    roomType: string;
+    checkIn: string;
+    checkOut: string;
+    rooms: number;
+    guestName: string;
+    status: string;
+  };
+}
+
+export function bookingRowToEmailPayload(row: {
+  id: string;
+  room_type: string;
+  check_in: string;
+  check_out: string;
+  rooms: number;
+  guest_name: string;
+  status: string;
+}): BookingConfirmationEmailData["booking"] {
+  return {
+    id: row.id,
+    roomType: row.room_type,
+    checkIn: row.check_in,
+    checkOut: row.check_out,
+    rooms: row.rooms,
+    guestName: row.guest_name,
+    status: row.status,
+  };
+}
+
 function getTransporter() {
   // Use configured SMTP or default to a "log only" mode
   const host = process.env.SMTP_HOST;
@@ -114,6 +148,51 @@ export async function sendEscalationEmail(data: EscalationEmailData): Promise<vo
   });
 
   console.log(`[EMAIL] Escalation alert sent to ${data.staffEmail} for ticket #${data.ticketId}`);
+}
+
+export async function sendBookingConfirmationEmail(data: BookingConfirmationEmailData): Promise<void> {
+  const transporter = getTransporter();
+  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || "ai-receptionist@hotel.local";
+  const safeHotelName = escapeHtml(data.hotelName);
+  const shortId = escapeHtml(data.booking.id.slice(0, 8).toUpperCase());
+  const safeGuest = escapeHtml(data.booking.guestName);
+  const safeRoom = escapeHtml(data.booking.roomType);
+  const safeCheckIn = escapeHtml(data.booking.checkIn);
+  const safeCheckOut = escapeHtml(data.booking.checkOut);
+
+  const subject = `Booking confirmed — ${data.hotelName} (#${data.booking.id.slice(0, 8).toUpperCase()})`;
+  const html = `
+    <div style="font-family: -apple-system, system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 20px;">
+      <div style="background: linear-gradient(135deg, #163a5f, #c9a227); padding: 18px 22px; border-radius: 14px 14px 0 0;">
+        <h2 style="color: #fff; margin: 0; font-size: 18px;">Booking Confirmed</h2>
+        <p style="color: rgba(255,255,255,0.85); margin: 4px 0 0; font-size: 13px;">${safeHotelName}</p>
+      </div>
+      <div style="background: #1a1a1a; border-radius: 0 0 14px 14px; padding: 22px; color: #e5e5e5;">
+        <p style="margin-top: 0;">Hi ${safeGuest}, your stay is confirmed.</p>
+        <p style="font-family: monospace; color: #e4c449; font-size: 14px;">Confirmation #${shortId}</p>
+        <ul style="line-height: 1.8; padding-left: 18px;">
+          <li><strong>Room:</strong> ${safeRoom} (${data.booking.rooms} room${data.booking.rooms === 1 ? "" : "s"})</li>
+          <li><strong>Check-in:</strong> ${safeCheckIn}</li>
+          <li><strong>Check-out:</strong> ${safeCheckOut}</li>
+        </ul>
+        <p style="color: #a3a3a3; font-size: 12px;">Need changes? Reply to this email or contact the front desk.</p>
+      </div>
+    </div>
+  `;
+
+  if (!transporter) {
+    console.log("[EMAIL] Booking confirmation (SMTP not configured):");
+    console.log(`  To: ${data.toEmail}`);
+    console.log(`  Subject: ${subject}`);
+    return;
+  }
+
+  await transporter.sendMail({
+    from: `"${data.hotelName}" <${fromEmail}>`,
+    to: data.toEmail,
+    subject,
+    html,
+  });
 }
 
 export async function sendPasswordResetEmail(data: PasswordResetEmailData): Promise<void> {

@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { authAuditLogs, hotels, passwordResetTokens } from "@/lib/db";
 import { sendPasswordResetEmail } from "@/lib/email";
-import { getClientIP } from "@/lib/rateLimit";
+import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
 import { validateCsrf } from "@/lib/csrf";
 
 const GENERIC_RESPONSE = { success: true, message: "If an account exists, reset instructions were sent." };
@@ -27,6 +27,12 @@ export async function POST(req: Request) {
 
   const ip = getClientIP(req);
   const userAgent = req.headers.get("user-agent");
+
+  const limit = checkRateLimit(`forgot-password:${ip}`, { maxRequests: 5, windowMs: 60 * 60 * 1000 });
+  if (!limit.allowed) {
+    await waitForMinimumDuration(requestStart);
+    return NextResponse.json(GENERIC_RESPONSE);
+  }
 
   try {
     const body = await req.json().catch(() => ({}));

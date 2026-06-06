@@ -8,6 +8,8 @@ import { aiNotConfiguredResponse, isAiConfigured } from '@/lib/ai';
 import { getKeywordsForLanguage } from '@/lib/languages';
 import { getGuestSession } from '@/lib/guestAuth';
 import { checkGuestChatRateLimit } from '@/lib/guestRateLimit';
+import { sanitizeChatHistory, sanitizeChatMessage } from '@/lib/chatValidation';
+import { sendBookingConfirmationEmail } from '@/lib/email';
 
 export const dynamic = 'force-dynamic';
 
@@ -293,9 +295,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const { message, language, history } = await req.json();
+    const { message: rawMessage, language, history } = await req.json();
 
-    if (!message || typeof message !== 'string') {
+    const message = sanitizeChatMessage(rawMessage);
+    if (!message) {
       return NextResponse.json({ error: 'A valid message string is required.' }, { status: 400 });
     }
 
@@ -306,8 +309,7 @@ export async function POST(req: Request) {
     const config = getHotelConfig();
     const langCode = language || config.language || 'en-US';
 
-    // Pass conversation history for multi-turn memory
-    const conversationHistory = Array.isArray(history) ? history : [];
+    const conversationHistory = sanitizeChatHistory(history);
 
     const startTime = Date.now();
     let reply = "";
@@ -367,6 +369,22 @@ export async function POST(req: Request) {
         language: langCode,
         reason,
       });
+    }
+
+    if (booking?.id && booking.guestEmail) {
+      void sendBookingConfirmationEmail({
+        toEmail: booking.guestEmail,
+        hotelName: config.branding.hotelName,
+        booking: {
+          id: booking.id,
+          roomType: booking.roomType,
+          checkIn: booking.checkIn,
+          checkOut: booking.checkOut,
+          rooms: booking.rooms,
+          guestName: booking.guestName,
+          status: booking.status,
+        },
+      }).catch((err) => console.error("[EMAIL] Booking confirmation failed:", err));
     }
 
     return NextResponse.json({

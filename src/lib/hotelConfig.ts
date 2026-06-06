@@ -7,6 +7,7 @@
 // ============================================================
 
 import { syncBrandingOnHotelRename } from "@/lib/hotelBrand";
+import { sanitizeBranding } from "@/lib/brandingValidation";
 
 export interface RoomType {
   name: string;
@@ -215,6 +216,8 @@ export function updateHotelConfig(updates: Partial<HotelConfig>): HotelConfig {
   if (updates.branding?.hotelName && nextHotelName !== prevHotelName) {
     updated.branding = syncBrandingOnHotelRename(prevHotelName, nextHotelName, updated.branding);
   }
+
+  updated.branding = sanitizeBranding(updated.branding);
 
   currentConfig = updated;
 

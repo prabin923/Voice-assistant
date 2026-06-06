@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
+import { validateCsrf } from '@/lib/csrf';
 
 /**
  * TingTing API Proxy Integration
@@ -20,6 +21,9 @@ export async function POST(req: Request) {
   // SECURITY: Require admin authentication
   const auth = await requireAuth();
   if (auth.error) return auth.error;
+
+  const csrfError = await validateCsrf(req);
+  if (csrfError) return csrfError;
 
   // Rate limit
   const ip = getClientIP(req);

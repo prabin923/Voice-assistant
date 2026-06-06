@@ -1,6 +1,181 @@
 @import "tailwindcss";
 
 /* ============================================
+   VAPI DESIGN SYSTEM — Neon spectrogram / midnight concrete
+   ============================================ */
+@theme {
+  --color-void-canvas: #0e0e13;
+  --color-carbon-surface: #09090b;
+  --color-slab-elevated: #18181b;
+  --color-iron-border: #27272a;
+  --color-steel-border: #3f3f46;
+  --color-zinc-mute: #71717a;
+  --color-pearl-border: #d8d7d4;
+  --color-ice-border: #d9e6ef;
+  --color-cream-text: #fffaea;
+  --color-bone-text: #f4f4f5;
+  --color-mercury-text: #a1a1aa;
+  --color-ember-orange: #e96b34;
+  --color-mint-pulse: #62f6b5;
+  --color-spectrogram-blue: #4dcafa;
+  --color-spectrogram-pink: #de94e2;
+  --color-spectrogram-yellow: #ffdd03;
+  --color-spectrogram-violet: #9977ff;
+
+  --font-seasonsans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-geist-mono: var(--font-mono), ui-monospace, monospace;
+
+  --radius-vapi: 5.6px;
+  --radius-pill: 9999px;
+
+  --spacing-section: 80px;
+  --spacing-page-max: 1200px;
+}
+
+/* Vapi component primitives */
+.vapi-btn-ember {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-ember-orange);
+  color: var(--color-cream-text);
+  padding: 12px 24px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: opacity 0.2s ease;
+}
+
+.vapi-btn-ember:hover {
+  opacity: 0.92;
+}
+
+.vapi-btn-mint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-mint-pulse);
+  color: var(--color-void-canvas);
+  padding: 12px 24px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: opacity 0.2s ease;
+}
+
+.vapi-btn-mint:hover {
+  opacity: 0.92;
+}
+
+.vapi-btn-compact {
+  padding: 8px 16px;
+}
+
+.vapi-nav-label {
+  font-family: var(--font-geist-mono);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-zinc-mute);
+  transition: color 0.2s ease;
+}
+
+.vapi-nav-label:hover {
+  color: var(--color-cream-text);
+}
+
+.vapi-headline {
+  font-family: var(--font-seasonsans);
+  font-weight: 300;
+  color: var(--color-cream-text);
+  letter-spacing: -0.022em;
+  line-height: 1.09;
+}
+
+.vapi-section-heading {
+  font-family: var(--font-seasonsans);
+  font-weight: 300;
+  color: var(--color-cream-text);
+  letter-spacing: -0.016em;
+  line-height: 1.2;
+}
+
+.vapi-hairline {
+  border-top: 1px solid var(--color-iron-border);
+}
+
+.vapi-list-item {
+  background: var(--color-carbon-surface);
+  border-top: 1px solid var(--color-iron-border);
+  border-radius: var(--radius-vapi);
+  padding: 16px 0;
+}
+
+.vapi-talk-console {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-cream-text);
+  color: var(--color-void-canvas);
+  padding: 16px 40px;
+  font-family: var(--font-geist-mono);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: opacity 0.2s ease;
+}
+
+.vapi-talk-console:hover {
+  opacity: 0.94;
+}
+
+.vapi-ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-vapi);
+  border: 1px solid var(--color-iron-border);
+  background: var(--color-carbon-surface);
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  color: var(--color-bone-text);
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.vapi-ghost-btn:hover {
+  border-color: var(--color-steel-border);
+  color: var(--color-cream-text);
+}
+
+.vapi-code-block {
+  background: var(--color-carbon-surface);
+  border: 1px solid var(--color-iron-border);
+  border-radius: var(--radius-vapi);
+  padding: 24px;
+  font-family: var(--font-geist-mono);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.vapi-spectrogram-bar {
+  flex: 1;
+  min-width: 3px;
+  max-width: 6px;
+  border-radius: var(--radius-vapi);
+  transition: height 0.3s ease;
+}
+
+/* ============================================
    PREMIUM DESIGN SYSTEM — WILLOW HOTEL AI
    Performance-Optimized Edition
    ============================================ */
@@ -31,8 +206,10 @@
 
 @layer base {
   body {
-    @apply bg-neutral-950 text-neutral-100 antialiased;
-    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    @apply antialiased;
+    background-color: var(--color-void-canvas);
+    color: var(--color-cream-text);
+    font-family: var(--font-seasonsans);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
@@ -1652,7 +1829,7 @@ html.light .voice-pipeline-glow {
   height: 1em;
   margin-left: 2px;
   vertical-align: text-bottom;
-  background: rgb(var(--hotel-accent-rgb));
+  background: var(--color-mint-pulse);
   animation: voice-pipeline-blink 1s step-end infinite;
 }
 
@@ -1660,7 +1837,7 @@ html.light .voice-pipeline-glow {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: rgba(142, 232, 255, 0.65);
+  background: var(--color-ember-orange);
   animation: voice-pipeline-pulse 1.2s ease-in-out infinite;
 }
 

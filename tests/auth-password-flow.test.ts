@@ -2,23 +2,45 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "crypto";
 import { NextResponse } from "next/server";
 
-const mockFindByEmail = vi.fn();
-const mockFindById = vi.fn();
-const mockBumpSessionVersion = vi.fn();
-const mockUpdatePassword = vi.fn();
-const mockHashPassword = vi.fn();
-const mockInvalidateActiveForHotel = vi.fn();
-const mockPasswordResetCreate = vi.fn();
-const mockFindActiveByHash = vi.fn();
-const mockMarkUsed = vi.fn();
-const mockAuditCreate = vi.fn();
-const mockRecentByHotel = vi.fn();
-const mockSendPasswordResetEmail = vi.fn();
-const mockGetClientIP = vi.fn();
-const mockValidateCsrf = vi.fn();
-const mockRequireAuth = vi.fn();
-const mockGetSession = vi.fn();
-const mockClearSession = vi.fn();
+const {
+  mockFindByEmail,
+  mockFindById,
+  mockBumpSessionVersion,
+  mockUpdatePassword,
+  mockHashPassword,
+  mockInvalidateActiveForHotel,
+  mockPasswordResetCreate,
+  mockFindActiveByHash,
+  mockMarkUsed,
+  mockAuditCreate,
+  mockRecentByHotel,
+  mockSendPasswordResetEmail,
+  mockGetClientIP,
+  mockCheckRateLimit,
+  mockValidateCsrf,
+  mockRequireAuth,
+  mockGetSession,
+  mockClearSession,
+} = vi.hoisted(() => ({
+  mockFindByEmail: vi.fn(),
+  mockFindById: vi.fn(),
+  mockBumpSessionVersion: vi.fn(),
+  mockUpdatePassword: vi.fn(),
+  mockHashPassword: vi.fn(),
+  mockInvalidateActiveForHotel: vi.fn(),
+  mockPasswordResetCreate: vi.fn(),
+  mockFindActiveByHash: vi.fn(),
+  mockMarkUsed: vi.fn(),
+  mockAuditCreate: vi.fn(),
+  mockRecentByHotel: vi.fn(),
+  mockSendPasswordResetEmail: vi.fn(),
+  mockGetClientIP: vi.fn(),
+  mockCheckRateLimit: vi.fn(),
+  mockValidateCsrf: vi.fn(),
+  mockRequireAuth: vi.fn(),
+  mockGetSession: vi.fn(),
+  mockClearSession: vi.fn(),
+}));
 
 vi.mock("@/lib/db", () => ({
   hotels: {
@@ -48,6 +70,7 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/rateLimit", () => ({
   getClientIP: mockGetClientIP,
+  checkRateLimit: mockCheckRateLimit,
 }));
 
 vi.mock("@/lib/csrf", () => ({
@@ -78,6 +101,7 @@ describe("Auth password reset and audit routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetClientIP.mockReturnValue("10.0.0.1");
+    mockCheckRateLimit.mockReturnValue({ allowed: true, retryAfterMs: 0 });
     mockValidateCsrf.mockResolvedValue(null);
     mockBumpSessionVersion.mockReturnValue(2);
   });

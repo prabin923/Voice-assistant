@@ -22,6 +22,11 @@ export async function POST(request: Request) {
     const csrfError = await validateCsrf(request);
     if (csrfError) return csrfError;
 
+    if (process.env.NODE_ENV === "production" && process.env.ALLOW_ADMIN_REGISTRATION !== "true") {
+      await waitForMinimumDuration(requestStart);
+      return NextResponse.json({ error: "Registration failed" }, { status: 403 });
+    }
+
     // SECURITY: Rate limit registration — 3 per hour per IP
     const limit = checkRateLimit(`register:${ip}`, { maxRequests: 3, windowMs: 3600000 });
     if (!limit.allowed) {

@@ -47,9 +47,7 @@ export async function POST(req: Request) {
 
     await setGuestSessionCookie(token);
     return NextResponse.json({ success: true, guest: publicGuestProfile(guest) });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Registration failed";
-    const status = message.includes("already registered") ? 409 : 400;
-    return NextResponse.json({ error: message }, { status });
+  } catch {
+    return NextResponse.json({ error: "Registration failed. Please try signing in or use another email." }, { status: 400 });
   }
 }

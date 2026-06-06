@@ -161,16 +161,20 @@ function getDb(): Database.Database {
 
   globalForDb.db = db;
   
-  // Seed default admin user if none exist
+  // Optional dev-only bootstrap — never seeds in production
   const countResult = db.prepare("SELECT COUNT(*) as count FROM hotels").get() as { count: number };
-  if (countResult.count === 0) {
+  if (
+    countResult.count === 0 &&
+    process.env.NODE_ENV !== "production" &&
+    process.env.SEED_DEFAULT_ADMIN === "true"
+  ) {
     const bcrypt = require("bcryptjs");
     const hash = bcrypt.hashSync("password123", 10);
     const id = randomUUID();
     db.prepare(
       "INSERT INTO hotels (id, name, email, password) VALUES (?, ?, ?, ?)"
-    ).run(id, "Gokarna Admin", "admin@hotel.com", hash);
-    console.log("Seeded default admin user: admin@hotel.com / password123");
+    ).run(id, "Dev Admin", "admin@hotel.com", hash);
+    console.warn("[db] SEED_DEFAULT_ADMIN=true — created dev admin admin@hotel.com (change password immediately)");
   }
 
   return db;
@@ -321,6 +325,16 @@ export const interactions = {
       )
     `).get(`-${days} days`) as { avg: number };
     return Math.round(result.avg * 10) / 10;
+  },
+
+  topGuestMessages(limit: number = 8): { message: string; count: number }[] {
+    return db.prepare(`
+      SELECT guest_message as message, COUNT(*) as count
+      FROM interactions
+      GROUP BY guest_message
+      ORDER BY count DESC
+      LIMIT ?
+    `).all(Math.max(1, Math.min(20, limit))) as { message: string; count: number }[];
   },
 };
 

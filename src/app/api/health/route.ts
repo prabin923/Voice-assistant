@@ -7,6 +7,9 @@ import { isSelfHostedSttConfigured } from "@/lib/selfHostedStt";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ ok: true });
+  }
   return NextResponse.json({
     openai: isOpenAiConfigured(),
     gemini: isGeminiConfigured(),

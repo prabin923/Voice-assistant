@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { availability, bookings } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
+import { getHotelConfig } from "@/lib/hotelConfig";
+import { sendBookingConfirmationEmail, bookingRowToEmailPayload } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +80,15 @@ export async function POST(req: Request) {
       guestEmail: guestEmail || null,
       status: "confirmed",
     });
+
+    if (guestEmail) {
+      const config = getHotelConfig();
+      void sendBookingConfirmationEmail({
+        toEmail: guestEmail,
+        hotelName: config.branding.hotelName,
+        booking: bookingRowToEmailPayload(booking),
+      }).catch((err) => console.error("[EMAIL] Booking confirmation failed:", err));
+    }
 
     return NextResponse.json({ success: true, booking });
   } catch {

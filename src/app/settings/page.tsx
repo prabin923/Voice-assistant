@@ -6,14 +6,15 @@ import {
   Settings, Hotel, Phone, Clock, Utensils, Dumbbell,
   Save, RotateCcw, Plus, Trash2, ChevronLeft, CheckCircle2,
   AlertCircle, MessageSquare, LogOut, User, BarChart3, Inbox, X,
-  Crown, Sparkles, Sun, Moon, Bell, CalendarDays,
+  Crown, Sparkles, Bell, CalendarDays, CalendarCheck,
 } from "lucide-react";
 import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
 import { applyHotelBrandTheme, notifyHotelConfigUpdated, syncBrandingOnHotelRename } from "@/lib/hotelBrand";
-import { StaynepLogo } from "@/components/StaynepLogo";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 import { StaffNotificationCenter } from "@/components/StaffNotificationCenter";
 import { CalendarInventoryCenter } from "@/components/CalendarInventoryCenter";
+import { BookingsCenter } from "@/components/BookingsCenter";
+import { vapiCardCls, vapiGhostBtn, vapiInputCls, vapiLabelCls, vapiTabActive, vapiTabIdle } from "@/lib/vapiUi";
 
 interface RoomType {
   name: string;
@@ -48,7 +49,7 @@ interface HotelConfig {
   };
 }
 
-type Tab = "notifications" | "calendar" | "branding" | "contact" | "policies" | "rooms" | "dining" | "amenities" | "faq" | "persona" | "telephony";
+type Tab = "notifications" | "calendar" | "bookings" | "branding" | "contact" | "policies" | "rooms" | "dining" | "amenities" | "faq" | "persona" | "telephony";
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<HotelConfig | null>(null);
@@ -58,7 +59,6 @@ export default function SettingsPage() {
   const [hotelUser, setHotelUser] = useState<{ name: string; email: string } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "delete" | "info" } | null>(null);
   const [loadError, setLoadError] = useState("");
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [openHandoffCount, setOpenHandoffCount] = useState(0);
 
   const showToast = useCallback((message: string, type: "success" | "delete" | "info" = "success") => {
@@ -90,21 +90,6 @@ export default function SettingsPage() {
   useEffect(() => {
     loadProtectedData();
   }, [loadProtectedData]);
-
-  useEffect(() => {
-    const savedTheme = window.localStorage.getItem("theme");
-    const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const nextTheme = savedTheme === "light" || savedTheme === "dark"
-      ? savedTheme
-      : (systemPrefersDark ? "dark" : "light");
-    setTheme(nextTheme);
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.classList.remove("light", "dark");
-    document.documentElement.classList.add(theme);
-    window.localStorage.setItem("theme", theme);
-  }, [theme]);
 
   useEffect(() => {
     if (config?.branding) applyHotelBrandTheme(config.branding);
@@ -143,19 +128,16 @@ export default function SettingsPage() {
 
   if (!config) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-neutral-950">
+      <div className="flex min-h-screen items-center justify-center bg-void-canvas">
         {loadError ? (
-          <div className="text-center space-y-4 px-4">
+          <div className="space-y-4 px-4 text-center">
             <p className="text-sm text-red-400">{loadError}</p>
-            <button
-              onClick={loadProtectedData}
-              className="px-4 py-2 rounded-xl bg-[#163a5f] hover:bg-[#1e5278] text-white text-sm font-medium"
-            >
+            <button type="button" onClick={loadProtectedData} className="vapi-btn-ember vapi-btn-compact">
               Retry
             </button>
           </div>
         ) : (
-          <div className="w-8 h-8 border-2 border-[#163a5f] dark:border-[#e4c449] border-t-transparent rounded-full animate-spin" />
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-ember-orange border-t-transparent" />
         )}
       </div>
     );
@@ -164,6 +146,7 @@ export default function SettingsPage() {
   const tabs: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: "notifications", label: "Notifications", icon: <Bell className="w-4 h-4" />, badge: openHandoffCount },
     { id: "calendar", label: "Calendar", icon: <CalendarDays className="w-4 h-4" /> },
+    { id: "bookings", label: "Bookings", icon: <CalendarCheck className="w-4 h-4" /> },
     { id: "branding", label: "Branding", icon: <Hotel className="w-4 h-4" /> },
     { id: "contact", label: "Contact", icon: <Phone className="w-4 h-4" /> },
     { id: "policies", label: "Policies", icon: <Clock className="w-4 h-4" /> },
@@ -174,19 +157,11 @@ export default function SettingsPage() {
     { id: "persona", label: "AI Persona", icon: <Settings className="w-4 h-4" /> },
     { id: "telephony", label: "Telnyx Voice", icon: <Phone className="w-4 h-4" /> },
   ];
-  const isDark = theme === "dark";
+  const isDark = true;
 
-  const inputCls = `w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#c9a227]/38 focus:border-[#c9a227]/55 transition-all ${
-    isDark
-      ? "bg-neutral-800/50 border border-neutral-700/50 text-neutral-100 placeholder-neutral-500"
-      : "bg-white border border-neutral-300 text-neutral-900 placeholder-neutral-400"
-  }`;
-  const labelCls = `block text-xs font-medium mb-1.5 uppercase tracking-wider ${isDark ? "text-neutral-400" : "text-neutral-600"}`;
-  const cardCls = `rounded-2xl p-6 space-y-5 ${
-    isDark
-      ? "bg-neutral-900/50 border border-neutral-800/60"
-      : "bg-white border border-neutral-200 shadow-[0_10px_30px_rgba(15,23,42,0.06)]"
-  }`;
+  const inputCls = vapiInputCls;
+  const labelCls = vapiLabelCls;
+  const cardCls = vapiCardCls;
 
   // Helper to update nested config
   const updateBranding = (key: string, value: string) => {
@@ -205,16 +180,16 @@ export default function SettingsPage() {
   const updatePolicy = (key: string, value: string) => setConfig({ ...config, policies: { ...config.policies, [key]: value } });
 
   return (
-    <div className={`relative min-h-screen overflow-hidden ${isDark ? "text-neutral-100" : "text-neutral-900"}`}>
-      <SiteShellBackdrop isDark={isDark} />
+    <div className="relative min-h-screen overflow-hidden bg-void-canvas text-cream-text">
+      <SiteShellBackdrop />
       <div className="relative z-10">
       {/* Toast Notification */}
       {toast && (
         <div className="fixed top-6 right-6 z-50 animate-in slide-in-from-top-2 fade-in">
-          <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl text-sm font-medium shadow-2xl backdrop-blur-xl border ${
-            toast.type === "success" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300" :
-            toast.type === "delete" ? "bg-red-500/10 border-red-500/25 text-red-300" :
-            "bg-blue-500/10 border-blue-500/20 text-blue-300"
+          <div className={`flex items-center gap-3 rounded-[5.6px] border px-5 py-3 text-sm font-medium ${
+            toast.type === "success" ? "border-mint-pulse/30 bg-mint-pulse/10 text-mint-pulse" :
+            toast.type === "delete" ? "border-red-500/30 bg-red-500/10 text-red-300" :
+            "border-ice-border/30 bg-slab-elevated text-bone-text"
           }`}>
             {toast.type === "success" ? <CheckCircle2 className="w-4 h-4" /> :
              toast.type === "delete" ? <Trash2 className="w-4 h-4" /> :
@@ -228,100 +203,79 @@ export default function SettingsPage() {
       )}
 
       {/* Header */}
-      <header className={`sticky top-0 z-20 border-b backdrop-blur-xl ${siteHeaderChrome(isDark)}`}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/assistant" className={`flex items-center gap-2 transition-colors ${isDark ? "text-neutral-400 hover:text-white" : "text-neutral-600 hover:text-neutral-900"}`}>
-              <ChevronLeft className="w-5 h-5" />
-              <span className="text-sm">Back to Assistant</span>
+      <header className={`sticky top-0 z-20 border-b ${siteHeaderChrome()}`}>
+        <div className="mx-auto flex max-w-[1200px] flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+            <Link href="/assistant" className="vapi-nav-label inline-flex items-center gap-2 text-zinc-mute hover:text-cream-text">
+              <ChevronLeft className="w-4 h-4" strokeWidth={1.5} />
+              <span className="normal-case tracking-normal font-sans text-sm">Back</span>
             </Link>
-            <div className={`h-6 w-px ${isDark ? "bg-neutral-800" : "bg-neutral-300"}`} />
-            <Link href="/" className="flex shrink-0 items-center" aria-label="StayNEP home">
-              <StaynepLogo isDark={isDark} size="sm" />
-            </Link>
-            <div className={`h-6 w-px ${isDark ? "bg-neutral-800" : "bg-neutral-300"}`} />
+            <div className="hidden h-6 w-px bg-iron-border sm:block" />
+            <Link href="/" className="text-sm font-semibold text-cream-text">STAYNEP</Link>
+            <div className="hidden h-6 w-px bg-iron-border sm:block" />
             <div className="flex items-center gap-2">
-              <Settings className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" />
-              <h1 className="text-lg font-semibold">Hotel Configuration</h1>
+              <Settings className="w-4 h-4 text-ice-border" strokeWidth={1.5} />
+              <h1 className="text-sm font-medium text-cream-text">Hotel configuration</h1>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-              className={`h-9 w-9 rounded-xl border flex items-center justify-center transition-all ${
-                isDark ? "border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-600" : "border-neutral-300 text-neutral-500 hover:text-neutral-900 hover:border-neutral-400 bg-white"
-              }`}
-              aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
-            >
-              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
+          <div className="flex flex-wrap items-center gap-2">
             {hotelUser && (
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm ${isDark ? "bg-white/5 border border-white/[0.08] text-neutral-400" : "bg-white border border-neutral-200 text-neutral-600"}`}>
-                <User className="w-3.5 h-3.5" />
+              <div className={`flex items-center gap-2 rounded-[5.6px] border border-iron-border bg-carbon-surface px-3 py-1.5 text-sm text-zinc-mute`}>
+                <User className="w-3.5 h-3.5" strokeWidth={1.5} />
                 <span>{hotelUser.name}</span>
               </div>
             )}
-            <Link href="/admin/support" className={`relative flex items-center gap-2 px-3 py-2 rounded-xl text-sm border transition-all ${
-              isDark ? "text-neutral-400 border-neutral-800 hover:border-amber-500/30 hover:text-amber-400" : "text-neutral-600 border-neutral-300 hover:border-amber-400/40 hover:text-amber-600 bg-white"
-            }`}>
-              <Inbox className="w-4 h-4" /><span className="hidden sm:inline">Support</span>
+            <Link href="/admin/support" className={`${vapiGhostBtn} relative text-xs`}>
+              <Inbox className="w-4 h-4" strokeWidth={1.5} /><span className="hidden sm:inline">Support</span>
               {openHandoffCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-[10px] font-bold text-black flex items-center justify-center">
+                <span className="absolute -top-1.5 -right-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-ember-orange px-1 text-[10px] font-bold text-void-canvas">
                   {openHandoffCount > 9 ? "9+" : openHandoffCount}
                 </span>
               )}
             </Link>
-            <Link href="/admin/analytics" className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm border transition-all ${
-              isDark ? "text-neutral-400 border-neutral-800 hover:border-sky-500/35 hover:text-sky-300" : "text-neutral-600 border-neutral-300 hover:border-[#285a82]/45 hover:text-[#163a5f] bg-white"
-            }`}>
-              <BarChart3 className="w-4 h-4" /><span className="hidden sm:inline">Analytics</span>
+            <Link href="/admin/analytics" className={`${vapiGhostBtn} text-xs`}>
+              <BarChart3 className="w-4 h-4" strokeWidth={1.5} /><span className="hidden sm:inline">Analytics</span>
             </Link>
             {saveStatus === "success" && (
-              <span className="flex items-center gap-1.5 text-emerald-400 text-sm animate-in fade-in">
+              <span className="flex items-center gap-1.5 text-sm text-mint-pulse animate-in fade-in">
                 <CheckCircle2 className="w-4 h-4" /> Saved
               </span>
             )}
             {saveStatus === "error" && (
-              <span className="flex items-center gap-1.5 text-red-400 text-sm">
+              <span className="flex items-center gap-1.5 text-sm text-red-400">
                 <AlertCircle className="w-4 h-4" /> Error saving
               </span>
             )}
-            <button onClick={reset} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm border transition-all ${
-              isDark ? "text-neutral-400 border-neutral-800 hover:border-neutral-600 hover:text-white" : "text-neutral-600 border-neutral-300 hover:border-neutral-400 hover:text-neutral-900 bg-white"
-            }`}>
-              <RotateCcw className="w-4 h-4" /> Reset
+            <button type="button" onClick={reset} className={vapiGhostBtn}>
+              <RotateCcw className="w-4 h-4" strokeWidth={1.5} /> Reset
             </button>
-            <button onClick={save} disabled={saving} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-[#163a5f] hover:bg-[#1e5278] text-white transition-all disabled:opacity-50 shadow-lg shadow-[#163a5f]/25">
-              <Save className="w-4 h-4" /> {saving ? "Saving..." : "Save Changes"}
+            <button type="button" onClick={save} disabled={saving} className="vapi-btn-ember vapi-btn-compact disabled:opacity-50">
+              <Save className="w-4 h-4" strokeWidth={1.5} /> {saving ? "Saving..." : "Save"}
             </button>
-            <button onClick={handleLogout} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm border transition-all ${
-              isDark ? "text-neutral-500 hover:text-red-400 border-neutral-800 hover:border-red-500/30" : "text-neutral-500 hover:text-red-500 border-neutral-300 hover:border-red-400/40 bg-white"
-            }`}>
-              <LogOut className="w-4 h-4" />
+            <button type="button" onClick={handleLogout} className={`${vapiGhostBtn} hover:border-red-500/40 hover:text-red-300`}>
+              <LogOut className="w-4 h-4" strokeWidth={1.5} />
             </button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col sm:flex-row gap-6 sm:gap-8">
-        {/* Sidebar Tabs — horizontal scroll on mobile, vertical on desktop */}
-        <aside className="sm:w-56 shrink-0">
-          <nav className="flex sm:flex-col gap-1 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0 sm:sticky sm:top-24 scrollbar-premium">
+      <div className="mx-auto flex max-w-[1200px] flex-col gap-6 px-4 py-6 sm:flex-row sm:gap-8 sm:px-6 sm:py-8">
+        {/* Sidebar Tabs */}
+        <aside className="shrink-0 sm:w-56">
+          <nav className="scrollbar-premium flex gap-1 overflow-x-auto pb-2 sm:flex-col sm:overflow-visible sm:pb-0 sm:sticky sm:top-24">
             {tabs.map(tab => (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  activeTab === tab.id
-                    ? "border border-[#163a5f]/25 bg-[#163a5f]/10 text-[#163a5f] dark:border-[#c9a227]/35 dark:bg-[#c9a227]/12 dark:text-[#e4c449]"
-                    : "text-neutral-400 hover:text-white hover:bg-neutral-900/50"
+                className={`flex w-full items-center gap-3 rounded-[5.6px] border px-4 py-2.5 text-sm font-medium transition-colors ${
+                  activeTab === tab.id ? vapiTabActive : vapiTabIdle
                 }`}
               >
                 {tab.icon}
                 <span className="flex-1 text-left">{tab.label}</span>
                 {tab.badge != null && tab.badge > 0 && (
-                  <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-amber-500 text-[10px] font-bold text-black flex items-center justify-center">
+                  <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-ember-orange px-1.5 text-[10px] font-bold text-void-canvas">
                     {tab.badge > 9 ? "9+" : tab.badge}
                   </span>
                 )}
@@ -349,6 +303,15 @@ export default function SettingsPage() {
               isDark={isDark}
               cardCls={cardCls}
               inputCls={inputCls}
+              labelCls={labelCls}
+              onToast={showToast}
+            />
+          )}
+
+          {activeTab === "bookings" && (
+            <BookingsCenter
+              isDark={isDark}
+              cardCls={cardCls}
               labelCls={labelCls}
               onToast={showToast}
             />
