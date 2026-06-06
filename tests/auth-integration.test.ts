@@ -16,8 +16,11 @@ const mockCheckRateLimit = vi.fn();
 const mockGetClientIP = vi.fn();
 const mockValidateCsrf = vi.fn();
 const mockAuditCreate = vi.fn();
+const mockEnsureDbReady = vi.fn();
+const mockCheckRateLimitAsync = vi.fn();
 
 vi.mock("@/lib/db", () => ({
+  ensureDbReady: mockEnsureDbReady,
   hotels: {
     findByEmail: mockFindByEmail,
     findById: mockFindById,
@@ -51,6 +54,10 @@ vi.mock("@/lib/rateLimit", () => ({
   getClientIP: mockGetClientIP,
 }));
 
+vi.mock("@/lib/rateLimitDistributed", () => ({
+  checkRateLimitAsync: mockCheckRateLimitAsync,
+}));
+
 vi.mock("@/lib/csrf", () => ({
   validateCsrf: mockValidateCsrf,
 }));
@@ -62,6 +69,8 @@ describe("Auth integration flows", () => {
     mockGetClientIP.mockReturnValue("127.0.0.1");
     mockValidateCsrf.mockResolvedValue(null);
     mockBumpSessionVersion.mockReturnValue(1);
+    mockEnsureDbReady.mockResolvedValue(undefined);
+    mockCheckRateLimitAsync.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
   });
 
   it("redirects expired/invalid session cookie on protected page to /admin/login", async () => {

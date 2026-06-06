@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI, Modality } from "@google/genai";
+import { requireAiAccess } from "@/lib/aiAccessGuard";
 import { getGeminiApiKey, geminiNotConfiguredResponse } from "@/lib/gemini";
 import { GEMINI_LIVE_MODEL } from "@/lib/geminiModel";
 import { buildSystemInstruction } from "@/lib/responseEngine";
@@ -9,6 +10,9 @@ export const dynamic = "force-dynamic";
 
 /** Issue a short-lived token so the browser can connect to Gemini Live API without exposing the API key. */
 export async function POST(req: Request) {
+  const access = await requireAiAccess(req, "live");
+  if (!access.allowed) return access.response;
+
   const ip = getClientIP(req);
   const limit = checkRateLimit(`live-token:${ip}`, { maxRequests: 10, windowMs: 60000 });
   if (!limit.allowed) {

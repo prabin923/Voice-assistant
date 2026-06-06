@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getHotelConfig } from '@/lib/hotelConfig';
+import { ensureHotelConfigLoaded } from '@/lib/hotelConfig';
 import { getAssistantResponse } from '@/lib/responseEngine';
-import { availability, bookings, guests, interactions } from '@/lib/db';
+import { availability, guests, interactions, ensureDbReady } from '@/lib/db';
+import { createBookingSafe, sendBookingEmailIfNeeded } from '@/lib/bookingService';
 import { notifyHotelStaff, type EscalationReason } from '@/lib/escalation';
 import { getClientIP } from '@/lib/rateLimit';
 import { aiNotConfiguredResponse, isAiConfigured } from '@/lib/ai';
@@ -9,7 +10,6 @@ import { getKeywordsForLanguage } from '@/lib/languages';
 import { getGuestSession } from '@/lib/guestAuth';
 import { checkGuestChatRateLimit } from '@/lib/guestRateLimit';
 import { sanitizeChatHistory, sanitizeChatMessage } from '@/lib/chatValidation';
-import { sendBookingConfirmationEmail } from '@/lib/email';
 
 export const dynamic = 'force-dynamic';
 
@@ -125,7 +125,7 @@ export type BookingSummary = {
 async function buildBookingReply(params: {
   message: string;
   langCode: string;
-  config: ReturnType<typeof getHotelConfig>;
+  config: Awaited<ReturnType<typeof ensureHotelConfigLoaded>>;
   history: ChatHistoryMessage[];
   guestProfile?: { id: string; name: string; phone: string | null; email: string };
 }): Promise<{
@@ -161,10 +161,12 @@ async function buildBookingReply(params: {
     };
   }
 
-  const availabilityByRoom = config.rooms.map((room) => ({
-    roomType: room.name,
-    available: availability.get(room.name, dateRange.checkIn!, dateRange.checkOut!).available,
-  }));
+  const availabilityByRoom = await Promise.all(
+    config.rooms.map(async (room) => ({
+      roomType: room.name,
+      available: (await availability.get(room.name, dateRange.checkIn!, dateRange.checkOut!)).available,
+    }))
+  );
 
   if (!roomType) {
     const availableRooms = availabilityByRoom.filter((item) => item.available > 0);
@@ -225,7 +227,7 @@ async function buildBookingReply(params: {
     };
   }
 
-  const booking = bookings.create({
+  const bookingResult = await createBookingSafe({
     roomType,
     checkIn: dateRange.checkIn,
     checkOut: dateRange.checkOut,
@@ -234,8 +236,22 @@ async function buildBookingReply(params: {
     guestPhone,
     guestEmail,
     guestId: guestProfile?.id,
-    status: "confirmed",
   });
+
+  if (!bookingResult.ok) {
+    return {
+      handled: true,
+      reply:
+        bookingResult.status === 409
+          ? `Only ${bookingResult.available ?? 0} ${roomType} room(s) are available for those dates. I will notify staff to assist with options.`
+          : "I couldn't complete that booking right now. I'll connect you with our front desk.",
+      escalate: bookingResult.status === 409,
+      reason: bookingResult.status === 409 ? "ai_flagged" : undefined,
+    };
+  }
+
+  const booking = bookingResult.booking;
+  sendBookingEmailIfNeeded(booking);
 
   return {
     handled: true,
@@ -268,9 +284,9 @@ export async function POST(req: Request) {
     // Rate limit: 30 chat requests per minute per IP
     const ip = getClientIP(req);
     const guestSession = await getGuestSession();
-    const guestRecord = guestSession ? guests.findById(guestSession.guestId) : undefined;
+    const guestRecord = guestSession ? await guests.findById(guestSession.guestId) : undefined;
 
-    const chatLimit = checkGuestChatRateLimit({
+    const chatLimit = await checkGuestChatRateLimit({
       ip,
       guestId: guestSession?.guestId,
     });
@@ -306,7 +322,8 @@ export async function POST(req: Request) {
       return NextResponse.json(aiNotConfiguredResponse(), { status: 501 });
     }
 
-    const config = getHotelConfig();
+    await ensureDbReady();
+    const config = await ensureHotelConfigLoaded();
     const langCode = language || config.language || 'en-US';
 
     const conversationHistory = sanitizeChatHistory(history);
@@ -347,14 +364,14 @@ export async function POST(req: Request) {
 
     // Log interaction
     try {
-      interactions.log({
+      await interactions.log({
         guestMessage: message,
         aiResponse: reply,
         language: langCode,
         guestId: guestSession?.guestId,
       });
       if (guestSession?.guestId) {
-        guests.recordMessage(guestSession.guestId);
+        await guests.recordMessage(guestSession.guestId);
       }
     } catch (e) {
       console.error("Failed to log interaction:", e);
@@ -369,22 +386,6 @@ export async function POST(req: Request) {
         language: langCode,
         reason,
       });
-    }
-
-    if (booking?.id && booking.guestEmail) {
-      void sendBookingConfirmationEmail({
-        toEmail: booking.guestEmail,
-        hotelName: config.branding.hotelName,
-        booking: {
-          id: booking.id,
-          roomType: booking.roomType,
-          checkIn: booking.checkIn,
-          checkOut: booking.checkOut,
-          rooms: booking.rooms,
-          guestName: booking.guestName,
-          status: booking.status,
-        },
-      }).catch((err) => console.error("[EMAIL] Booking confirmation failed:", err));
     }
 
     return NextResponse.json({

@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2, LogIn, LogOut, User, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2, LogIn, LogOut, User, X, XCircle } from "lucide-react";
 import {
+  cancelGuestBooking,
+  fetchGuestBookings,
   fetchGuestMe,
   guestLogin,
   guestLogout,
   guestRegister,
+  type GuestBooking,
   type GuestProfile,
 } from "@/lib/clientGuestAuth";
 import { vapiInputCls } from "@/lib/vapiUi";
@@ -53,6 +56,18 @@ export function GuestAuthPanel({
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [guestBookings, setGuestBookings] = useState<GuestBooking[]>([]);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!guest || !open) return;
+    setBookingsLoading(true);
+    void fetchGuestBookings()
+      .then(setGuestBookings)
+      .catch(() => setGuestBookings([]))
+      .finally(() => setBookingsLoading(false));
+  }, [guest, open]);
 
   const tierBadge =
     guest?.loyaltyTier === "loyal"
@@ -91,10 +106,29 @@ export function GuestAuthPanel({
     try {
       await guestLogout();
       onGuestChange(null);
+      setGuestBookings([]);
       setOpen(false);
     } finally {
       setLoading(false);
     }
+  };
+
+  const cancelBooking = async (id: string) => {
+    setCancellingId(id);
+    try {
+      await cancelGuestBooking(id);
+      setGuestBookings((prev) => prev.map((b) => (b.id === id ? { ...b, status: "cancelled" } : b)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to cancel booking");
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
+  const formatStay = (checkIn: string, checkOut: string) => {
+    const fmt = (v: string) =>
+      new Date(`${v}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return `${fmt(checkIn)} → ${fmt(checkOut)}`;
   };
 
   return (
@@ -155,6 +189,46 @@ export function GuestAuthPanel({
                 <div className="rounded-[5.6px] border border-iron-border bg-slab-elevated p-4 text-sm text-bone-text">
                   <p><span className="text-zinc-mute">Email:</span> {guest.email}</p>
                   {guest.phone ? <p className="mt-1"><span className="text-zinc-mute">Phone:</span> {guest.phone}</p> : null}
+                </div>
+                <div className="space-y-2">
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-mute">Your bookings</p>
+                  {bookingsLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-zinc-mute">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading…
+                    </div>
+                  ) : guestBookings.length === 0 ? (
+                    <p className="text-sm text-zinc-mute">No bookings linked to your account yet.</p>
+                  ) : (
+                    <ul className="max-h-40 space-y-2 overflow-y-auto">
+                      {guestBookings.map((b) => (
+                        <li key={b.id} className="rounded-[5.6px] border border-iron-border bg-slab-elevated p-3 text-sm">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="font-medium text-cream-text">{b.roomType}</p>
+                              <p className="text-xs text-zinc-mute">{formatStay(b.checkIn, b.checkOut)}</p>
+                              <p className="mt-1 text-xs capitalize text-zinc-mute">{b.status}</p>
+                            </div>
+                            {b.status === "confirmed" ? (
+                              <button
+                                type="button"
+                                onClick={() => void cancelBooking(b.id)}
+                                disabled={cancellingId === b.id}
+                                className="inline-flex items-center gap-1 rounded-[5.6px] border border-red-500/30 px-2 py-1 text-[10px] uppercase tracking-wider text-red-400"
+                              >
+                                {cancellingId === b.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <XCircle className="h-3 w-3" />
+                                )}
+                                Cancel
+                              </button>
+                            ) : null}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
                 <button
                   type="button"

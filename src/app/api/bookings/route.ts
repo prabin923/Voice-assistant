@@ -1,33 +1,36 @@
 import { NextResponse } from "next/server";
-import { availability, bookings } from "@/lib/db";
+import { bookings, ensureDbReady } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
-import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
-import { getHotelConfig } from "@/lib/hotelConfig";
-import { sendBookingConfirmationEmail, bookingRowToEmailPayload } from "@/lib/email";
+import { getClientIP } from "@/lib/rateLimit";
+import { checkRateLimitAsync } from "@/lib/rateLimitDistributed";
+import { getGuestSession } from "@/lib/guestAuth";
+import {
+  createBookingSafe,
+  sendBookingEmailIfNeeded,
+  publicBookingRow,
+} from "@/lib/bookingService";
 
 export const dynamic = "force-dynamic";
-
-function isIsoDate(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
 
 export async function GET(req: Request) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
+
+  await ensureDbReady();
 
   const { searchParams } = new URL(req.url);
   const limit = Number(searchParams.get("limit") || 100);
   const mode = searchParams.get("mode");
   const list =
     mode === "upcoming"
-      ? bookings.upcoming(Math.max(1, Math.min(300, Math.floor(limit))))
-      : bookings.list(Math.max(1, Math.min(300, Math.floor(limit))));
+      ? await bookings.upcoming(Math.max(1, Math.min(300, Math.floor(limit))))
+      : await bookings.list(Math.max(1, Math.min(300, Math.floor(limit))));
   return NextResponse.json({ bookings: list });
 }
 
 export async function POST(req: Request) {
   const ip = getClientIP(req);
-  const limit = checkRateLimit(`bookings:${ip}`, { maxRequests: 12, windowMs: 60000 });
+  const limit = await checkRateLimitAsync(`bookings:${ip}`, { maxRequests: 12, windowMs: 60000 });
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many booking attempts. Please wait a moment." },
@@ -36,61 +39,32 @@ export async function POST(req: Request) {
   }
 
   try {
+    await ensureDbReady();
+
     const body = await req.json();
-    const roomType = String(body.roomType || "").trim();
-    const checkIn = String(body.checkIn || "").trim();
-    const checkOut = String(body.checkOut || "").trim();
-    const guestName = String(body.guestName || "").trim();
-    const guestPhone = String(body.guestPhone || "").trim();
-    const guestEmail = String(body.guestEmail || "").trim();
-    const rooms = Number(body.rooms || 1);
+    const guestSession = await getGuestSession();
 
-    if (!roomType || !guestName || !guestPhone || !isIsoDate(checkIn) || !isIsoDate(checkOut)) {
-      return NextResponse.json(
-        {
-          error:
-            "roomType, checkIn, checkOut, guestName, and guestPhone are required (dates must be YYYY-MM-DD).",
-        },
-        { status: 400 }
-      );
-    }
-    if (checkIn >= checkOut) {
-      return NextResponse.json({ error: "checkOut must be after checkIn." }, { status: 400 });
-    }
-
-    const requestedRooms = Math.max(1, Math.floor(rooms));
-    const roomAvailability = availability.get(roomType, checkIn, checkOut);
-    if (roomAvailability.available < requestedRooms) {
-      return NextResponse.json(
-        {
-          error: "Requested room is not available for those dates.",
-          available: roomAvailability.available,
-        },
-        { status: 409 }
-      );
-    }
-
-    const booking = bookings.create({
-      roomType,
-      checkIn,
-      checkOut,
-      rooms: requestedRooms,
-      guestName,
-      guestPhone,
-      guestEmail: guestEmail || null,
-      status: "confirmed",
+    const result = await createBookingSafe({
+      roomType: String(body.roomType || ""),
+      checkIn: String(body.checkIn || ""),
+      checkOut: String(body.checkOut || ""),
+      guestName: String(body.guestName || ""),
+      guestPhone: String(body.guestPhone || ""),
+      guestEmail: String(body.guestEmail || "").trim() || null,
+      rooms: Number(body.rooms || 1),
+      guestId: guestSession?.guestId ?? null,
     });
 
-    if (guestEmail) {
-      const config = getHotelConfig();
-      void sendBookingConfirmationEmail({
-        toEmail: guestEmail,
-        hotelName: config.branding.hotelName,
-        booking: bookingRowToEmailPayload(booking),
-      }).catch((err) => console.error("[EMAIL] Booking confirmation failed:", err));
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error, ...(result.available !== undefined ? { available: result.available } : {}) },
+        { status: result.status }
+      );
     }
 
-    return NextResponse.json({ success: true, booking });
+    sendBookingEmailIfNeeded(result.booking);
+
+    return NextResponse.json({ success: true, booking: publicBookingRow(result.booking) });
   } catch {
     return NextResponse.json({ error: "Failed to create booking." }, { status: 500 });
   }

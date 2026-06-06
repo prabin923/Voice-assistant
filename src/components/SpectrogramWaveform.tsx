@@ -40,6 +40,7 @@ export function SpectrogramWaveform({ barCount = 96, className = "" }: Spectrogr
       {bars.map((bar, i) => (
         <div
           key={i}
+          data-gsap="wave-bar"
           className="vapi-spectrogram-bar"
           style={{
             height: `${Math.max(8, bar.height * 100)}%`,

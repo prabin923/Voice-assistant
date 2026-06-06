@@ -1,8 +1,9 @@
 import { createHash } from "crypto";
 import { NextResponse } from "next/server";
-import { authAuditLogs, hotels, passwordResetTokens } from "@/lib/db";
+import { authAuditLogs, hotels, passwordResetTokens, ensureDbReady } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { getClientIP } from "@/lib/rateLimit";
+import { checkRateLimitAsync } from "@/lib/rateLimitDistributed";
 import { validateCsrf } from "@/lib/csrf";
 
 const MIN_RESPONSE_MS = 450;
@@ -26,7 +27,14 @@ export async function POST(req: Request) {
   const ip = getClientIP(req);
   const userAgent = req.headers.get("user-agent");
 
+  const limit = await checkRateLimitAsync(`reset-password:${ip}`, { maxRequests: 5, windowMs: 60_000 });
+  if (!limit.allowed) {
+    return NextResponse.json({ error: "Too many attempts. Please wait." }, { status: 429 });
+  }
+
   try {
+    await ensureDbReady();
+
     const body = await req.json().catch(() => ({}));
     const token = typeof body?.token === "string" ? body.token.trim() : "";
     const password = typeof body?.password === "string" ? body.password : "";
@@ -37,25 +45,25 @@ export async function POST(req: Request) {
     }
 
     const tokenHash = sha256(token);
-    const activeToken = passwordResetTokens.findActiveByHash(tokenHash);
+    const activeToken = await passwordResetTokens.findActiveByHash(tokenHash);
     if (!activeToken) {
       await waitForMinimumDuration(requestStart);
       return NextResponse.json({ error: "Reset failed" }, { status: 400 });
     }
 
-    const hotel = hotels.findById(activeToken.hotel_id);
+    const hotel = await hotels.findById(activeToken.hotel_id);
     if (!hotel) {
-      passwordResetTokens.markUsed(activeToken.id);
+      await passwordResetTokens.markUsed(activeToken.id);
       await waitForMinimumDuration(requestStart);
       return NextResponse.json({ error: "Reset failed" }, { status: 400 });
     }
 
     const hashedPassword = await hashPassword(password);
-    hotels.updatePassword(hotel.id, hashedPassword);
-    hotels.bumpSessionVersion(hotel.id);
-    passwordResetTokens.markUsed(activeToken.id);
-    passwordResetTokens.invalidateActiveForHotel(hotel.id);
-    authAuditLogs.create({
+    await hotels.updatePassword(hotel.id, hashedPassword);
+    await hotels.bumpSessionVersion(hotel.id);
+    await passwordResetTokens.markUsed(activeToken.id);
+    await passwordResetTokens.invalidateActiveForHotel(hotel.id);
+    await authAuditLogs.create({
       hotelId: hotel.id,
       email: hotel.email,
       event: "password_reset_success",

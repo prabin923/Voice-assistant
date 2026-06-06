@@ -23,7 +23,7 @@ interface RateLimitOptions {
   windowMs?: number;      // Window size in ms (default: 60000 = 1 min)
 }
 
-interface RateLimitResult {
+export interface RateLimitResult {
   allowed: boolean;
   remaining: number;
   retryAfterMs: number;

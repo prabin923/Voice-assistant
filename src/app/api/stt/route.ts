@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { requireAiAccess } from "@/lib/aiAccessGuard";
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 import { getGeminiApiKey, mapGeminiApiError } from '@/lib/gemini';
 import { GEMINI_MODEL } from '@/lib/geminiModel';
@@ -24,6 +25,9 @@ function isSttAvailable(): boolean {
 
 export async function POST(req: Request) {
   try {
+    const access = await requireAiAccess(req, "stt");
+    if (!access.allowed) return access.response;
+
     const ip = getClientIP(req);
     const limit = checkRateLimit(`stt:${ip}`, { maxRequests: 30, windowMs: 60000 });
     if (!limit.allowed) {

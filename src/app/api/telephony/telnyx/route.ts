@@ -10,8 +10,10 @@
 
 import { getAssistantResponse } from "@/lib/responseEngine";
 import { notifyHotelStaff } from "@/lib/escalation";
-import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
+import { getClientIP } from "@/lib/rateLimit";
+import { checkRateLimitAsync } from "@/lib/rateLimitDistributed";
 import { getHotelConfig } from "@/lib/hotelConfig";
+import { interactions } from "@/lib/db";
 import { verify as ed25519Verify } from "@noble/ed25519";
 import {
   buildTelnyxConversationXml,
@@ -89,7 +91,7 @@ function handleInboundCall(req: Request, language: string): Response {
 
 async function handleGather(req: Request, language: string, transcript: string): Promise<Response> {
   const ip = getClientIP(req);
-  const limit = checkRateLimit(`telnyx:${ip}`, { maxRequests: 60, windowMs: 60_000 });
+  const limit = await checkRateLimitAsync(`telnyx:${ip}`, { maxRequests: 60, windowMs: 60_000 });
   if (!limit.allowed) {
     return xmlResponse(
       buildTelnyxConversationXml(
@@ -134,6 +136,17 @@ async function handleGather(req: Request, language: string, transcript: string):
     escalate = true;
   }
 
+  try {
+    await interactions.log({
+      guestMessage: sanitized,
+      aiResponse: aiReply,
+      language,
+      guestId: null,
+    });
+  } catch (logErr) {
+    console.error("[Telnyx Webhook] Failed to log interaction:", logErr);
+  }
+
   if (escalate) {
     return xmlResponse(buildTelnyxHangupXml(aiReply, language));
   }
@@ -171,6 +184,9 @@ export async function POST(req: Request): Promise<Response> {
 export async function GET(req: Request): Promise<Response> {
   const url = new URL(req.url);
   if (url.searchParams.get("preview") === "1") {
+    if (process.env.NODE_ENV === "production") {
+      return new Response("Forbidden", { status: 403 });
+    }
     const config = getHotelConfig();
     const language = config.language || "en-US";
     const sample = buildTelnyxConversationXml(

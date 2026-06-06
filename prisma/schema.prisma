@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Hotel {
+  id             String   @id
+  name           String
+  email          String   @unique
+  password       String
+  sessionVersion Int      @default(0) @map("session_version")
+  config         String   @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("hotels")
+}
+
+model Interaction {
+  id           String   @id
+  guestMessage String   @map("guest_message")
+  aiResponse   String   @map("ai_response")
+  language     String
+  guestId      String?  @map("guest_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([guestId])
+  @@map("interactions")
+}
+
+model SupportTicket {
+  id               String    @id
+  guestMessage     String    @map("guest_message")
+  aiResponse       String    @map("ai_response")
+  language         String
+  status           String    @default("open")
+  staffReply       String?   @map("staff_reply")
+  escalationReason String?   @map("escalation_reason")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  resolvedAt       DateTime? @map("resolved_at")
+
+  @@map("support_tickets")
+}
+
+model RoomInventoryDefault {
+  roomType String @id @map("room_type")
+  count    Int
+
+  @@map("room_inventory_defaults")
+}
+
+model RoomInventoryOverride {
+  roomType String @map("room_type")
+  date     String
+  count    Int
+
+  @@id([roomType, date])
+  @@map("room_inventory_overrides")
+}
+
+model Booking {
+  id         String   @id
+  roomType   String   @map("room_type")
+  checkIn    String   @map("check_in")
+  checkOut   String   @map("check_out")
+  rooms      Int
+  guestName  String   @map("guest_name")
+  guestPhone String   @map("guest_phone")
+  guestEmail String?  @map("guest_email")
+  guestId    String?  @map("guest_id")
+  status     String   @default("confirmed")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([guestId])
+  @@index([status, checkIn, checkOut])
+  @@map("bookings")
+}
+
+model Feedback {
+  id             String   @id
+  messageContent String   @map("message_content")
+  rating         String
+  comment        String?
+  guestId        String?  @map("guest_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("feedback")
+}
+
+model AuthAuditLog {
+  id        String   @id
+  hotelId   String?  @map("hotel_id")
+  email     String
+  event     String
+  ip        String?
+  userAgent String?  @map("user_agent")
+  metadata  String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("auth_audit_logs")
+}
+
+model PasswordResetToken {
+  id        String    @id
+  hotelId   String    @map("hotel_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("password_reset_tokens")
+}
+
+model Guest {
+  id                String    @id
+  name              String
+  email             String    @unique
+  password          String
+  phone             String?
+  preferredLanguage String    @default("en-US") @map("preferred_language")
+  sessionVersion    Int       @default(0) @map("session_version")
+  visitCount        Int       @default(0) @map("visit_count")
+  messageCount      Int       @default(0) @map("message_count")
+  bookingCount      Int       @default(0) @map("booking_count")
+  lastVisitAt       DateTime? @map("last_visit_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@map("guests")
+}

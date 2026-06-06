@@ -5,7 +5,7 @@
 // ============================================================
 
 import { NextResponse } from 'next/server';
-import { getHotelConfig, updateHotelConfig, resetHotelConfig } from '@/lib/hotelConfig';
+import { ensureHotelConfigLoaded, updateHotelConfig, resetHotelConfig } from '@/lib/hotelConfig';
 import { requireAuth } from '@/lib/auth';
 import { validateCsrf } from "@/lib/csrf";
 import { isAiConfigured } from "@/lib/ai";
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 // Public: frontend needs branding/config to render
 export async function GET() {
-  const config = getHotelConfig();
+  const config = await ensureHotelConfigLoaded();
   // Strip sensitive fields for public access
   const { telephony, ...publicConfig } = config;
   return NextResponse.json({
@@ -35,7 +35,7 @@ export async function PUT(req: Request) {
 
   try {
     const updates = await req.json();
-    const updated = updateHotelConfig(updates);
+    const updated = await updateHotelConfig(updates);
     return NextResponse.json({ success: true, config: updated });
   } catch {
     return NextResponse.json(
@@ -52,6 +52,6 @@ export async function DELETE(req: Request) {
   const csrfError = await validateCsrf(req);
   if (csrfError) return csrfError;
 
-  const config = resetHotelConfig();
+  const config = await resetHotelConfig();
   return NextResponse.json({ success: true, config, message: 'Configuration reset to defaults.' });
 }

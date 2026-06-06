@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Reveal } from "@/components/Reveal";
 import { CountUpStat } from "@/components/CountUpStat";
+import { GsapLandingAnimations } from "@/components/GsapLandingAnimations";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 import { SpectrogramWaveform } from "@/components/SpectrogramWaveform";
 import { VoicePipelineDemo } from "@/components/VoicePipelineDemo";
@@ -128,10 +129,11 @@ const LOGO_STRIP = ["Unity", "ONE", "Intuit", "Delphi", "Housecall Pro", "Cherry
 export default function MarketingHomePage() {
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-void-canvas text-cream-text">
+      <GsapLandingAnimations />
       <SiteShellBackdrop />
 
       {/* Nav */}
-      <header className={`sticky top-0 z-50 border-b ${siteHeaderChrome()}`}>
+      <header data-gsap="nav" className={`sticky top-0 z-50 border-b ${siteHeaderChrome()}`}>
         <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <Link href="/" className="text-lg font-semibold tracking-tight text-cream-text">
             STAYNEP
@@ -165,7 +167,7 @@ export default function MarketingHomePage() {
       {/* Hero */}
       <section className="relative">
         <div className="mx-auto max-w-[1200px] px-4 pt-16 pb-8 sm:px-6 sm:pt-24 lg:pt-28">
-          <div className="mx-auto max-w-3xl text-center">
+          <div data-gsap="hero-copy" className="mx-auto max-w-3xl text-center">
             <h1 className="vapi-headline text-balance text-[clamp(2.5rem,6vw,4.25rem)]">
               Turn guest questions into
               <br />
@@ -186,7 +188,7 @@ export default function MarketingHomePage() {
             </div>
 
             <div className="mt-12 flex justify-center">
-              <Link href="/demo" className="vapi-talk-console">
+              <Link href="/demo" data-gsap="talk-console" className="vapi-talk-console">
                 Talk to StayNEP
                 <span className="grid grid-cols-2 gap-0.5">
                   {[0, 1, 2, 3].map((i) => (
@@ -197,7 +199,7 @@ export default function MarketingHomePage() {
             </div>
           </div>
 
-          <div className="mt-14 hidden lg:block">
+          <div data-gsap="pipeline" className="mt-14 hidden lg:block">
             <VoicePipelineDemo />
           </div>
         </div>
@@ -206,11 +208,12 @@ export default function MarketingHomePage() {
       </section>
 
       {/* Logo strip */}
-      <section className="vapi-hairline py-10">
+      <section data-gsap-section className="vapi-hairline py-10">
         <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-center gap-8 px-4 sm:gap-10 sm:px-6">
           {LOGO_STRIP.map((name) => (
             <span
               key={name}
+              data-gsap-item
               className="font-mono text-xs uppercase tracking-[0.08em] text-bone-text/70"
             >
               {name}
@@ -220,11 +223,12 @@ export default function MarketingHomePage() {
       </section>
 
       {/* Stats */}
-      <section className="vapi-hairline py-16 sm:py-20">
+      <section data-gsap-section className="vapi-hairline py-16 sm:py-20">
         <div className="mx-auto grid max-w-[1200px] grid-cols-1 gap-0 px-4 sm:grid-cols-3 sm:px-6">
           {STATS.map((stat, index) => (
             <Reveal key={stat.label} delayMs={index * 100}>
               <div
+                data-gsap-card
                 className={`vapi-list-item px-6 py-8 text-center sm:py-10 ${
                   index > 0 ? "sm:border-l sm:border-iron-border" : ""
                 }`}
@@ -237,7 +241,7 @@ export default function MarketingHomePage() {
       </section>
 
       {/* How it works */}
-      <section id="how-it-works" className="scroll-mt-24 vapi-hairline py-16 sm:py-20">
+      <section id="how-it-works" data-gsap-section className="scroll-mt-24 vapi-hairline py-16 sm:py-20">
         <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
           <Reveal className="max-w-2xl">
             <h2 className="vapi-section-heading text-[clamp(2rem,4vw,2.5rem)]">
@@ -251,7 +255,7 @@ export default function MarketingHomePage() {
           <div className="mt-12 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {HOW_IT_WORKS.map((step, index) => (
               <Reveal key={step.title} delayMs={index * 70}>
-                <article className="flex h-full flex-col rounded-[5.6px] border border-iron-border bg-carbon-surface p-6 transition-colors hover:border-steel-border">
+                <article data-gsap-card className="flex h-full flex-col rounded-[5.6px] border border-iron-border bg-carbon-surface p-6 transition-colors hover:border-steel-border">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-[5.6px] border border-iron-border bg-slab-elevated">
                       <step.icon className="h-5 w-5 text-ice-border" strokeWidth={1.5} />
@@ -280,7 +284,7 @@ export default function MarketingHomePage() {
       </section>
 
       {/* Features */}
-      <section id="features" className="scroll-mt-24 vapi-hairline py-16 sm:py-20">
+      <section id="features" data-gsap-section className="scroll-mt-24 vapi-hairline py-16 sm:py-20">
         <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
           <Reveal className="max-w-2xl">
             <h2 className="vapi-section-heading text-[clamp(2rem,4vw,2.5rem)]">
@@ -291,7 +295,7 @@ export default function MarketingHomePage() {
           <div className="mt-12 grid gap-4 sm:grid-cols-2">
             {FEATURES.map((feature, index) => (
               <Reveal key={feature.title} delayMs={index * 70}>
-                <article className="flex h-full flex-col rounded-[5.6px] border border-iron-border bg-carbon-surface p-6 transition-colors hover:border-steel-border">
+                <article data-gsap-card className="flex h-full flex-col rounded-[5.6px] border border-iron-border bg-carbon-surface p-6 transition-colors hover:border-steel-border">
                   <div className="flex h-10 w-10 items-center justify-center rounded-[5.6px] border border-iron-border bg-slab-elevated">
                     <feature.icon className="h-5 w-5 text-ice-border" strokeWidth={1.5} />
                   </div>
@@ -305,7 +309,7 @@ export default function MarketingHomePage() {
       </section>
 
       {/* Comparison */}
-      <section className="vapi-hairline py-16 sm:py-20">
+      <section data-gsap-section className="vapi-hairline py-16 sm:py-20">
         <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
           <Reveal className="max-w-2xl">
             <h2 className="vapi-section-heading text-[clamp(1.75rem,3.5vw,2.25rem)]">
@@ -324,6 +328,7 @@ export default function MarketingHomePage() {
               {COMPARISON.map((row) => (
                 <div
                   key={row.feature}
+                  data-gsap-card
                   className="grid grid-cols-1 gap-2 border-t border-iron-border px-4 py-4 text-sm max-md:space-y-2 md:grid-cols-[1.2fr_repeat(3,minmax(0,1fr))] md:items-center md:gap-4"
                 >
                   <span className="font-medium text-cream-text">{row.feature}</span>
@@ -350,7 +355,7 @@ export default function MarketingHomePage() {
       </section>
 
       {/* Guest paths */}
-      <section id="paths" className="scroll-mt-24 vapi-hairline py-16 sm:py-20">
+      <section id="paths" data-gsap-section className="scroll-mt-24 vapi-hairline py-16 sm:py-20">
         <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
           <Reveal className="max-w-2xl">
             <h2 className="vapi-section-heading text-[clamp(2rem,4vw,2.5rem)]">
@@ -366,6 +371,7 @@ export default function MarketingHomePage() {
               <Reveal key={item.title} delayMs={index * 70}>
                 <a
                   href={item.href}
+                  data-gsap-card
                   {...(item.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                   className="group flex items-center justify-between gap-4 px-6 py-5 transition-colors hover:bg-slab-elevated sm:px-8"
                 >
@@ -389,9 +395,9 @@ export default function MarketingHomePage() {
       </section>
 
       {/* Platform CTA */}
-      <section id="platform" className="scroll-mt-24 vapi-hairline px-4 py-16 sm:px-6 sm:py-20">
+      <section id="platform" data-gsap-section className="scroll-mt-24 vapi-hairline px-4 py-16 sm:px-6 sm:py-20">
         <Reveal>
-          <div className="mx-auto max-w-[1200px] rounded-[5.6px] border border-iron-border bg-carbon-surface p-6 sm:p-10">
+          <div data-gsap-card className="mx-auto max-w-[1200px] rounded-[5.6px] border border-iron-border bg-carbon-surface p-6 sm:p-10">
             <div className="flex items-center gap-3">
               <Hotel className="h-5 w-5 text-ice-border" strokeWidth={1.5} />
               <p className="vapi-nav-label">StayNEP platform</p>

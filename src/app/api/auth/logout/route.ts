@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { clearSession, getSession } from "@/lib/auth";
 import { validateCsrf } from "@/lib/csrf";
-import { authAuditLogs } from "@/lib/db";
+import { authAuditLogs, ensureDbReady } from "@/lib/db";
 import { getClientIP } from "@/lib/rateLimit";
 
 export async function POST(req: Request) {
@@ -11,7 +11,8 @@ export async function POST(req: Request) {
   const ip = getClientIP(req);
   const userAgent = req.headers.get("user-agent");
   if (session) {
-    authAuditLogs.create({
+    await ensureDbReady();
+    await authAuditLogs.create({
       hotelId: session.hotelId,
       email: session.email,
       event: "logout",

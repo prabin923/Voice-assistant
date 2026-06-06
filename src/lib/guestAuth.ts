@@ -64,7 +64,7 @@ export async function getGuestSession(): Promise<GuestSession | null> {
   const session = await verifyGuestToken(token);
   if (!session) return null;
 
-  const guest = guests.findById(session.guestId);
+  const guest = await guests.findById(session.guestId);
   if (!guest || guest.session_version !== session.tokenVersion) return null;
 
   return session;
@@ -93,11 +93,11 @@ export async function registerGuest(input: {
   if (!email || !input.name.trim() || input.password.length < 8) {
     throw new Error("Invalid registration data");
   }
-  if (guests.findByEmail(email)) {
+  if (await guests.findByEmail(email)) {
     throw new Error("Email already registered");
   }
 
-  const guest = guests.create({
+  const guest = await guests.create({
     name: input.name.trim(),
     email,
     password: await hashPassword(input.password),
@@ -116,13 +116,13 @@ export async function registerGuest(input: {
 
 export async function loginGuest(email: string, password: string) {
   const normalized = email.trim().toLowerCase();
-  const guest = guests.findByEmail(normalized);
+  const guest = await guests.findByEmail(normalized);
   if (!guest || !(await verifyPassword(password, guest.password))) {
     throw new Error("Invalid credentials");
   }
 
-  guests.recordVisit(guest.id);
-  const refreshed = guests.findById(guest.id)!;
+  await guests.recordVisit(guest.id);
+  const refreshed = (await guests.findById(guest.id))!;
   const token = await createGuestToken({
     guestId: refreshed.id,
     email: refreshed.email,

@@ -172,35 +172,44 @@ export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
   supportedLanguages: ["en-US", "es-ES", "fr-FR", "de-DE", "ja-JP", "zh-CN", "hi-IN", "ne-NP", "ko-KR", "ar-SA", "pt-BR", "ru-RU", "it-IT", "tr-TR", "th-TH", "vi-VN", "id-ID", "nl-NL", "pl-PL", "sv-SE"],
 };
 
-import { hotels } from "./db";
+import { hotels, ensureDbReady } from "./db";
+import { syncInventoryFromConfig } from "./inventorySync";
 
 // ============================================================
-// CONFIG STORE — In-memory store for the current session.
-// Persisted to the SQLite database.
+// CONFIG STORE — In-memory cache; persisted via ensureHotelConfigLoaded().
 // ============================================================
 let currentConfig: HotelConfig | null = null;
+let loadPromise: Promise<HotelConfig> | null = null;
 
-export function getHotelConfig(): HotelConfig {
+export async function ensureHotelConfigLoaded(): Promise<HotelConfig> {
   if (currentConfig) return currentConfig;
-
-  // Initial load from DB
-  try {
-    const hotel = hotels.getFirst();
-    if (hotel && hotel.config && hotel.config !== '{}') {
-      currentConfig = JSON.parse(hotel.config);
-      return currentConfig as HotelConfig;
-    }
-  } catch (e) {
-    console.error("Failed to load config from DB:", e);
+  if (!loadPromise) {
+    loadPromise = (async () => {
+      await ensureDbReady();
+      try {
+        const hotel = await hotels.getFirst();
+        if (hotel?.config && hotel.config !== "{}") {
+          currentConfig = JSON.parse(hotel.config) as HotelConfig;
+        } else {
+          currentConfig = { ...DEFAULT_HOTEL_CONFIG };
+        }
+      } catch (e) {
+        console.error("Failed to load config from DB:", e);
+        currentConfig = { ...DEFAULT_HOTEL_CONFIG };
+      }
+      await syncInventoryFromConfig(currentConfig);
+      return currentConfig;
+    })();
   }
-
-  // Fallback to defaults
-  currentConfig = { ...DEFAULT_HOTEL_CONFIG };
-  return currentConfig;
+  return loadPromise;
 }
 
-export function updateHotelConfig(updates: Partial<HotelConfig>): HotelConfig {
-  const config = getHotelConfig();
+export function getHotelConfig(): HotelConfig {
+  return currentConfig ?? DEFAULT_HOTEL_CONFIG;
+}
+
+export async function updateHotelConfig(updates: Partial<HotelConfig>): Promise<HotelConfig> {
+  const config = await ensureHotelConfigLoaded();
 
   const prevHotelName = config.branding.hotelName;
   const nextHotelName = updates.branding?.hotelName ?? prevHotelName;
@@ -223,29 +232,30 @@ export function updateHotelConfig(updates: Partial<HotelConfig>): HotelConfig {
 
   // Persist to DB (for the first hotel found)
   try {
-    const hotel = hotels.getFirst();
+    const hotel = await hotels.getFirst();
     if (hotel) {
-      hotels.updateConfig(hotel.id, JSON.stringify(updated));
+      await hotels.updateConfig(hotel.id, JSON.stringify(updated));
     }
   } catch (e) {
     console.error("Failed to persist config to DB:", e);
   }
 
+  await syncInventoryFromConfig(updated);
   return updated;
 }
 
-export function resetHotelConfig(): HotelConfig {
+export async function resetHotelConfig(): Promise<HotelConfig> {
   currentConfig = { ...DEFAULT_HOTEL_CONFIG };
-  
-  // Persist reset to DB
+
   try {
-    const hotel = hotels.getFirst();
+    const hotel = await hotels.getFirst();
     if (hotel) {
-      hotels.updateConfig(hotel.id, JSON.stringify(currentConfig));
+      await hotels.updateConfig(hotel.id, JSON.stringify(currentConfig));
     }
   } catch (e) {
     console.error("Failed to reset config in DB:", e);
   }
 
+  await syncInventoryFromConfig(currentConfig);
   return currentConfig;
 }

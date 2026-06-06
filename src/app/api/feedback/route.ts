@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { feedback } from "@/lib/db";
+import { feedback, ensureDbReady } from "@/lib/db";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
 import { requireAuth } from "@/lib/auth";
 import { getGuestSession } from "@/lib/guestAuth";
@@ -12,6 +12,8 @@ export async function POST(req: Request) {
     if (!limit.allowed) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
+
+    await ensureDbReady();
 
     const { messageContent, rating, comment } = await req.json();
 
@@ -29,7 +31,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "comment too long (max 1000 chars)" }, { status: 400 });
     }
 
-    const id = feedback.create({
+    const id = await feedback.create({
       messageContent,
       rating,
       comment,
@@ -47,8 +49,10 @@ export async function GET() {
   if (auth.error) return auth.error;
 
   try {
-    const stats = feedback.stats();
-    const recent = feedback.recent(10);
+    await ensureDbReady();
+
+    const stats = await feedback.stats();
+    const recent = await feedback.recent(10);
     return NextResponse.json({ stats, recent });
   } catch {
     return NextResponse.json({ error: "Failed to load feedback" }, { status: 500 });

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { availability } from "@/lib/db";
+import { availability, ensureDbReady } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { validateCsrf } from "@/lib/csrf";
-import { getHotelConfig } from "@/lib/hotelConfig";
+import { ensureHotelConfigLoaded } from "@/lib/hotelConfig";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,9 @@ function addDays(date: string, days: number): string {
 }
 
 export async function GET(req: Request) {
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   const { searchParams } = new URL(req.url);
   const checkIn = searchParams.get("checkIn")?.trim() || "";
   const checkOut = searchParams.get("checkOut")?.trim() || "";
@@ -36,30 +39,33 @@ export async function GET(req: Request) {
     );
   }
 
-  const config = getHotelConfig();
-  const byRoom = config.rooms.map((room) => {
-    const summary = availability.get(room.name, checkIn, checkOut);
-    const payload: Record<string, unknown> = {
-      maxOccupancy: room.maxOccupancy,
-      pricePerNight: room.pricePerNight,
-      currency: room.currency,
-      ...summary,
-    };
+  await ensureDbReady();
+  const config = await ensureHotelConfigLoaded();
+  const byRoom = await Promise.all(
+    config.rooms.map(async (room) => {
+      const summary = await availability.get(room.name, checkIn, checkOut);
+      const payload: Record<string, unknown> = {
+        maxOccupancy: room.maxOccupancy,
+        pricePerNight: room.pricePerNight,
+        currency: room.currency,
+        ...summary,
+      };
 
-    if (groupBy === "day") {
-      const byDate: Record<string, number> = {};
-      const bookedByDate: Record<string, number> = {};
-      for (let cursor = checkIn; cursor < checkOut; cursor = addDays(cursor, 1)) {
-        const nightly = availability.getNight(room.name, cursor);
-        byDate[cursor] = nightly.free;
-        bookedByDate[cursor] = nightly.booked;
+      if (groupBy === "day") {
+        const byDate: Record<string, number> = {};
+        const bookedByDate: Record<string, number> = {};
+        for (let cursor = checkIn; cursor < checkOut; cursor = addDays(cursor, 1)) {
+          const nightly = await availability.getNight(room.name, cursor);
+          byDate[cursor] = nightly.free;
+          bookedByDate[cursor] = nightly.booked;
+        }
+        payload.byDate = byDate;
+        payload.bookedByDate = bookedByDate;
       }
-      payload.byDate = byDate;
-      payload.bookedByDate = bookedByDate;
-    }
 
-    return payload;
-  });
+      return payload;
+    })
+  );
 
   return NextResponse.json({
     checkIn,
@@ -76,6 +82,8 @@ export async function PUT(req: Request) {
   if (csrfError) return csrfError;
 
   try {
+    await ensureDbReady();
+
     const body = await req.json();
     const roomType = String(body.roomType || "").trim();
     const date = String(body.date || "").trim();
@@ -91,7 +99,7 @@ export async function PUT(req: Request) {
       if (!Number.isFinite(defaultCount) || defaultCount < 0) {
         return NextResponse.json({ error: "defaultCount must be >= 0." }, { status: 400 });
       }
-      availability.setDefault(roomType, Math.floor(defaultCount));
+      await availability.setDefault(roomType, Math.floor(defaultCount));
     }
 
     if (date) {
@@ -99,12 +107,12 @@ export async function PUT(req: Request) {
         return NextResponse.json({ error: "date must be YYYY-MM-DD." }, { status: 400 });
       }
       if (clearOverride) {
-        availability.clearOverride(roomType, date);
+        await availability.clearOverride(roomType, date);
       } else {
         if (!Number.isFinite(count) || count < 0) {
           return NextResponse.json({ error: "count must be >= 0." }, { status: 400 });
         }
-        availability.setOverride(roomType, date, Math.floor(count));
+        await availability.setOverride(roomType, date, Math.floor(count));
       }
     }
 

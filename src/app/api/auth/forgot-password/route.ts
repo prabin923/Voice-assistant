@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "crypto";
 import { NextResponse } from "next/server";
-import { authAuditLogs, hotels, passwordResetTokens } from "@/lib/db";
+import { authAuditLogs, hotels, passwordResetTokens, ensureDbReady } from "@/lib/db";
 import { sendPasswordResetEmail } from "@/lib/email";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
 import { validateCsrf } from "@/lib/csrf";
@@ -35,6 +35,8 @@ export async function POST(req: Request) {
   }
 
   try {
+    await ensureDbReady();
+
     const body = await req.json().catch(() => ({}));
     const email = typeof body?.email === "string" ? body.email.toLowerCase().trim() : "";
 
@@ -43,14 +45,14 @@ export async function POST(req: Request) {
       return NextResponse.json(GENERIC_RESPONSE);
     }
 
-    const hotel = hotels.findByEmail(email);
+    const hotel = await hotels.findByEmail(email);
     if (hotel) {
       const rawToken = randomBytes(32).toString("hex");
       const tokenHash = sha256(rawToken);
       const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60_000).toISOString();
 
-      passwordResetTokens.invalidateActiveForHotel(hotel.id);
-      passwordResetTokens.create({ hotelId: hotel.id, tokenHash, expiresAt });
+      await passwordResetTokens.invalidateActiveForHotel(hotel.id);
+      await passwordResetTokens.create({ hotelId: hotel.id, tokenHash, expiresAt });
 
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
       const resetUrl = `${baseUrl}/admin/reset-password?token=${encodeURIComponent(rawToken)}`;
@@ -60,7 +62,7 @@ export async function POST(req: Request) {
         resetUrl,
       });
 
-      authAuditLogs.create({
+      await authAuditLogs.create({
         hotelId: hotel.id,
         email: hotel.email,
         event: "password_reset_request",

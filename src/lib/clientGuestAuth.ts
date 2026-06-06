@@ -85,3 +85,33 @@ export async function guestLogout(): Promise<void> {
   await ensureGuestCsrf();
   await fetch("/api/guest/auth/logout", withCsrfHeaders({ method: "POST" }));
 }
+
+export interface GuestBooking {
+  id: string;
+  roomType: string;
+  checkIn: string;
+  checkOut: string;
+  rooms: number;
+  guestName: string;
+  status: string;
+  createdAt: string;
+}
+
+export async function fetchGuestBookings(): Promise<GuestBooking[]> {
+  const res = await fetch("/api/guest/bookings", { credentials: "include" });
+  if (res.status === 401) return [];
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Failed to load bookings");
+  return (data.bookings ?? []) as GuestBooking[];
+}
+
+export async function cancelGuestBooking(id: string): Promise<void> {
+  await ensureGuestCsrf();
+  const res = await fetch(`/api/guest/bookings/${id}`, withCsrfHeaders({
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "cancel" }),
+  }));
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Failed to cancel booking");
+}

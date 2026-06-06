@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supportTickets } from "@/lib/db";
+import { supportTickets, ensureDbReady } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { validateCsrf } from "@/lib/csrf";
 
@@ -10,11 +10,13 @@ export async function GET(req: Request) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
 
+  await ensureDbReady();
+
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") || undefined;
 
-  const tickets = supportTickets.list(status);
-  const openCount = supportTickets.openCount();
+  const tickets = await supportTickets.list(status);
+  const openCount = await supportTickets.openCount();
 
   return NextResponse.json({ tickets, openCount });
 }
@@ -27,6 +29,8 @@ export async function PUT(req: Request) {
   if (csrfError) return csrfError;
 
   try {
+    await ensureDbReady();
+
     const { ticketId, staffReply } = await req.json();
 
     if (!ticketId || !staffReply) {
@@ -37,12 +41,12 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "Invalid input types" }, { status: 400 });
     }
 
-    const ticket = supportTickets.getById(ticketId);
+    const ticket = await supportTickets.getById(ticketId);
     if (!ticket) {
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
     }
 
-    supportTickets.reply(ticketId, staffReply);
+    await supportTickets.reply(ticketId, staffReply);
 
     return NextResponse.json({ success: true });
   } catch {

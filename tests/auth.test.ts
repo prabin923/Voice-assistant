@@ -14,6 +14,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 process.env.JWT_SECRET = 'test-secret-key-for-vitest-only';
 
 import { hashPassword, verifyPassword, createToken, verifyToken } from '@/lib/auth';
+import { createGuestToken } from '@/lib/guestAuth';
 
 describe('Auth — Password Hashing', () => {
 
@@ -113,5 +114,15 @@ describe('Auth — JWT Tokens', () => {
     const token1 = await createToken({ hotelId: 'h1', email: 'a@b.com', tokenVersion: 1 });
     const token2 = await createToken({ hotelId: 'h2', email: 'c@d.com', tokenVersion: 2 });
     expect(token1).not.toBe(token2);
+  });
+
+  it('should reject guest session tokens in admin verifyToken', async () => {
+    const guestToken = await createGuestToken({
+      guestId: 'guest-1',
+      email: 'guest@example.com',
+      tokenVersion: 1,
+    });
+    const result = await verifyToken(guestToken);
+    expect(result).toBeNull();
   });
 });

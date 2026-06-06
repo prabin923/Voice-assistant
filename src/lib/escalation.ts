@@ -79,7 +79,7 @@ export async function notifyHotelStaff(input: StaffHandoffInput): Promise<string
   const langCode = input.language || config.language || "en-US";
 
   try {
-    const ticket = supportTickets.create({
+    const ticket = await supportTickets.create({
       guestMessage: input.guestMessage,
       aiResponse: input.aiResponse,
       language: langCode,

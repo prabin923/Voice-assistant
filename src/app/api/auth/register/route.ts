@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authAuditLogs, hotels } from "@/lib/db";
+import { authAuditLogs, hotels, ensureDbReady } from "@/lib/db";
 import { hashPassword, createToken, setSessionCookie } from "@/lib/auth";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
 import { validateCsrf } from "@/lib/csrf";
@@ -36,6 +36,8 @@ export async function POST(request: Request) {
       );
     }
 
+    await ensureDbReady();
+
     const body = await request.json().catch(() => ({}));
     const name = typeof body?.name === "string" ? body.name : "";
     const email = typeof body?.email === "string" ? body.email : "";
@@ -57,14 +59,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Registration failed" }, { status: 400 });
     }
 
-    const existing = hotels.findByEmail(normalizedEmail);
+    const existing = await hotels.findByEmail(normalizedEmail);
     if (existing) {
       await waitForMinimumDuration(requestStart);
       return NextResponse.json({ error: "Registration failed" }, { status: 400 });
     }
 
     const hashedPassword = await hashPassword(password);
-    const hotel = hotels.create({ name: trimmedName, email: normalizedEmail, password: hashedPassword });
+    const hotel = await hotels.create({ name: trimmedName, email: normalizedEmail, password: hashedPassword });
 
     const token = await createToken({
       hotelId: hotel.id,
@@ -72,7 +74,7 @@ export async function POST(request: Request) {
       tokenVersion: hotel.session_version,
     });
     await setSessionCookie(token);
-    authAuditLogs.create({
+    await authAuditLogs.create({
       hotelId: hotel.id,
       email: hotel.email,
       event: "register",

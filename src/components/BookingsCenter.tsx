@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarCheck, Download, Loader2, RefreshCw } from "lucide-react";
+import { CalendarCheck, Download, Loader2, RefreshCw, XCircle } from "lucide-react";
 import { fetchJsonWithAuth } from "@/lib/clientAuth";
 
 interface BookingRow {
@@ -56,6 +56,7 @@ function toCsv(rows: BookingRow[]): string {
 export function BookingsCenter({ isDark, cardCls, labelCls, onToast }: Props) {
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [mode, setMode] = useState<"all" | "upcoming">("upcoming");
 
   const load = useCallback(async () => {
@@ -75,6 +76,24 @@ export function BookingsCenter({ isDark, cardCls, labelCls, onToast }: Props) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const cancelBooking = async (id: string) => {
+    if (!window.confirm("Cancel this booking?")) return;
+    setCancellingId(id);
+    try {
+      await fetchJsonWithAuth<{ success: boolean }>(`/api/bookings/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel" }),
+      });
+      onToast("Booking cancelled", "success");
+      await load();
+    } catch {
+      onToast("Failed to cancel booking", "delete");
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   const exportCsv = () => {
     if (!bookings.length) {
@@ -154,7 +173,8 @@ export function BookingsCenter({ isDark, cardCls, labelCls, onToast }: Props) {
                   <th className="pb-3 pr-3">Room</th>
                   <th className="pb-3 pr-3">Stay</th>
                   <th className="pb-3 pr-3">Status</th>
-                  <th className="pb-3">ID</th>
+                  <th className="pb-3 pr-3">ID</th>
+                  <th className="pb-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -173,7 +193,30 @@ export function BookingsCenter({ isDark, cardCls, labelCls, onToast }: Props) {
                       {formatDate(b.check_in)} → {formatDate(b.check_out)}
                     </td>
                     <td className="py-3 pr-3 align-top capitalize">{b.status}</td>
-                    <td className="py-3 align-top font-mono text-xs">{b.id.slice(0, 8).toUpperCase()}</td>
+                    <td className="py-3 pr-3 align-top font-mono text-xs">{b.id.slice(0, 8).toUpperCase()}</td>
+                    <td className="py-3 align-top">
+                      {b.status === "confirmed" ? (
+                        <button
+                          type="button"
+                          onClick={() => void cancelBooking(b.id)}
+                          disabled={cancellingId === b.id}
+                          className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold ${
+                            isDark
+                              ? "border-red-500/30 text-red-400 hover:bg-red-500/10"
+                              : "border-red-200 text-red-600 hover:bg-red-50"
+                          }`}
+                        >
+                          {cancellingId === b.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <XCircle className="w-3 h-3" />
+                          )}
+                          Cancel
+                        </button>
+                      ) : (
+                        <span className={`text-xs ${muted}`}>—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

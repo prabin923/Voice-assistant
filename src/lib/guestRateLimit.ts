@@ -1,4 +1,4 @@
-import { checkRateLimit } from "@/lib/rateLimit";
+import { checkRateLimitAsync } from "@/lib/rateLimitDistributed";
 import { guests } from "@/lib/db";
 
 /** Burst limits per minute */
@@ -13,14 +13,14 @@ export type GuestRateLimitResult =
   | { allowed: true; remainingDaily?: number }
   | { allowed: false; reason: "burst" | "daily"; retryAfterMs?: number; requiresAuth?: boolean };
 
-export function checkGuestChatRateLimit(input: {
+export async function checkGuestChatRateLimit(input: {
   ip: string;
   guestId?: string | null;
-}): GuestRateLimitResult {
+}): Promise<GuestRateLimitResult> {
   const { ip, guestId } = input;
 
   if (guestId) {
-    const burst = checkRateLimit(`chat-guest:${guestId}`, {
+    const burst = await checkRateLimitAsync(`chat-guest:${guestId}`, {
       maxRequests: GUEST_CHAT_BURST,
       windowMs: 60_000,
     });
@@ -28,7 +28,7 @@ export function checkGuestChatRateLimit(input: {
       return { allowed: false, reason: "burst", retryAfterMs: burst.retryAfterMs };
     }
 
-    const dailyCount = guests.todayMessageCount(guestId);
+    const dailyCount = await guests.todayMessageCount(guestId);
     if (dailyCount >= GUEST_CHAT_DAILY) {
       return { allowed: false, reason: "daily" };
     }
@@ -36,7 +36,7 @@ export function checkGuestChatRateLimit(input: {
     return { allowed: true, remainingDaily: GUEST_CHAT_DAILY - dailyCount };
   }
 
-  const burst = checkRateLimit(`chat-anon:${ip}`, {
+  const burst = await checkRateLimitAsync(`chat-anon:${ip}`, {
     maxRequests: ANON_CHAT_BURST,
     windowMs: 60_000,
   });
@@ -50,7 +50,7 @@ export function checkGuestChatRateLimit(input: {
   }
 
   const dailyKey = `chat-anon-daily:${ip}`;
-  const daily = checkRateLimit(dailyKey, {
+  const daily = await checkRateLimitAsync(dailyKey, {
     maxRequests: ANON_CHAT_DAILY,
     windowMs: 24 * 60 * 60 * 1000,
   });

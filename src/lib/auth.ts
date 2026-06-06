@@ -28,6 +28,7 @@ export async function verifyToken(token: string): Promise<{ hotelId: string; ema
   try {
     if (!hasProductionJwtSecret() && process.env.NODE_ENV === "production") return null;
     const { payload } = await jwtVerify(token, getJwtSecretBytes());
+    if (payload.typ === "guest") return null;
     return payload as unknown as { hotelId: string; email: string; tokenVersion: number };
   } catch {
     return null;
@@ -76,7 +77,7 @@ export async function getSession(): Promise<{ hotelId: string; email: string; to
   const session = await verifyToken(token);
   if (!session) return null;
 
-  const hotel = hotels.findById(session.hotelId);
+  const hotel = await hotels.findById(session.hotelId);
   if (!hotel || hotel.session_version !== session.tokenVersion) {
     return null;
   }

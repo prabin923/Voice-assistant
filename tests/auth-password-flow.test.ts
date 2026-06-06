@@ -21,6 +21,8 @@ const {
   mockRequireAuth,
   mockGetSession,
   mockClearSession,
+  mockEnsureDbReady,
+  mockCheckRateLimitAsync,
 } = vi.hoisted(() => ({
   mockFindByEmail: vi.fn(),
   mockFindById: vi.fn(),
@@ -40,9 +42,12 @@ const {
   mockRequireAuth: vi.fn(),
   mockGetSession: vi.fn(),
   mockClearSession: vi.fn(),
+  mockEnsureDbReady: vi.fn(),
+  mockCheckRateLimitAsync: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
+  ensureDbReady: mockEnsureDbReady,
   hotels: {
     findByEmail: mockFindByEmail,
     findById: mockFindById,
@@ -71,6 +76,10 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("@/lib/rateLimit", () => ({
   getClientIP: mockGetClientIP,
   checkRateLimit: mockCheckRateLimit,
+}));
+
+vi.mock("@/lib/rateLimitDistributed", () => ({
+  checkRateLimitAsync: mockCheckRateLimitAsync,
 }));
 
 vi.mock("@/lib/csrf", () => ({
@@ -104,6 +113,8 @@ describe("Auth password reset and audit routes", () => {
     mockCheckRateLimit.mockReturnValue({ allowed: true, retryAfterMs: 0 });
     mockValidateCsrf.mockResolvedValue(null);
     mockBumpSessionVersion.mockReturnValue(2);
+    mockEnsureDbReady.mockResolvedValue(undefined);
+    mockCheckRateLimitAsync.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
   });
 
   it("POST forgot-password returns generic message for empty email", async () => {

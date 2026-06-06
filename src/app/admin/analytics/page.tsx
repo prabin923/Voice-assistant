@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   BarChart3, TrendingUp, Globe, Clock, MessageSquare,
   ChevronLeft, Settings, LogOut, User, Loader2, Activity,
-  AlertTriangle, CheckCircle2, Timer, Inbox, RefreshCw, Zap, ThumbsUp, Sun, Moon
+  AlertTriangle, CheckCircle2, Timer, Inbox, RefreshCw, Zap, ThumbsUp, Sun, Moon, CalendarCheck
 } from "lucide-react";
 import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
 import { StaynepLogo } from "@/components/StaynepLogo";
@@ -27,6 +27,13 @@ interface AnalyticsData {
   resolutionRate: number;
   avgResolutionHours: number;
   feedbackStats: { total: number; up: number; down: number; satisfaction: number };
+  bookingStats?: {
+    total: number;
+    confirmed: number;
+    cancelled: number;
+    upcoming: number;
+    createdLast30Days: number;
+  };
 }
 
 interface AuthAuditLog {
@@ -229,6 +236,13 @@ export default function AnalyticsPage() {
           <StatCard icon={<Zap className="w-5 h-5" />} label="AI Handled" value={`${aiHandledRate}%`} color="purple" isDark={isDark} />
           <StatCard icon={<Timer className="w-5 h-5" />} label="Avg Resolution" value={data.avgResolutionHours > 0 ? `${data.avgResolutionHours}h` : "—"} color="cyan" isDark={isDark} />
           <StatCard icon={<ThumbsUp className="w-5 h-5" />} label="Satisfaction" value={`${data.feedbackStats.satisfaction}%`} color="emerald" isDark={isDark} />
+          {data.bookingStats ? (
+            <>
+              <StatCard icon={<CalendarCheck className="w-5 h-5" />} label="Total Bookings" value={data.bookingStats.total} color="brand" isDark={isDark} />
+              <StatCard icon={<CalendarCheck className="w-5 h-5" />} label="Upcoming Stays" value={data.bookingStats.upcoming} color="blue" isDark={isDark} />
+              <StatCard icon={<CalendarCheck className="w-5 h-5" />} label="Bookings (30d)" value={data.bookingStats.createdLast30Days} color="purple" isDark={isDark} />
+            </>
+          ) : null}
         </div>
 
         {/* Escalation Summary Strip */}

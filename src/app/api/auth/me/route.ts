@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { clearSession, getSession } from "@/lib/auth";
-import { hotels } from "@/lib/db";
+import { hotels, ensureDbReady } from "@/lib/db";
 
 export async function GET() {
   const session = await getSession();
@@ -8,7 +8,8 @@ export async function GET() {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const hotel = hotels.findById(session.hotelId);
+  await ensureDbReady();
+  const hotel = await hotels.findById(session.hotelId);
   if (!hotel) {
     await clearSession();
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

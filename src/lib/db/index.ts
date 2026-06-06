@@ -1,0 +1,25 @@
+export * from "@/lib/db/types";
+export {
+  interactions,
+  supportTickets,
+  availability,
+  bookings,
+  guests,
+  hotels,
+  authAuditLogs,
+  passwordResetTokens,
+  feedback,
+  initDb,
+} from "@/lib/db/repository";
+
+let ready: Promise<void> | null = null;
+
+export async function ensureDbReady(): Promise<void> {
+  if (!ready) {
+    ready = (async () => {
+      const { initDb } = await import("@/lib/db/repository");
+      await initDb();
+    })();
+  }
+  await ready;
+}
