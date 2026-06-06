@@ -9,7 +9,7 @@ import {
   Crown, Sparkles, Sun, Moon, Bell, CalendarDays,
 } from "lucide-react";
 import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
-import { applyHotelBrandTheme, notifyHotelConfigUpdated } from "@/lib/hotelBrand";
+import { applyHotelBrandTheme, notifyHotelConfigUpdated, syncBrandingOnHotelRename } from "@/lib/hotelBrand";
 import { StaynepLogo } from "@/components/StaynepLogo";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 import { StaffNotificationCenter } from "@/components/StaffNotificationCenter";
@@ -189,7 +189,18 @@ export default function SettingsPage() {
   }`;
 
   // Helper to update nested config
-  const updateBranding = (key: string, value: string) => setConfig({ ...config, branding: { ...config.branding, [key]: value } });
+  const updateBranding = (key: string, value: string) => {
+    setConfig((prev) => {
+      if (!prev) return prev;
+      if (key === "hotelName") {
+        return {
+          ...prev,
+          branding: syncBrandingOnHotelRename(prev.branding.hotelName, value, prev.branding),
+        };
+      }
+      return { ...prev, branding: { ...prev.branding, [key]: value } };
+    });
+  };
   const updateContact = (key: string, value: string) => setConfig({ ...config, contact: { ...config.contact, [key]: value } });
   const updatePolicy = (key: string, value: string) => setConfig({ ...config, policies: { ...config.policies, [key]: value } });
 

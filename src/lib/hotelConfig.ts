@@ -6,6 +6,8 @@
 // settings panel or by editing the config directly.
 // ============================================================
 
+import { syncBrandingOnHotelRename } from "@/lib/hotelBrand";
+
 export interface RoomType {
   name: string;
   pricePerNight: number;
@@ -202,33 +204,16 @@ export function updateHotelConfig(updates: Partial<HotelConfig>): HotelConfig {
   const prevHotelName = config.branding.hotelName;
   const nextHotelName = updates.branding?.hotelName ?? prevHotelName;
 
-  const updated = { ...config, ...updates };
+  const updated: HotelConfig = {
+    ...config,
+    ...updates,
+    branding: { ...config.branding, ...(updates.branding ?? {}) },
+    contact: { ...config.contact, ...(updates.contact ?? {}) },
+    policies: { ...config.policies, ...(updates.policies ?? {}) },
+  };
 
-  // If the user only changed the hotel name (and left default welcome/farewell intact),
-  // regenerate those templates so the assistant UI reflects the new name.
   if (updates.branding?.hotelName && nextHotelName !== prevHotelName) {
-    const prevWelcome = config.branding.welcomeMessage;
-    const prevFarewell = config.branding.farewellMessage;
-
-    const defaultWelcomePrev = `Welcome to ${prevHotelName}! How can I assist you with your stay today?`;
-    const defaultFarewellPrev = `Thank you for choosing ${prevHotelName}. Have a wonderful day!`;
-
-    const defaultWelcomeNext = `Welcome to ${nextHotelName}! How can I assist you with your stay today?`;
-    const defaultFarewellNext = `Thank you for choosing ${nextHotelName}. Have a wonderful day!`;
-
-    if (prevWelcome === defaultWelcomePrev) {
-      updated.branding = {
-        ...updated.branding,
-        welcomeMessage: defaultWelcomeNext,
-      };
-    }
-
-    if (prevFarewell === defaultFarewellPrev) {
-      updated.branding = {
-        ...updated.branding,
-        farewellMessage: defaultFarewellNext,
-      };
-    }
+    updated.branding = syncBrandingOnHotelRename(prevHotelName, nextHotelName, updated.branding);
   }
 
   currentConfig = updated;

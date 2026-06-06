@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getHotelConfig } from '@/lib/hotelConfig';
 import { getAssistantResponse } from '@/lib/responseEngine';
-import { availability, bookings, interactions } from '@/lib/db';
+import { availability, bookings, guests, interactions } from '@/lib/db';
 import { notifyHotelStaff, type EscalationReason } from '@/lib/escalation';
-import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
+import { getClientIP } from '@/lib/rateLimit';
 import { aiNotConfiguredResponse, isAiConfigured } from '@/lib/ai';
 import { getKeywordsForLanguage } from '@/lib/languages';
+import { getGuestSession } from '@/lib/guestAuth';
+import { checkGuestChatRateLimit } from '@/lib/guestRateLimit';
 
 export const dynamic = 'force-dynamic';
 
@@ -123,6 +125,7 @@ async function buildBookingReply(params: {
   langCode: string;
   config: ReturnType<typeof getHotelConfig>;
   history: ChatHistoryMessage[];
+  guestProfile?: { id: string; name: string; phone: string | null; email: string };
 }): Promise<{
   handled: boolean;
   reply?: string;
@@ -130,7 +133,7 @@ async function buildBookingReply(params: {
   reason?: EscalationReason;
   booking?: BookingSummary;
 }> {
-  const { message, langCode, config, history } = params;
+  const { message, langCode, config, history, guestProfile } = params;
   if (!isBookingIntent(message, langCode)) return { handled: false };
 
   const roomNames = config.rooms.map((room) => room.name);
@@ -207,7 +210,11 @@ async function buildBookingReply(params: {
   }
 
   const details = extractGuestDetails(message, history);
-  if (!details.guestName || !details.guestPhone) {
+  const guestName = details.guestName || guestProfile?.name;
+  const guestPhone = details.guestPhone || guestProfile?.phone || undefined;
+  const guestEmail = details.guestEmail || guestProfile?.email;
+
+  if (!guestName || !guestPhone) {
     return {
       handled: true,
       reply:
@@ -221,9 +228,10 @@ async function buildBookingReply(params: {
     checkIn: dateRange.checkIn,
     checkOut: dateRange.checkOut,
     rooms: Math.max(1, Math.floor(requestedRooms)),
-    guestName: details.guestName,
-    guestPhone: details.guestPhone,
-    guestEmail: details.guestEmail,
+    guestName,
+    guestPhone,
+    guestEmail,
+    guestId: guestProfile?.id,
     status: "confirmed",
   });
 
@@ -257,11 +265,31 @@ export async function POST(req: Request) {
   try {
     // Rate limit: 30 chat requests per minute per IP
     const ip = getClientIP(req);
-    const limit = checkRateLimit(`chat:${ip}`, { maxRequests: 30, windowMs: 60000 });
-    if (!limit.allowed) {
+    const guestSession = await getGuestSession();
+    const guestRecord = guestSession ? guests.findById(guestSession.guestId) : undefined;
+
+    const chatLimit = checkGuestChatRateLimit({
+      ip,
+      guestId: guestSession?.guestId,
+    });
+    if (!chatLimit.allowed) {
+      const message =
+        chatLimit.reason === "daily"
+          ? guestSession
+            ? "You have reached today's message limit. Please try again tomorrow."
+            : "Daily guest limit reached. Sign in for a higher limit and saved profile."
+          : "Too many requests. Please wait a moment.";
       return NextResponse.json(
-        { error: "Too many requests. Please wait a moment." },
-        { status: 429, headers: { "Retry-After": String(Math.ceil(limit.retryAfterMs / 1000)) } }
+        {
+          error: message,
+          requiresGuestAuth: Boolean(chatLimit.requiresAuth),
+        },
+        {
+          status: 429,
+          headers: chatLimit.retryAfterMs
+            ? { "Retry-After": String(Math.ceil(chatLimit.retryAfterMs / 1000)) }
+            : undefined,
+        }
       );
     }
 
@@ -292,6 +320,14 @@ export async function POST(req: Request) {
       langCode,
       config,
       history: conversationHistory,
+      guestProfile: guestRecord
+        ? {
+            id: guestRecord.id,
+            name: guestRecord.name,
+            phone: guestRecord.phone,
+            email: guestRecord.email,
+          }
+        : undefined,
     });
 
     if (bookingFlow.handled) {
@@ -309,7 +345,15 @@ export async function POST(req: Request) {
 
     // Log interaction
     try {
-      interactions.log({ guestMessage: message, aiResponse: reply, language: langCode });
+      interactions.log({
+        guestMessage: message,
+        aiResponse: reply,
+        language: langCode,
+        guestId: guestSession?.guestId,
+      });
+      if (guestSession?.guestId) {
+        guests.recordMessage(guestSession.guestId);
+      }
     } catch (e) {
       console.error("Failed to log interaction:", e);
     }
@@ -330,6 +374,17 @@ export async function POST(req: Request) {
       escalated: escalate,
       ticketId,
       booking,
+      guest: guestRecord
+        ? {
+            name: guestRecord.name,
+            loyaltyTier:
+              guestRecord.visit_count >= 10
+                ? "loyal"
+                : guestRecord.visit_count >= 2
+                  ? "returning"
+                  : "new",
+          }
+        : undefined,
       hotelName: config.branding.hotelName,
       language: langCode,
       responseTimeMs,

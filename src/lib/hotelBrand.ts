@@ -10,6 +10,77 @@ const DEFAULT_BRANDING: BrandingConfig = {
   farewellMessage: "Thank you for choosing Willow Hotel. Have a wonderful day!",
 };
 
+export function defaultWelcomeMessage(hotelName: string): string {
+  const name = hotelName.trim() || "Your Hotel";
+  return `Welcome to ${name}! How can I assist you with your stay today?`;
+}
+
+export function defaultFarewellMessage(hotelName: string): string {
+  const name = hotelName.trim() || "Your Hotel";
+  return `Thank you for choosing ${name}. Have a wonderful day!`;
+}
+
+/** Replace the previous hotel name inside welcome/farewell when the name changes in settings. */
+export function syncBrandingOnHotelRename(
+  prevName: string,
+  nextName: string,
+  branding: BrandingConfig,
+): BrandingConfig {
+  const trimmedPrev = prevName.trim();
+  const trimmedNext = nextName.trim();
+  if (!trimmedNext || trimmedPrev === trimmedNext) {
+    return { ...branding, hotelName: trimmedNext || branding.hotelName };
+  }
+
+  const next = { ...branding, hotelName: trimmedNext };
+  const welcome = branding.welcomeMessage?.trim() ?? "";
+  const farewell = branding.farewellMessage?.trim() ?? "";
+
+  if (
+    !welcome ||
+    welcome === defaultWelcomeMessage(trimmedPrev) ||
+    (trimmedPrev && welcome.includes(trimmedPrev))
+  ) {
+    next.welcomeMessage = defaultWelcomeMessage(trimmedNext);
+  }
+
+  if (
+    !farewell ||
+    farewell === defaultFarewellMessage(trimmedPrev) ||
+    (trimmedPrev && farewell.includes(trimmedPrev))
+  ) {
+    next.farewellMessage = defaultFarewellMessage(trimmedNext);
+  }
+
+  return next;
+}
+
+/** Headline for guest-facing screens — always the configured hotel name. */
+export function getGuestWelcomeHeadline(branding: BrandingConfig): string {
+  return branding.hotelName?.trim() || "Your Hotel";
+}
+
+/** Subtext after the hotel name — strips a redundant "Welcome to {name}" prefix if present. */
+export function getGuestWelcomeSubtext(branding: BrandingConfig): string {
+  const name = branding.hotelName?.trim();
+  const welcome = branding.welcomeMessage?.trim() || defaultWelcomeMessage(name || "Your Hotel");
+  const fallback = "How can I assist you with your stay today?";
+
+  if (!name) return welcome;
+
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!new RegExp(escaped, "i").test(welcome)) {
+    return fallback;
+  }
+
+  const withoutPrefix = welcome
+    .replace(new RegExp(`^Welcome to\\s+${escaped}!?\\s*`, "i"), "")
+    .replace(new RegExp(`^Welcome to\\s+${escaped}\\s*`, "i"), "")
+    .trim();
+
+  return withoutPrefix || fallback;
+}
+
 const DEFAULT_SUGGESTED_QUESTIONS = [
   "What time is check-in and check-out?",
   "Do you have a swimming pool or gym?",

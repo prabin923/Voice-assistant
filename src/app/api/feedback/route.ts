@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { feedback } from "@/lib/db";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
 import { requireAuth } from "@/lib/auth";
+import { getGuestSession } from "@/lib/guestAuth";
 
 // POST is public (guests submit feedback) — rate-limited
 export async function POST(req: Request) {
@@ -28,7 +29,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "comment too long (max 1000 chars)" }, { status: 400 });
     }
 
-    const id = feedback.create({ messageContent, rating, comment });
+    const id = feedback.create({
+      messageContent,
+      rating,
+      comment,
+      guestId: (await getGuestSession())?.guestId,
+    });
     return NextResponse.json({ id, success: true });
   } catch {
     return NextResponse.json({ error: "Failed to submit feedback" }, { status: 500 });

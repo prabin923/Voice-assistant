@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Mic, Volume2, Loader2, Phone, PhoneCall, ChevronDown, ChevronLeft, ChevronRight, Check, ThumbsUp, ThumbsDown, Sun, Moon, History, Clock3 } from "lucide-react";
+import { Mic, Volume2, Loader2, PhoneCall, ChevronDown, ChevronLeft, ChevronRight, Check, ThumbsUp, ThumbsDown, Sun, Moon, History, Sparkles, Bot, ChevronUp, Send, MessageSquare, Globe2, X } from "lucide-react";
 import CallOverlay, { type CallHistoryRecord } from "@/components/CallOverlay";
 import { BookingSummaryCard, type BookingSummary } from "@/components/BookingSummaryCard";
+import { GuestAuthPanel, loadGuestProfile } from "@/components/GuestAuthPanel";
+import type { GuestProfile } from "@/lib/clientGuestAuth";
 import { StaynepLogo } from "@/components/StaynepLogo";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 import { useHotelPublicConfig } from "@/hooks/useHotelPublicConfig";
@@ -17,6 +19,7 @@ import {
 } from "@/lib/voiceSilence";
 
 type VoiceStyle = "warm" | "professional" | "energetic";
+type InputMode = "voice" | "text";
 
 interface LanguageOption {
   code: string;
@@ -228,7 +231,7 @@ function pickRecorderMimeType(): string | undefined {
 }
 
 export default function VoiceAssistant() {
-  const { branding, suggestedQuestions, config: hotelConfig } = useHotelPublicConfig();
+  const { branding, suggestedQuestions, config: hotelConfig, welcomeHeadline, welcomeSubtext } = useHotelPublicConfig();
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -250,6 +253,12 @@ export default function VoiceAssistant() {
   const [aiReady, setAiReady] = useState<boolean | null>(null);
   const [sttReady, setSttReady] = useState<boolean | null>(null);
   const [geminiLiveReady, setGeminiLiveReady] = useState<boolean | null>(null);
+  const [guestProfile, setGuestProfile] = useState<GuestProfile | null>(null);
+  const [showGuestAuth, setShowGuestAuth] = useState(false);
+  const [showCallHistory, setShowCallHistory] = useState(false);
+  const [inputMode, setInputMode] = useState<InputMode>("voice");
+  const [chatDraft, setChatDraft] = useState("");
+  const chatInputRef = useRef<HTMLInputElement>(null);
   const ui = useMemo(() => getUI(selectedLanguage.code), [selectedLanguage]);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const nativeSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -267,8 +276,14 @@ export default function VoiceAssistant() {
   const cachedVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
   const selectedLanguageRef = useRef(selectedLanguage);
   selectedLanguageRef.current = selectedLanguage;
+  const inputModeRef = useRef(inputMode);
+  inputModeRef.current = inputMode;
 
   useEffect(() => { setMounted(true); }, []);
+
+  useEffect(() => {
+    void loadGuestProfile().then(setGuestProfile).catch(() => setGuestProfile(null));
+  }, []);
 
   useEffect(() => {
     try {
@@ -316,6 +331,22 @@ export default function VoiceAssistant() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    if (!showLanguageMenu) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowLanguageMenu(false);
+        setLanguageSearch("");
+      }
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [showLanguageMenu]);
 
   // Preload voices — some browsers lazy-load them
   useEffect(() => {
@@ -607,7 +638,7 @@ export default function VoiceAssistant() {
     synthRef.current.speak(utterance);
   }, [pickBestVoice, toHumanSpeechText, voiceStyle]);
 
-  const handleUserAudioComplete = useCallback(async (text: string) => {
+  const handleUserMessage = useCallback(async (text: string, speakReply = inputModeRef.current === "voice") => {
     setIsListening(false);
     setIsProcessing(true);
     setMessages((prev) => [...prev, { role: "user", content: text }]);
@@ -616,6 +647,7 @@ export default function VoiceAssistant() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           message: text,
           language: selectedLanguage.code,
@@ -625,6 +657,9 @@ export default function VoiceAssistant() {
       const data = await response.json();
       const apiError =
         typeof data.error === "string" && data.error.trim() ? data.error.trim() : "";
+      if (data.requiresGuestAuth) {
+        setShowGuestAuth(true);
+      }
       const reply =
         typeof data.reply === "string" && data.reply.trim()
           ? data.reply.trim()
@@ -634,6 +669,17 @@ export default function VoiceAssistant() {
               ? ui.errorConnection
               : ui.errorGeneric;
       if (apiError) setErrorMessage(apiError);
+      if (data.guest && guestProfile) {
+        setGuestProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                messageCount: prev.messageCount + 1,
+                loyaltyTier: data.guest.loyaltyTier ?? prev.loyaltyTier,
+              }
+            : prev
+        );
+      }
       const booking =
         data.booking &&
         typeof data.booking === "object" &&
@@ -647,26 +693,43 @@ export default function VoiceAssistant() {
       if (data.escalated) {
         setMessages((prev) => [...prev, { role: "assistant", content: GUEST_STAFF_HANDOFF_MESSAGE }]);
         autoListenAfterSpeakRef.current = false;
+      } else if (speakReply) {
+        autoListenAfterSpeakRef.current = true;
+        speakText(reply);
+      } else {
+        autoListenAfterSpeakRef.current = false;
       }
-      autoListenAfterSpeakRef.current = true;
-      speakText(reply);
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", content: ui.errorConnection }]);
     } finally {
       setIsProcessing(false);
     }
-  }, [messages, selectedLanguage, speakText, ui.errorConnection, ui.errorGeneric]);
+  }, [messages, selectedLanguage, speakText, ui.errorConnection, ui.errorGeneric, guestProfile]);
+
+  const handleUserAudioComplete = useCallback(
+    (text: string) => handleUserMessage(text, inputModeRef.current === "voice"),
+    [handleUserMessage],
+  );
 
   const handleSuggestedQuestion = useCallback((question: string) => {
     if (isProcessing || isListening || isSpeaking || aiReady === false) return;
     setErrorMessage(null);
-    if (!inConversationRef.current) {
+    const useVoice = inputModeRef.current === "voice";
+    if (useVoice && !inConversationRef.current) {
       inConversationRef.current = true;
       setInConversation(true);
       autoListenAfterSpeakRef.current = true;
     }
-    void handleUserAudioComplete(question);
-  }, [aiReady, handleUserAudioComplete, isListening, isProcessing, isSpeaking]);
+    void handleUserMessage(question, useVoice);
+  }, [aiReady, handleUserMessage, isListening, isProcessing, isSpeaking]);
+
+  const submitChatMessage = useCallback(() => {
+    const trimmed = chatDraft.trim();
+    if (!trimmed || isProcessing || isListening || isSpeaking || aiReady === false) return;
+    setErrorMessage(null);
+    setChatDraft("");
+    void handleUserMessage(trimmed, false);
+  }, [aiReady, chatDraft, handleUserMessage, isListening, isProcessing, isSpeaking]);
 
   // Keep refs up to date for use inside callbacks
   handleUserAudioCompleteRef.current = handleUserAudioComplete;
@@ -830,6 +893,14 @@ export default function VoiceAssistant() {
     setIsProcessing(false);
   }, []);
 
+  const switchInputMode = useCallback((mode: InputMode) => {
+    setInputMode(mode);
+    if (mode === "text") {
+      stopEverything();
+      setTimeout(() => chatInputRef.current?.focus(), 100);
+    }
+  }, [stopEverything]);
+
   // ── Simple on/off toggle ──
   const toggleListening = () => {
     if (inConversation || isListening || isSpeaking || isProcessing) {
@@ -878,6 +949,253 @@ export default function VoiceAssistant() {
 
   const formatCallDuration = (secs: number) => `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, "0")}s`;
 
+  const voiceStatusLabel =
+    isListening ? ui.listening : isSpeaking ? ui.speaking : isProcessing ? "Processing" : inConversation ? "Tap to end" : ui.ready;
+
+  const panelShell = isDark
+    ? "border-white/10 bg-white/[0.03] backdrop-blur-xl"
+    : "border-neutral-200/80 bg-white/90 shadow-[0_12px_40px_rgba(15,23,42,0.06)]";
+
+  const renderVoiceOrb = (compact = false) => {
+    const size = compact ? "w-28 h-28" : "w-36 h-36 lg:w-40 lg:h-40";
+    const iconSize = compact ? "w-12 h-12" : "w-16 h-16";
+    const innerIcon = compact ? "w-7 h-7" : "w-9 h-9";
+
+    return (
+      <div className="relative group cursor-pointer mx-auto" onClick={toggleListening}>
+        {!compact && <div className="glass-outer-ring absolute -inset-3 rounded-full" />}
+
+        {isListening && (
+          <div className={`absolute ${compact ? "-inset-10" : "-inset-14"}`}>
+            <div className="ripple-ring scale-150" style={{ animationDelay: "0s", borderColor: branding.accentColor, opacity: 0.35 }} />
+            <div className="ripple-ring scale-150" style={{ animationDelay: "0.8s", borderColor: branding.accentColor, opacity: 0.18 }} />
+          </div>
+        )}
+
+        <div
+          className={`glass-circle relative z-10 ${size} rounded-full flex flex-col items-center justify-center overflow-hidden border hover:scale-[1.03] active:scale-95 transition-all duration-500 ease-out animate-morph ${
+            isListening ? "scale-105 glass-circle-listening" : isDark ? "border-white/[0.08] group-hover:border-white/20" : "border-neutral-200 group-hover:border-neutral-300"
+          } ${isProcessing ? "animate-pulse" : ""} ${isSpeaking ? "scale-[1.02] glass-circle-speaking" : ""}`}
+        >
+          {isProcessing ? (
+            <Loader2 className={`${iconSize} animate-spin ${isDark ? "text-white/80" : "text-neutral-700"}`} />
+          ) : isListening ? (
+            <Mic className={`${iconSize} animate-pulse ${isDark ? "text-white/90" : "text-neutral-800"}`} />
+          ) : isSpeaking ? (
+            <Volume2 className={`${iconSize} animate-pulse-soft ${isDark ? "text-white/90" : "text-neutral-800"}`} />
+          ) : (
+            <div className={`${compact ? "w-14 h-14" : "w-[4.5rem] h-[4.5rem]"} rounded-full flex items-center justify-center border transition-colors ${
+              isDark ? "bg-white/[0.04] border-white/[0.08] group-hover:bg-white/[0.08]" : "bg-white/80 border-neutral-200 group-hover:bg-white"
+            }`}>
+              <Mic className={`${innerIcon} ${isDark ? "text-neutral-400 group-hover:text-white/90" : "text-neutral-500 group-hover:text-neutral-900"}`} />
+            </div>
+          )}
+          <div className={`absolute inset-0 rounded-full pointer-events-none ${isDark ? "bg-gradient-to-b from-white/[0.06] to-transparent" : "bg-gradient-to-b from-white/70 via-white/20 to-transparent"}`} />
+        </div>
+      </div>
+    );
+  };
+
+  const renderSuggestedChips = () =>
+    suggestedQuestions.length > 0 ? (
+      <div className="flex flex-wrap gap-2">
+        {suggestedQuestions.map((question) => (
+          <button
+            key={question}
+            type="button"
+            disabled={aiReady === false || isProcessing || isListening || isSpeaking}
+            onClick={() => handleSuggestedQuestion(question)}
+            className={`rounded-2xl border px-3.5 py-2 text-left text-[12px] font-medium leading-snug transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 ${
+              isDark ? "border-white/10 bg-white/[0.04] text-neutral-200 hover:bg-white/[0.08]" : "border-neutral-200 bg-white text-neutral-700 hover:border-sky-200 hover:bg-sky-50/80"
+            }`}
+          >
+            {question}
+          </button>
+        ))}
+      </div>
+    ) : null;
+
+  const renderChatComposer = () => (
+    <div className={`shrink-0 border-t px-4 py-3 sm:px-5 ${isDark ? "border-white/10" : "border-neutral-200/80"}`}>
+      <div className={`flex gap-1 p-1 rounded-xl mb-2.5 ${isDark ? "bg-white/[0.04]" : "bg-neutral-100"}`}>
+        <button
+          type="button"
+          onClick={() => switchInputMode("voice")}
+          className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-wider transition-all ${
+            inputMode === "voice"
+              ? isDark ? "bg-white/10 text-white shadow-sm" : "bg-white text-neutral-900 shadow-sm"
+              : isDark ? "text-neutral-500 hover:text-neutral-300" : "text-neutral-500 hover:text-neutral-700"
+          }`}
+        >
+          <Mic className="w-3.5 h-3.5" />
+          Voice
+        </button>
+        <button
+          type="button"
+          onClick={() => switchInputMode("text")}
+          className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-wider transition-all ${
+            inputMode === "text"
+              ? isDark ? "bg-white/10 text-white shadow-sm" : "bg-white text-neutral-900 shadow-sm"
+              : isDark ? "text-neutral-500 hover:text-neutral-300" : "text-neutral-500 hover:text-neutral-700"
+          }`}
+        >
+          <MessageSquare className="w-3.5 h-3.5" />
+          Chat
+        </button>
+      </div>
+
+      {inputMode === "text" ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submitChatMessage();
+          }}
+          className="flex gap-2"
+        >
+          <input
+            ref={chatInputRef}
+            type="text"
+            value={chatDraft}
+            onChange={(e) => setChatDraft(e.target.value)}
+            placeholder="Type your message…"
+            disabled={isProcessing || aiReady === false}
+            className={`flex-1 min-w-0 rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors ${
+              isDark
+                ? "bg-white/[0.06] border border-white/10 text-white placeholder-neutral-500 focus:border-white/20"
+                : "bg-white border border-neutral-200 text-neutral-900 placeholder-neutral-400 focus:border-neutral-300"
+            }`}
+          />
+          <button
+            type="submit"
+            disabled={!chatDraft.trim() || isProcessing || aiReady === false}
+            className="shrink-0 h-10 w-10 rounded-xl flex items-center justify-center text-white transition-all active:scale-95 disabled:opacity-40"
+            style={{ background: "rgb(var(--hotel-accent-rgb))" }}
+            aria-label="Send message"
+          >
+            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          </button>
+        </form>
+      ) : (
+        <p className={`text-center text-[11px] leading-relaxed ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>
+          Prefer typing? Switch to <button type="button" onClick={() => switchInputMode("text")} className="font-semibold underline underline-offset-2" style={{ color: "rgb(var(--hotel-accent-bright-rgb))" }}>Chat</button>.
+        </p>
+      )}
+    </div>
+  );
+
+  const renderLanguageMenu = () =>
+    showLanguageMenu ? (
+      <>
+        <button
+          type="button"
+          className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-[2px]"
+          aria-label="Close language menu"
+          onClick={() => {
+            setShowLanguageMenu(false);
+            setLanguageSearch("");
+          }}
+        />
+        <div
+          className={`fixed z-[70] flex flex-col overflow-hidden rounded-2xl border shadow-2xl inset-x-4 top-[4.25rem] max-h-[min(72vh,32rem)] sm:inset-x-auto sm:right-6 sm:w-[22rem] lg:right-[calc(340px+1.5rem)] ${
+            isDark ? "border-white/10 bg-neutral-950" : "border-neutral-200 bg-white"
+          }`}
+          dir="ltr"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Choose language"
+        >
+          <div className={`flex items-center justify-between gap-3 px-4 py-3.5 border-b shrink-0 ${isDark ? "border-white/10" : "border-neutral-200"}`}>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div
+                className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 ${isDark ? "bg-white/[0.06]" : "bg-neutral-100"}`}
+              >
+                <Globe2 className="w-4 h-4" style={{ color: "rgb(var(--hotel-accent-rgb))" }} />
+              </div>
+              <div className="min-w-0">
+                <p className={`text-sm font-bold truncate ${isDark ? "text-white" : "text-neutral-900"}`}>Language</p>
+                <p className={`text-[10px] uppercase tracking-wider ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+                  {ALL_LANGUAGES.length} supported
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowLanguageMenu(false);
+                setLanguageSearch("");
+              }}
+              className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${isDark ? "text-neutral-400 hover:bg-white/10 hover:text-white" : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"}`}
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className={`px-4 py-3 border-b shrink-0 ${isDark ? "border-white/10" : "border-neutral-200"}`}>
+            <input
+              type="text"
+              placeholder="Search language..."
+              value={languageSearch}
+              onChange={(e) => setLanguageSearch(e.target.value)}
+              className={`w-full px-3.5 py-2.5 rounded-xl text-sm outline-none ${
+                isDark
+                  ? "bg-white/[0.06] border border-white/10 text-white placeholder-neutral-500 focus:border-white/20"
+                  : "bg-neutral-50 border border-neutral-200 text-neutral-900 placeholder-neutral-400 focus:border-neutral-300"
+              }`}
+              autoFocus
+            />
+          </div>
+
+          <div className="flex-1 overflow-y-auto scrollbar-premium p-2 min-h-0">
+            {filteredLanguages.length === 0 ? (
+              <p className={`px-3 py-6 text-center text-sm ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+                No languages match your search.
+              </p>
+            ) : (
+              <div className="space-y-0.5">
+                {filteredLanguages.map((lang) => {
+                  const selected = selectedLanguage.code === lang.code;
+                  return (
+                    <button
+                      key={lang.code}
+                      type="button"
+                      onClick={() => changeLanguage(lang)}
+                      className={`w-full px-3 py-2.5 flex items-center gap-3 rounded-xl text-sm transition-all ${
+                        selected
+                          ? isDark
+                            ? "bg-white/10 text-white ring-1 ring-white/15"
+                            : "bg-neutral-100 text-neutral-900 ring-1 ring-neutral-200"
+                          : isDark
+                            ? "text-neutral-300 hover:bg-white/[0.05]"
+                            : "text-neutral-700 hover:bg-neutral-50"
+                      }`}
+                    >
+                      <span className="text-xl shrink-0 leading-none">{lang.flag}</span>
+                      <div className="flex-1 text-left min-w-0">
+                        <div className="font-semibold truncate leading-snug">{lang.nativeName}</div>
+                        <div className={`text-[10px] truncate ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>{lang.name}</div>
+                      </div>
+                      {selected ? (
+                        <Check className="w-4 h-4 shrink-0" style={{ color: "rgb(var(--hotel-accent-rgb))" }} />
+                      ) : (
+                        <span className="w-4 shrink-0" aria-hidden />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className={`shrink-0 px-4 py-2.5 border-t text-center ${isDark ? "border-white/10 bg-black/20" : "border-neutral-200 bg-neutral-50"}`}>
+            <p className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+              Speaking: {selectedLanguage.flag} {selectedLanguage.nativeName}
+            </p>
+          </div>
+        </div>
+      </>
+    ) : null;
+
   return (
     <div
       className={`relative min-h-screen flex flex-col font-sans overflow-hidden transition-colors ${
@@ -888,444 +1206,431 @@ export default function VoiceAssistant() {
     >
       <SiteShellBackdrop isDark={isDark} />
 
-      {/* Nav — same chrome as marketing + admin */}
-      <header className={`sticky top-0 z-20 shrink-0 border-b backdrop-blur-xl ${siteHeaderChrome(isDark)}`}>
-        <div className="mx-auto flex min-h-14 max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-6">
-        <Link href="/" className="flex items-center gap-3 sm:gap-4 cursor-pointer min-w-0" aria-label="Back to StayNEP home">
-          <StaynepLogo isDark={isDark} size="sm" />
-          <div className={`hidden sm:block h-10 w-px shrink-0 ${isDark ? "bg-white/10" : "bg-neutral-200"}`} aria-hidden />
-          <div
-            className="h-11 w-11 shrink-0 rounded-2xl flex items-center justify-center shadow-2xl rotate-3 hover:rotate-0 transition-transform duration-500 overflow-hidden"
-            style={{
-              background: branding.logoUrl ? undefined : `linear-gradient(135deg, ${branding.accentColor}, #fb923c)`,
-              boxShadow: `0 10px 30px -10px ${branding.accentColor}80`,
-            }}
-          >
-            {branding.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={branding.logoUrl} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <span className="text-sm font-black text-white">{branding.hotelName?.charAt(0) || "H"}</span>
-            )}
-          </div>
-          <div className="flex flex-col min-w-0">
-            <h1 className={`text-sm font-bold tracking-tight leading-tight ${isDark ? "text-white" : "text-neutral-900"}`}>{branding.hotelName}</h1>
-            <div className="hidden sm:flex items-center gap-2 mt-0.5">
+      <header className={`sticky top-0 z-30 shrink-0 border-b backdrop-blur-xl ${siteHeaderChrome(isDark)}`}>
+        <div className="mx-auto flex min-h-14 max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <Link href="/" className="flex items-center gap-3 min-w-0" aria-label="Back to StayNEP home">
+            <StaynepLogo isDark={isDark} size="sm" />
+            <div className={`hidden sm:block h-9 w-px shrink-0 ${isDark ? "bg-white/10" : "bg-neutral-200"}`} aria-hidden />
+            <div
+              className="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center overflow-hidden shadow-lg"
+              style={{
+                background: branding.logoUrl ? undefined : `linear-gradient(135deg, ${branding.accentColor}, #fb923c)`,
+                boxShadow: `0 8px 24px -8px ${branding.accentColor}80`,
+              }}
+            >
+              {branding.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={branding.logoUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-sm font-black text-white">{branding.hotelName?.charAt(0) || "H"}</span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <h1 className={`truncate text-sm font-bold tracking-tight ${isDark ? "text-white" : "text-neutral-900"}`}>
+                {branding.hotelName}
+              </h1>
+              <p className={`hidden sm:block text-[10px] font-semibold uppercase tracking-[0.16em] ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+                AI Concierge
+              </p>
+            </div>
+          </Link>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <GuestAuthPanel
+              isDark={isDark}
+              guest={guestProfile}
+              onGuestChange={setGuestProfile}
+              preferredLanguage={selectedLanguage.code}
+              open={showGuestAuth}
+              onOpenChange={setShowGuestAuth}
+            />
+
+            <button
+              type="button"
+              onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+              className={`h-10 w-10 flex items-center justify-center rounded-xl transition-all active:scale-90 ${
+                isDark ? "glass text-neutral-400 hover:text-white" : "bg-white border border-neutral-200 text-neutral-500 hover:text-neutral-900"
+              }`}
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            >
+              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+
+            <div className="relative" ref={langMenuRef}>
               <button
                 type="button"
-                onClick={() => setUseServerSTT((v) => !v)}
-                className={`flex items-center gap-2 rounded-full px-2 py-0.5 transition-colors ${
-                  isDark ? "hover:bg-white/10" : "hover:bg-neutral-100"
+                onClick={() => setShowLanguageMenu((open) => !open)}
+                className={`px-3 py-2 rounded-xl text-[13px] font-medium transition-all flex items-center gap-2 active:scale-95 ${
+                  showLanguageMenu
+                    ? isDark ? "bg-white/10 text-white ring-1 ring-white/15" : "bg-neutral-100 text-neutral-900 ring-1 ring-neutral-200"
+                    : isDark ? "glass text-neutral-300 hover:text-white" : "bg-white border border-neutral-200 text-neutral-700 hover:text-neutral-900"
                 }`}
-                title={useServerSTT ? "Using Gemini STT (uses API quota). Click for Native Mode." : "Using browser speech. Click for AI Mode (Gemini STT)."}
+                aria-expanded={showLanguageMenu}
+                aria-haspopup="dialog"
               >
-                <span className={`w-1.5 h-1.5 rounded-full ${useServerSTT ? "bg-cyan-400" : "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.6)]"}`} />
-                <span className={`text-[9px] font-black tracking-widest uppercase ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
-                  {useServerSTT ? "AI Mode" : "Native Mode"}
-                </span>
+                <span className="text-base">{selectedLanguage.flag}</span>
+                <span className="hidden sm:inline max-w-[5.5rem] truncate">{selectedLanguage.nativeName}</span>
+                <ChevronDown className={`w-3.5 h-3.5 opacity-40 transition-transform ${showLanguageMenu ? "rotate-180" : ""}`} />
               </button>
             </div>
           </div>
-        </Link>
-
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-            className={`h-10 w-10 flex items-center justify-center rounded-2xl transition-all active:scale-90 ${
-              isDark
-                ? "glass text-neutral-400 hover:text-white"
-                : "bg-white border border-neutral-200 text-neutral-500 hover:text-neutral-900"
-            }`}
-            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          >
-            {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
-
-          <div className="relative" ref={langMenuRef}>
-            <button
-              onClick={() => setShowLanguageMenu(!showLanguageMenu)}
-              className={`px-4 py-2.5 rounded-2xl text-[13px] font-medium transition-all flex items-center gap-3 active:scale-95 ${
-                isDark
-                  ? "glass text-neutral-300 hover:text-white"
-                  : "bg-white border border-neutral-200 text-neutral-700 hover:text-neutral-900"
-              }`}
-            >
-              <span className="text-lg">{selectedLanguage.flag}</span>
-              <span className="hidden sm:inline tracking-tight">{selectedLanguage.nativeName}</span>
-              <ChevronDown className={`w-3.5 h-3.5 opacity-40 transition-transform duration-500 ${showLanguageMenu ? "rotate-180" : ""}`} />
-            </button>
-
-            {showLanguageMenu && (
-              <div
-                className={`absolute right-0 mt-3 w-80 max-h-96 rounded-3xl shadow-2xl overflow-hidden z-30 animate-in slide-in-from-top-2 ${
-                  isDark ? "glass-morphic" : "bg-white border border-neutral-200"
-                }`}
-                dir="ltr"
-              >
-                <div className={`p-4 border-b ${isDark ? "border-white/[0.05]" : "border-neutral-200"}`}>
-                  <input
-                    type="text"
-                    placeholder="Search language..."
-                    value={languageSearch}
-                    onChange={(e) => setLanguageSearch(e.target.value)}
-                    className={`w-full px-4 py-3 rounded-2xl text-sm outline-none font-medium ${
-                      isDark
-                        ? "bg-white/5 border border-white/10 text-white"
-                        : "bg-neutral-50 border border-neutral-200 text-neutral-900"
-                    }`}
-                    autoFocus
-                  />
-                </div>
-                <div className="max-h-64 overflow-y-auto scrollbar-premium py-2">
-                  {filteredLanguages.map((lang) => (
-                    <button
-                      key={lang.code}
-                      onClick={() => changeLanguage(lang)}
-                      className={`w-full px-5 py-3.5 flex items-center gap-4 text-sm transition-all group ${
-                        selectedLanguage.code === lang.code
-                          ? (isDark ? "bg-white/10 text-white" : "bg-neutral-100 text-neutral-900")
-                          : (isDark ? "text-neutral-400 hover:bg-white/[0.03]" : "text-neutral-600 hover:bg-neutral-50")
-                      }`}
-                    >
-                      <span className="text-xl group-hover:scale-110 transition-transform">{lang.flag}</span>
-                      <div className="flex-1 text-left min-w-0">
-                        <div className="font-bold truncate">{lang.nativeName}</div>
-                        <div className="text-[10px] uppercase font-bold tracking-widest opacity-40 mt-0.5">{lang.name}</div>
-                      </div>
-                      {selectedLanguage.code === lang.code && (
-                        <Check className="w-4 h-4" style={{ color: "rgb(var(--hotel-accent-rgb))" }} />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-        </div>
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-8 sm:py-12 max-w-5xl w-full mx-auto relative overflow-y-auto scrollbar-hide">
-        {aiReady === false && (
-          <div
-            role="alert"
-            className="mb-6 w-full max-w-xl rounded-2xl border border-amber-500/30 bg-amber-950/50 px-4 py-3 text-center text-sm text-amber-100"
-          >
-            Gemini API key is missing on the server. Local: add <code className="text-amber-200">GOOGLE_GENERATIVE_AI_API_KEY</code> to{" "}
-            <code className="text-amber-200">.env.local</code> and run <code className="text-amber-200">npm run dev</code> again. Production: set the same variable in Vercel → Environment Variables, then redeploy.
+      {aiReady === false && (
+        <div
+          role="alert"
+          className="mx-auto mt-3 w-full max-w-3xl px-4 sm:px-6"
+        >
+          <div className="rounded-xl border border-amber-500/30 bg-amber-950/50 px-4 py-3 text-center text-sm text-amber-100">
+            Gemini API key is missing. Add <code className="text-amber-200">GOOGLE_GENERATIVE_AI_API_KEY</code> to{" "}
+            <code className="text-amber-200">.env.local</code> and restart the dev server.
           </div>
-        )}
-        <div className="w-full flex flex-col items-center gap-16">
-          {mounted ? (
-          <div className="relative group cursor-pointer" onClick={toggleListening}>
-            <div className="glass-outer-ring absolute -inset-4 rounded-full" />
+        </div>
+      )}
 
-            {isListening && (
-              <div className="absolute -inset-20">
-                <div className="ripple-ring scale-150" style={{ animationDelay: '0s', borderColor: branding.accentColor, opacity: 0.4 }} />
-                <div className="ripple-ring scale-150" style={{ animationDelay: '0.8s', borderColor: branding.accentColor, opacity: 0.2 }} />
+      <div className="flex-1 flex flex-col lg:flex-row min-h-0 max-w-7xl w-full mx-auto lg:min-h-[calc(100vh-3.5rem-2.5rem)]">
+        {/* ── Conversation column ── */}
+        <main className={`flex-1 flex flex-col min-h-0 min-w-0 px-4 sm:px-6 pt-4 lg:pb-6 lg:pt-6 lg:h-full ${inputMode === "voice" ? "pb-28" : "pb-4"}`}>
+          <div className={`flex-1 flex flex-col min-h-0 rounded-[1.75rem] border overflow-hidden ${panelShell}`}>
+            {/* Chat header strip */}
+            <div className={`shrink-0 flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 border-b ${isDark ? "border-white/10" : "border-neutral-200/80"}`}>
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0"
+                  style={{ background: `linear-gradient(135deg, ${branding.accentColor}33, rgba(var(--hotel-accent-rgb), 0.15))` }}
+                >
+                  <Sparkles className="w-4 h-4" style={{ color: "rgb(var(--hotel-accent-bright-rgb))" }} />
+                </div>
+                <div className="min-w-0">
+                  <p className={`text-sm font-bold truncate ${isDark ? "text-white" : "text-neutral-900"}`}>
+                    {messages.length === 0 ? welcomeHeadline : "Conversation"}
+                  </p>
+                  <p className={`text-[11px] truncate ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+                    {selectedLanguage.flag} {selectedLanguage.nativeName} · {messages.length === 0 ? welcomeSubtext : ui.welcomeHint}
+                  </p>
+                </div>
               </div>
-            )}
-
-            <div className={`glass-circle relative z-10 w-56 h-56 sm:w-64 sm:h-64 rounded-full flex flex-col items-center justify-center overflow-hidden border hover:scale-105 active:scale-95 transition-all duration-700 ease-out animate-morph ${isListening ? "scale-110 glass-circle-listening" : (isDark ? "border-white/[0.08] group-hover:border-white/20" : "border-neutral-200 group-hover:border-neutral-300")} ${isProcessing ? "animate-pulse" : ""} ${isSpeaking ? "scale-105 glass-circle-speaking" : ""}`}>
-              {isProcessing ? (
-                <div className="flex flex-col items-center gap-4">
-                  <Loader2 className={`w-16 h-16 animate-spin ${isDark ? "text-white/80" : "text-neutral-700"}`} />
-                  <span className={`text-[10px] font-black uppercase tracking-widest animate-pulse ${isDark ? "text-white/30" : "text-neutral-500"}`}>Processing</span>
-                </div>
-              ) : isListening ? (
-                <Mic className={`w-20 h-20 animate-pulse ${isDark ? "text-white/90" : "text-neutral-800"}`} />
-              ) : isSpeaking ? (
-                <Volume2 className={`w-20 h-20 animate-pulse-soft ${isDark ? "text-white/90" : "text-neutral-800"}`} />
-              ) : (
-                <div className="flex flex-col items-center gap-4">
-                  <div className={`w-20 h-20 rounded-full flex items-center justify-center border transition-colors duration-300 ${
-                    isDark
-                      ? "bg-white/[0.04] border-white/[0.08] group-hover:bg-white/[0.08] group-hover:border-white/15"
-                      : "bg-white/80 border-neutral-200 group-hover:bg-white group-hover:border-neutral-300"
-                  }`}>
-                    <Mic className={`w-10 h-10 transition-colors duration-300 ${isDark ? "text-neutral-400 group-hover:text-white/90" : "text-neutral-500 group-hover:text-neutral-900"}`} />
-                  </div>
-                  <div className="flex flex-col items-center gap-1">
-                    <span className={`text-[11px] font-black uppercase tracking-[0.4em] transition-colors duration-300 ${isDark ? "text-neutral-500 group-hover:text-neutral-300" : "text-neutral-600 group-hover:text-neutral-800"}`}>
-                      {ui.tapToSpeak.split(' ')[0]}
-                    </span>
-                    <span className={`text-[9px] font-bold uppercase tracking-[0.2em] transition-colors duration-300 ${isDark ? "text-neutral-600 group-hover:text-neutral-400" : "text-neutral-500 group-hover:text-neutral-700"}`}>
-                      {ui.tapToSpeak.split(' ').slice(1).join(' ')}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              <div className={`absolute inset-0 rounded-full pointer-events-none ${isDark ? "bg-gradient-to-b from-white/[0.06] to-transparent" : "bg-gradient-to-b from-white/70 via-white/20 to-transparent"}`} />
+              {guestProfile ? (
+                <span className={`hidden sm:inline shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
+                  isDark ? "bg-white/10 text-neutral-300" : "bg-neutral-100 text-neutral-600"
+                }`}>
+                  {guestProfile.loyaltyTier} guest
+                </span>
+              ) : null}
             </div>
 
-            <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 whitespace-nowrap">
-              <div className="flex flex-col items-center gap-2">
-                <span
-                  className={`text-[12px] font-black uppercase tracking-[0.5em] transition-all duration-700 ${
-                    isListening
-                      ? ""
-                      : isSpeaking
-                        ? "text-[#7eb8e8]"
-                        : inConversation
-                          ? "text-neutral-400"
-                          : "text-neutral-600"
-                  }`}
-                  style={isListening ? { color: "rgb(var(--hotel-accent-bright-rgb))" } : undefined}
-                >
-                  {isListening ? ui.listening : isSpeaking ? ui.speaking : isProcessing ? 'Processing' : inConversation ? 'Tap to End' : ui.ready}
-                </span>
-                {!isListening && !isSpeaking && !isProcessing && (
-                  <div className={`w-12 h-0.5 rounded-full overflow-hidden ${isDark ? "bg-white/5" : "bg-neutral-300/70"}`}>
-                    <div className="w-full h-full animate-shimmer" style={{ backgroundColor: "rgba(var(--hotel-accent-rgb), 0.25)" }} />
+            {/* Messages scroll area */}
+            <div className="flex-1 overflow-y-auto scrollbar-premium px-4 sm:px-5 py-5">
+              {messages.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center py-8 sm:py-12">
+                  <div
+                    className={`mb-5 h-16 w-16 rounded-2xl flex items-center justify-center border ${
+                      isDark ? "border-white/10 bg-white/[0.04]" : "border-neutral-200 bg-white"
+                    }`}
+                  >
+                    <Bot className={`w-8 h-8 ${isDark ? "text-neutral-400" : "text-neutral-500"}`} />
                   </div>
-                )}
-              </div>
+                  <h2 className="va-welcome-title text-2xl sm:text-3xl text-gradient-brand mb-2 max-w-md text-balance">
+                    {welcomeHeadline}
+                  </h2>
+                  <p className={`text-sm max-w-sm leading-relaxed mb-6 ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
+                    {welcomeSubtext}
+                  </p>
+                  {suggestedQuestions.length > 0 && (
+                    <div className="w-full max-w-lg">
+                      <p className={`mb-3 text-[10px] font-black uppercase tracking-[0.18em] ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+                        {ui.suggestedQuestions}
+                      </p>
+                      <div className="flex flex-wrap justify-center gap-2">{renderSuggestedChips()}</div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-5 pb-4">
+                  {messages.map((msg, i) => (
+                    <div
+                      key={i}
+                      className={`flex gap-3 animate-in slide-in-from-bottom-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
+                    >
+                      <div
+                        className={`shrink-0 h-8 w-8 rounded-xl flex items-center justify-center mt-0.5 ${
+                          msg.role === "user"
+                            ? isDark ? "bg-white/10 text-neutral-300" : "bg-neutral-200 text-neutral-700"
+                            : isDark ? "bg-white/[0.06] text-amber-200" : "bg-amber-50 text-amber-700"
+                        }`}
+                        style={
+                          msg.role === "assistant"
+                            ? { boxShadow: `0 0 0 1px rgba(var(--hotel-accent-rgb), 0.25)` }
+                            : undefined
+                        }
+                      >
+                        {msg.role === "user" ? (
+                          <span className="text-[10px] font-black uppercase">{ui.you.charAt(0)}</span>
+                        ) : (
+                          <Bot className="w-4 h-4" />
+                        )}
+                      </div>
+
+                      <div className={`flex flex-col gap-1.5 min-w-0 max-w-[85%] ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                        <div
+                          className={`px-4 py-3 rounded-2xl text-[14px] leading-relaxed ${
+                            msg.role === "user"
+                              ? isDark
+                                ? "bg-white/[0.08] text-neutral-100 rounded-tr-md border border-white/10"
+                                : "bg-[#163a5f] text-white rounded-tr-md shadow-md"
+                              : isDark
+                                ? "glass text-neutral-100 rounded-tl-md border border-white/10"
+                                : "bg-white text-neutral-800 rounded-tl-md border border-neutral-200 shadow-sm"
+                          }`}
+                          style={
+                            msg.role === "assistant"
+                              ? { borderColor: "rgba(var(--hotel-accent-rgb), 0.28)" }
+                              : undefined
+                          }
+                        >
+                          {renderAssistantMessageContent(msg.content)}
+                        </div>
+
+                        {msg.role === "assistant" && msg.booking ? (
+                          <BookingSummaryCard booking={msg.booking} hotelName={branding.hotelName} isDark={isDark} />
+                        ) : null}
+
+                        <div className={`flex items-center gap-2 px-1 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
+                          <span className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? "text-neutral-600" : "text-neutral-400"}`}>
+                            {msg.role === "user" ? ui.you : branding.hotelName}
+                          </span>
+                          {msg.role === "assistant" && (
+                            <div className="flex items-center gap-0.5">
+                              {feedbackGiven[i] ? (
+                                <span className={`text-[10px] font-medium ${feedbackGiven[i] === "up" ? "text-emerald-500" : ""}`} style={feedbackGiven[i] === "down" ? { color: "rgb(var(--hotel-accent-rgb))" } : undefined}>
+                                  {feedbackGiven[i] === "up" ? "Thanks!" : "Noted"}
+                                </span>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setFeedbackGiven((prev) => ({ ...prev, [i]: "up" }));
+                                      fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageContent: msg.content, rating: "up" }) });
+                                    }}
+                                    className={`p-1 rounded-md transition-all ${isDark ? "text-neutral-600 hover:text-emerald-400" : "text-neutral-400 hover:text-emerald-600"}`}
+                                    title="Helpful"
+                                  >
+                                    <ThumbsUp className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setFeedbackGiven((prev) => ({ ...prev, [i]: "down" }));
+                                      fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageContent: msg.content, rating: "down" }) });
+                                    }}
+                                    className={`p-1 rounded-md transition-all ${isDark ? "text-neutral-600 hover:text-amber-300" : "text-neutral-400 hover:text-amber-600"}`}
+                                    title="Not helpful"
+                                  >
+                                    <ThumbsDown className="w-3 h-3" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
+            </div>
+
+            {renderChatComposer()}
+          </div>
+        </main>
+
+        {/* ── Voice control sidebar (desktop) ── */}
+        <aside className={`hidden lg:flex w-[340px] shrink-0 flex-col gap-4 px-4 sm:px-6 py-6 border-l ${isDark ? "border-white/10" : "border-neutral-200/80"}`}>
+          <div className={`rounded-[1.5rem] border p-5 flex flex-col items-center gap-4 ${panelShell}`}>
+            <div className="w-full flex items-center justify-between">
+              <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+                Voice
+              </span>
+              <button
+                type="button"
+                onClick={() => setUseServerSTT((v) => !v)}
+                className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-wider transition-colors ${
+                  isDark ? "bg-white/[0.06] hover:bg-white/10 text-neutral-400" : "bg-neutral-100 hover:bg-neutral-200 text-neutral-600"
+                }`}
+                title={useServerSTT ? "Using Gemini STT" : "Using browser speech"}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${useServerSTT ? "bg-cyan-400" : "bg-emerald-500"}`} />
+                {useServerSTT ? "AI STT" : "Native"}
+              </button>
+            </div>
+
+            {mounted ? renderVoiceOrb(false) : (
+              <div className={`w-36 h-36 rounded-full glass-circle border ${isDark ? "border-white/[0.08]" : "border-neutral-200"}`} />
+            )}
+
+            <div className="text-center">
+              <p
+                className={`text-xs font-bold uppercase tracking-[0.25em] ${isListening ? "" : isSpeaking ? "text-sky-400" : isDark ? "text-neutral-400" : "text-neutral-600"}`}
+                style={isListening ? { color: "rgb(var(--hotel-accent-bright-rgb))" } : undefined}
+              >
+                {voiceStatusLabel}
+              </p>
+              <p className={`mt-1 text-[11px] ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>
+                {inConversation ? "Tap orb to stop" : ui.tapToSpeak}
+              </p>
             </div>
 
             {errorMessage && aiReady !== false && (
-              <div role="alert" className="absolute -bottom-28 left-1/2 z-20 -translate-x-1/2 max-w-sm px-4 py-2 rounded-2xl text-center text-xs font-medium text-amber-200/90 bg-amber-950/40 border border-amber-500/20">
+              <div role="alert" className="w-full rounded-xl px-3 py-2 text-center text-[11px] font-medium text-amber-200/90 bg-amber-950/40 border border-amber-500/20">
                 {errorMessage}
               </div>
             )}
           </div>
-          ) : (
-          <div className={`relative w-56 h-56 sm:w-64 sm:h-64 rounded-full glass-circle flex flex-col items-center justify-center border ${isDark ? "border-white/[0.08]" : "border-neutral-200"}`}>
-            <div className={`w-20 h-20 rounded-full flex items-center justify-center border ${isDark ? "bg-white/[0.04] border-white/[0.08]" : "bg-white/80 border-neutral-200"}`}>
-              <Mic className={`w-10 h-10 ${isDark ? "text-neutral-400" : "text-neutral-500"}`} />
+
+          <button
+            onClick={async () => {
+              try {
+                await navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+                  stream.getTracks().forEach((track) => track.stop());
+                });
+              } catch { /* overlay handles fallback */ }
+              setInCall(true);
+            }}
+            className={`w-full group flex items-center gap-3 rounded-[1.25rem] border px-4 py-3.5 transition-all active:scale-[0.98] ${
+              isDark ? "border-emerald-500/25 bg-emerald-500/[0.06] hover:bg-emerald-500/10" : "border-emerald-200 bg-emerald-50/60 hover:bg-emerald-50"
+            }`}
+          >
+            <div className="h-10 w-10 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-500">
+              <PhoneCall className="w-5 h-5" />
             </div>
-          </div>
-          )}
+            <div className="text-left">
+              <p className={`text-sm font-bold ${isDark ? "text-white" : "text-neutral-900"}`}>Concierge call</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500/70">Telephony mode</p>
+            </div>
+          </button>
 
-          <div className="flex flex-col items-center gap-6 mt-8">
+          <div className={`rounded-[1.25rem] border overflow-hidden ${panelShell}`}>
             <button
-              onClick={async () => {
-                try {
-                  await navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-                    stream.getTracks().forEach((track) => track.stop());
-                  });
-                } catch {
-                  /* Call overlay will request mic again and fall back if denied */
-                }
-                setInCall(true);
-              }}
-              className={`group flex items-center gap-4 px-8 py-4 rounded-full transition-all active:scale-95 ${
-                isDark
-                  ? "glass hover:bg-white/[0.05] border-emerald-500/20 hover:border-emerald-500/40"
-                  : "bg-white border border-emerald-200 hover:border-emerald-300 shadow-[0_8px_28px_rgba(16,185,129,0.08)]"
-              }`}
+              type="button"
+              onClick={() => setShowCallHistory((v) => !v)}
+              className={`w-full flex items-center justify-between px-4 py-3.5 ${isDark ? "hover:bg-white/[0.03]" : "hover:bg-neutral-50"}`}
             >
-              <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500/20">
-                <PhoneCall className="w-5 h-5 group-hover:animate-ring" />
-              </div>
-              <div className="flex flex-col items-start text-left">
-                <span className={`text-[13px] font-bold tracking-tight ${isDark ? "text-white" : "text-neutral-900"}`}>Concierge Call</span>
-                <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500/60">Telephony Mode</span>
-              </div>
-            </button>
-
-            <div className={`w-full max-w-xl rounded-3xl border p-4 sm:p-5 ${isDark ? "glass border-white/10" : "bg-white/90 border-neutral-200 shadow-[0_12px_30px_rgba(15,23,42,0.08)]"}`}>
-              <div className="mb-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <History className="h-4 w-4" style={{ color: "rgb(var(--hotel-accent-rgb))" }} />
-                  <h3 className={`text-xs font-black uppercase tracking-[0.18em] ${isDark ? "text-neutral-300" : "text-neutral-700"}`}>
-                    Call History
-                  </h3>
-                </div>
+              <div className="flex items-center gap-2">
+                <History className="h-4 w-4" style={{ color: "rgb(var(--hotel-accent-rgb))" }} />
+                <span className={`text-xs font-bold uppercase tracking-wider ${isDark ? "text-neutral-300" : "text-neutral-700"}`}>
+                  Call history
+                </span>
                 {callHistory.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => persistCallHistory([])}
-                    className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-neutral-500 hover:text-neutral-300" : "text-neutral-500 hover:text-neutral-700"}`}
-                  >
-                    Clear
-                  </button>
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${isDark ? "bg-white/10 text-neutral-400" : "bg-neutral-200 text-neutral-600"}`}>
+                    {callHistory.length}
+                  </span>
                 )}
               </div>
+              {showCallHistory ? <ChevronUp className="h-4 w-4 opacity-50" /> : <ChevronDown className="h-4 w-4 opacity-50" />}
+            </button>
 
-              {callHistory.length === 0 ? (
-                <p className={`text-xs ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
-                  No calls yet. Start a concierge call to build history.
-                </p>
-              ) : (
-                <div className="space-y-2.5">
-                  {callHistory.slice(0, 4).map((item) => (
-                    <div key={item.id} className={`rounded-2xl border p-3 ${isDark ? "border-white/10 bg-white/[0.03]" : "border-neutral-200 bg-white"}`}>
-                      <div className="mb-1.5 flex items-center justify-between gap-3">
-                        <span className={`text-[10px] font-black uppercase tracking-wider ${isDark ? "text-neutral-400" : "text-neutral-600"}`}>
-                          {item.mode === "server" ? "AI Speech Mode" : "Native Speech Mode"}
-                        </span>
-                        <span className={`text-[10px] font-bold ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
-                          {formatCallTime(item.startedAt)}
-                        </span>
-                      </div>
-                      <p className={`text-xs leading-relaxed ${isDark ? "text-neutral-300" : "text-neutral-700"}`}>
-                        {item.transcriptPreview}
-                      </p>
-                      <div className="mt-2 flex items-center gap-3">
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold ${isDark ? "text-neutral-400" : "text-neutral-600"}`}>
-                          <Clock3 className="h-3 w-3" /> {formatCallDuration(item.durationSec)}
-                        </span>
-                        <span className={`text-[10px] font-bold ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
-                          {item.languageCode}
-                        </span>
-                        <span className={`text-[10px] font-bold ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
-                          {item.totalTurns} turns
-                        </span>
-                      </div>
+            {showCallHistory && (
+              <div className={`px-4 pb-4 border-t ${isDark ? "border-white/10" : "border-neutral-200/80"}`}>
+                {callHistory.length === 0 ? (
+                  <p className={`pt-3 text-xs ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>No calls yet.</p>
+                ) : (
+                  <>
+                    <div className="pt-3 space-y-2 max-h-48 overflow-y-auto scrollbar-premium">
+                      {callHistory.slice(0, 5).map((item) => (
+                        <div key={item.id} className={`rounded-xl border p-2.5 ${isDark ? "border-white/10 bg-white/[0.02]" : "border-neutral-200 bg-white"}`}>
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className={`text-[9px] font-bold uppercase ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+                              {formatCallTime(item.startedAt)}
+                            </span>
+                            <span className={`text-[9px] font-bold ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+                              {formatCallDuration(item.durationSec)}
+                            </span>
+                          </div>
+                          <p className={`text-[11px] leading-snug line-clamp-2 ${isDark ? "text-neutral-400" : "text-neutral-600"}`}>
+                            {item.transcriptPreview}
+                          </p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            
-            <p className={`text-[11px] font-bold text-center max-w-xs leading-loose tracking-widest uppercase opacity-70 ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
-              {branding.tagline}
-            </p>
-          </div>
-        </div>
-
-        <div className="w-full max-w-2xl mt-16 space-y-8 z-10">
-          {messages.length === 0 ? (
-            <div className={`glass-panel text-center animate-in rounded-[48px] border p-12 sm:p-14 ${
-              isDark
-                ? "border-white/10"
-                : "border-neutral-200/70 shadow-[0_18px_50px_rgba(15,23,42,0.08)]"
-            }`}>
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-gradient-brand mb-4">
-                {branding.welcomeMessage}
-              </h2>
-              <p className={`text-sm font-medium leading-relaxed max-w-sm mx-auto opacity-80 ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
-                {ui.welcomeHint}
-              </p>
-              {suggestedQuestions.length > 0 && (
-                <div className="mt-8 text-left">
-                  <p className={`mb-3 text-center text-[10px] font-black uppercase tracking-[0.2em] ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
-                    {ui.suggestedQuestions}
-                  </p>
-                  <div className="flex flex-wrap justify-center gap-2.5">
-                    {suggestedQuestions.map((question) => (
+                    {callHistory.length > 0 && (
                       <button
-                        key={question}
                         type="button"
-                        disabled={aiReady === false || isProcessing || isListening || isSpeaking}
-                        onClick={() => handleSuggestedQuestion(question)}
-                        className={`rounded-full border px-4 py-2 text-left text-[13px] font-medium leading-snug transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 ${
-                          isDark
-                            ? "border-white/10 bg-white/[0.04] text-neutral-200 hover:bg-white/[0.08]"
-                            : "border-neutral-200 bg-white text-neutral-700 hover:bg-sky-50/80"
-                        }`}
-                        style={{
-                          ["--tw-border-opacity" as string]: 1,
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.borderColor = `rgba(var(--hotel-accent-rgb), 0.4)`;
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.borderColor = "";
-                        }}
+                        onClick={() => persistCallHistory([])}
+                        className={`mt-2 text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-neutral-500 hover:text-neutral-300" : "text-neutral-500 hover:text-neutral-700"}`}
                       >
-                        {question}
+                        Clear all
                       </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-4 sm:space-y-6 pb-20">
-              {messages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex flex-col gap-1.5 animate-in slide-in-from-bottom-2 ${
-                    msg.role === "user" ? "items-end" : "items-start"
-                  }`}
-                >
-                  <div className={`
-                    px-4 sm:px-6 py-3 sm:py-4 rounded-3xl max-w-[95%] sm:max-w-[80%] text-[14px] sm:text-[15px] font-medium leading-relaxed
-                    ${msg.role === "user" 
-                      ? (isDark
-                          ? "bg-white/5 text-neutral-200 rounded-tr-none border border-white/10"
-                          : "bg-white text-neutral-800 rounded-tr-none border border-neutral-200 shadow-[0_10px_30px_rgba(15,23,42,0.08)]")
-                      : (isDark
-                          ? "glass text-white rounded-tl-none shadow-xl shadow-black/35"
-                          : "bg-gradient-to-br from-amber-50 to-sky-50 text-neutral-800 rounded-tl-none shadow-[0_12px_34px_rgba(15,23,42,0.12)]")}
-                    style={
-                      msg.role === "assistant"
-                        ? { borderColor: "rgba(var(--hotel-accent-rgb), 0.35)", borderWidth: 1, borderStyle: "solid" }
-                        : undefined
-                    }
-                  `}>
-                    {renderAssistantMessageContent(msg.content)}
-                  </div>
-                  {msg.role === "assistant" && msg.booking ? (
-                    <BookingSummaryCard
-                      booking={msg.booking}
-                      hotelName={branding.hotelName}
-                      isDark={isDark}
-                    />
-                  ) : null}
-                  <div className="flex items-center gap-2 px-1">
-                    <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>
-                      {msg.role === "user" ? ui.you : branding.hotelName}
-                    </span>
-                    {msg.role === "assistant" && (
-                      <div className="flex items-center gap-1 ml-1">
-                        {feedbackGiven[i] ? (
-                          <span className={`text-[10px] font-bold ${feedbackGiven[i] === "up" ? "text-emerald-500" : ""}`} style={feedbackGiven[i] === "down" ? { color: "rgb(var(--hotel-accent-rgb))" } : undefined}>
-                            {feedbackGiven[i] === "up" ? "👍 Thanks!" : "👎 Noted"}
-                          </span>
-                        ) : (
-                          <>
-                            <button
-                              onClick={() => {
-                                setFeedbackGiven(prev => ({ ...prev, [i]: "up" }));
-                                fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageContent: msg.content, rating: "up" }) });
-                              }}
-                              className={`p-1 rounded-lg transition-all ${isDark ? "text-neutral-600 hover:text-emerald-400 hover:bg-emerald-500/10" : "text-neutral-500 hover:text-emerald-600 hover:bg-emerald-500/10"}`}
-                              title="Helpful"
-                            >
-                              <ThumbsUp className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setFeedbackGiven(prev => ({ ...prev, [i]: "down" }));
-                                fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageContent: msg.content, rating: "down" }) });
-                              }}
-                              className={`p-1 rounded-lg transition-all ${isDark ? "text-neutral-600 hover:bg-white/[0.06]" : "text-neutral-500 hover:bg-yellow-600/15"}`}
-                              style={{ ["--hover-color" as string]: "rgb(var(--hotel-accent-rgb))" }}
-                              onMouseEnter={(e) => { e.currentTarget.style.color = "rgb(var(--hotel-accent-rgb))"; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.color = ""; }}
-                              title="Not helpful"
-                            >
-                              <ThumbsDown className="w-3 h-3" />
-                            </button>
-                          </>
-                        )}
-                      </div>
                     )}
-                  </div>
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-          )}
-        </div>
-      </main>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
 
-      <footer
-        className={`text-center py-6 text-[10px] font-bold tracking-[0.2em] uppercase backdrop-blur-md ${
-          isDark
-            ? "text-neutral-600 border-t border-white/[0.02] bg-black/20"
-            : "text-neutral-500 border-t border-neutral-200 bg-white/70"
+          <p className={`text-[10px] font-semibold text-center uppercase tracking-[0.14em] leading-relaxed px-2 ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>
+            {branding.tagline}
+          </p>
+        </aside>
+      </div>
+
+      {/* ── Mobile voice dock (voice mode only) ── */}
+      {inputMode === "voice" && (
+      <div
+        className={`lg:hidden fixed bottom-0 inset-x-0 z-20 border-t backdrop-blur-xl ${
+          isDark ? "border-white/10 bg-[#05070d]/90" : "border-neutral-200 bg-white/95"
         }`}
       >
-        {branding.hotelName} concierge • {selectedLanguage.flag} {selectedLanguage.nativeName}
+        <div className="mx-auto max-w-lg px-4 py-3 flex items-center gap-4">
+          {mounted ? renderVoiceOrb(true) : (
+            <div className={`w-28 h-28 rounded-full glass-circle border shrink-0 ${isDark ? "border-white/[0.08]" : "border-neutral-200"}`} />
+          )}
+
+          <div className="flex-1 min-w-0">
+            <p
+              className={`text-[11px] font-bold uppercase tracking-[0.2em] truncate ${isListening ? "" : isDark ? "text-neutral-300" : "text-neutral-700"}`}
+              style={isListening ? { color: "rgb(var(--hotel-accent-bright-rgb))" } : undefined}
+            >
+              {voiceStatusLabel}
+            </p>
+            {errorMessage && aiReady !== false ? (
+              <p role="alert" className="mt-0.5 text-[10px] text-amber-400 line-clamp-2">{errorMessage}</p>
+            ) : (
+              <p className={`mt-0.5 text-[10px] ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>
+                {inConversation ? "Tap to stop" : ui.tapToSpeak}
+              </p>
+            )}
+          </div>
+
+          <button
+            onClick={async () => {
+              try {
+                await navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+                  stream.getTracks().forEach((track) => track.stop());
+                });
+              } catch { /* overlay handles fallback */ }
+              setInCall(true);
+            }}
+            className={`shrink-0 h-12 w-12 rounded-2xl flex items-center justify-center transition-all active:scale-95 ${
+              isDark ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25" : "bg-emerald-50 text-emerald-600 border border-emerald-200"
+            }`}
+            aria-label="Start concierge call"
+          >
+            <PhoneCall className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+      )}
+
+      <footer
+        className={`hidden lg:block text-center py-4 text-[10px] font-semibold tracking-[0.16em] uppercase shrink-0 ${
+          isDark ? "text-neutral-600 border-t border-white/[0.04]" : "text-neutral-500 border-t border-neutral-200"
+        }`}
+      >
+        {branding.hotelName} · {selectedLanguage.flag} {selectedLanguage.nativeName}
       </footer>
+
+      {renderLanguageMenu()}
 
       {inCall && (
         <CallOverlay

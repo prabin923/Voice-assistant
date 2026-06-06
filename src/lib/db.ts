@@ -7,6 +7,16 @@ const dbPath = resolveDatabasePath();
 const globalForDb = globalThis as unknown as { db: Database.Database; authCleanupStarted?: boolean };
 const AUTH_RETENTION_DAYS = 90;
 
+function addColumnIfMissing(db: Database.Database, table: string, column: string, definition: string) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (columns.some((col) => col.name === column)) return;
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  } catch {
+    // Another initializer may have added the column concurrently.
+  }
+}
+
 function getDb(): Database.Database {
   if (globalForDb.db) return globalForDb.db;
 
@@ -127,6 +137,28 @@ function getDb(): Database.Database {
     )
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS guests (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      password TEXT NOT NULL,
+      phone TEXT,
+      preferred_language TEXT NOT NULL DEFAULT 'en-US',
+      session_version INTEGER NOT NULL DEFAULT 0,
+      visit_count INTEGER NOT NULL DEFAULT 0,
+      message_count INTEGER NOT NULL DEFAULT 0,
+      booking_count INTEGER NOT NULL DEFAULT 0,
+      last_visit_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  addColumnIfMissing(db, "interactions", "guest_id", "TEXT");
+  addColumnIfMissing(db, "bookings", "guest_id", "TEXT");
+  addColumnIfMissing(db, "feedback", "guest_id", "TEXT");
+
   globalForDb.db = db;
   
   // Seed default admin user if none exist
@@ -222,15 +254,16 @@ export interface Interaction {
   guest_message: string;
   ai_response: string;
   language: string;
+  guest_id: string | null;
   created_at: string;
 }
 
 export const interactions = {
-  log(data: { guestMessage: string; aiResponse: string; language: string }) {
+  log(data: { guestMessage: string; aiResponse: string; language: string; guestId?: string | null }) {
     const id = generateId();
     db.prepare(
-      "INSERT INTO interactions (id, guest_message, ai_response, language) VALUES (?, ?, ?, ?)"
-    ).run(id, data.guestMessage, data.aiResponse, data.language);
+      "INSERT INTO interactions (id, guest_message, ai_response, language, guest_id) VALUES (?, ?, ?, ?, ?)"
+    ).run(id, data.guestMessage, data.aiResponse, data.language, data.guestId ?? null);
   },
 
   totalCount(): number {
@@ -348,6 +381,7 @@ export interface Booking {
   guest_name: string;
   guest_phone: string;
   guest_email: string | null;
+  guest_id: string | null;
   status: string;
   created_at: string;
 }
@@ -458,6 +492,7 @@ export const bookings = {
     guestName: string;
     guestPhone: string;
     guestEmail?: string | null;
+    guestId?: string | null;
     status?: "confirmed" | "cancelled";
   }): Booking {
     const id = generateId();
@@ -466,8 +501,8 @@ export const bookings = {
 
     db.prepare(`
       INSERT INTO bookings (
-        id, room_type, check_in, check_out, rooms, guest_name, guest_phone, guest_email, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, room_type, check_in, check_out, rooms, guest_name, guest_phone, guest_email, status, guest_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       data.roomType,
@@ -477,8 +512,15 @@ export const bookings = {
       data.guestName.trim(),
       data.guestPhone.trim(),
       data.guestEmail?.trim() || null,
-      status
+      status,
+      data.guestId ?? null
     );
+
+    if (data.guestId) {
+      db.prepare(
+        "UPDATE guests SET booking_count = booking_count + 1, updated_at = datetime('now') WHERE id = ?"
+      ).run(data.guestId);
+    }
 
     return db.prepare("SELECT * FROM bookings WHERE id = ?").get(id) as Booking;
   },
@@ -500,6 +542,94 @@ export const bookings = {
         LIMIT ?
       `)
       .all(Math.max(1, Math.floor(limit))) as Booking[];
+  },
+};
+
+export interface Guest {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+  phone: string | null;
+  preferred_language: string;
+  session_version: number;
+  visit_count: number;
+  message_count: number;
+  booking_count: number;
+  last_visit_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const guests = {
+  findByEmail(email: string): Guest | undefined {
+    return db.prepare("SELECT * FROM guests WHERE email = ?").get(email.trim().toLowerCase()) as Guest | undefined;
+  },
+
+  findById(id: string): Guest | undefined {
+    return db.prepare("SELECT * FROM guests WHERE id = ?").get(id) as Guest | undefined;
+  },
+
+  create(data: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string | null;
+    preferredLanguage?: string;
+  }): Guest {
+    const id = generateId();
+    db.prepare(`
+      INSERT INTO guests (id, name, email, password, phone, preferred_language, visit_count, last_visit_at)
+      VALUES (?, ?, ?, ?, ?, ?, 1, datetime('now'))
+    `).run(
+      id,
+      data.name.trim(),
+      data.email.trim().toLowerCase(),
+      data.password,
+      data.phone?.trim() || null,
+      data.preferredLanguage || "en-US"
+    );
+    return this.findById(id)!;
+  },
+
+  recordVisit(id: string) {
+    db.prepare(`
+      UPDATE guests
+      SET visit_count = visit_count + 1,
+          last_visit_at = datetime('now'),
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(id);
+  },
+
+  recordMessage(id: string) {
+    db.prepare(`
+      UPDATE guests
+      SET message_count = message_count + 1,
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(id);
+  },
+
+  todayMessageCount(id: string): number {
+    const row = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM interactions
+      WHERE guest_id = ?
+        AND date(created_at) = date('now')
+    `).get(id) as { count: number };
+    return row.count;
+  },
+
+  listLoyal(limit: number = 50): Array<Pick<Guest, "id" | "name" | "email" | "visit_count" | "message_count" | "booking_count" | "last_visit_at">> {
+    return db.prepare(`
+      SELECT id, name, email, visit_count, message_count, booking_count, last_visit_at
+      FROM guests
+      ORDER BY visit_count DESC, message_count DESC
+      LIMIT ?
+    `).all(Math.max(1, Math.floor(limit))) as Array<
+      Pick<Guest, "id" | "name" | "email" | "visit_count" | "message_count" | "booking_count" | "last_visit_at">
+    >;
   },
 };
 
@@ -609,11 +739,11 @@ export const passwordResetTokens = {
 };
 
 export const feedback = {
-  create(data: { messageContent: string; rating: "up" | "down"; comment?: string }) {
+  create(data: { messageContent: string; rating: "up" | "down"; comment?: string; guestId?: string | null }) {
     const id = generateId();
     db.prepare(
-      "INSERT INTO feedback (id, message_content, rating, comment) VALUES (?, ?, ?, ?)"
-    ).run(id, data.messageContent, data.rating, data.comment || null);
+      "INSERT INTO feedback (id, message_content, rating, comment, guest_id) VALUES (?, ?, ?, ?, ?)"
+    ).run(id, data.messageContent, data.rating, data.comment || null, data.guestId ?? null);
     return id;
   },
 

@@ -5,6 +5,8 @@ import {
   applyHotelBrandTheme,
   buildSuggestedQuestions,
   DEFAULT_PUBLIC_HOTEL_CONFIG,
+  getGuestWelcomeHeadline,
+  getGuestWelcomeSubtext,
   HOTEL_CONFIG_UPDATED_EVENT,
   mergePublicHotelConfig,
   type PublicHotelConfig,
@@ -62,6 +64,8 @@ export function useHotelPublicConfig() {
   return {
     config,
     branding: config.branding,
+    welcomeHeadline: getGuestWelcomeHeadline(config.branding),
+    welcomeSubtext: getGuestWelcomeSubtext(config.branding),
     suggestedQuestions,
     loading,
     reload: loadConfig,

@@ -1595,6 +1595,21 @@ html.light .text-gradient {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  /* Prevent descenders from being clipped with background-clip:text */
+  padding-bottom: 0.06em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* Display headline for assistant welcome — room for serif descenders */
+.va-welcome-title {
+  font-family: var(--font-display), ui-serif, Georgia, "Times New Roman", serif;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+  line-height: 1.2;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 html.light .text-gradient-brand {

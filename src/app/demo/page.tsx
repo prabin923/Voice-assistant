@@ -6,11 +6,16 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Hotel, Loader2, Mic, Moon, Sun, UserRound } from "lucide-react";
 import { StaynepLogo } from "@/components/StaynepLogo";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
+import { GuestAuthPanel, loadGuestProfile } from "@/components/GuestAuthPanel";
+import type { GuestProfile } from "@/lib/clientGuestAuth";
 
 export default function DemoPage() {
   const router = useRouter();
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [loadingHotel, setLoadingHotel] = useState(false);
+  const [loadingGuest, setLoadingGuest] = useState(false);
+  const [showGuestAuth, setShowGuestAuth] = useState(false);
+  const [guestProfile, setGuestProfile] = useState<GuestProfile | null>(null);
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("theme");
@@ -32,8 +37,23 @@ export default function DemoPage() {
   const muted = isDark ? "text-white/62" : "text-slate-600";
   const panel = isDark ? "border-white/10 bg-white/[0.045]" : "border-slate-200 bg-white/82";
 
-  function chooseGuest() {
+  function goToAssistant() {
     router.push("/assistant");
+  }
+
+  async function chooseGuest() {
+    setLoadingGuest(true);
+    try {
+      const profile = await loadGuestProfile();
+      if (profile) {
+        setGuestProfile(profile);
+        goToAssistant();
+        return;
+      }
+      setShowGuestAuth(true);
+    } finally {
+      setLoadingGuest(false);
+    }
   }
 
   async function chooseHotel() {
@@ -92,14 +112,18 @@ export default function DemoPage() {
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
             <button
               type="button"
-              onClick={chooseGuest}
-              disabled={loadingHotel}
+              onClick={() => void chooseGuest()}
+              disabled={loadingHotel || loadingGuest}
               className={`group rounded-[1.2rem] border p-5 text-left transition hover:-translate-y-0.5 ${
                 isDark ? "border-white/10 bg-black/20 hover:border-cyan-300/30" : "border-slate-200 bg-white hover:border-[#163a5f]/25"
               }`}
             >
               <div className={`mb-4 grid h-12 w-12 place-items-center rounded-2xl ${isDark ? "bg-cyan-300/10 text-cyan-100" : "bg-slate-100 text-[#163a5f]"}`}>
-                <UserRound className="h-6 w-6" />
+                {loadingGuest ? (
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                ) : (
+                  <UserRound className="h-6 w-6" />
+                )}
               </div>
               <h2 className="text-lg font-bold">Guest / user</h2>
               <p className={`mt-2 text-sm leading-6 ${muted}`}>Try the multilingual voice receptionist.</p>
@@ -134,6 +158,21 @@ export default function DemoPage() {
           </div>
         </div>
       </div>
+
+      <GuestAuthPanel
+        isDark={isDark}
+        guest={guestProfile}
+        onGuestChange={setGuestProfile}
+        open={showGuestAuth}
+        onOpenChange={setShowGuestAuth}
+        hideTrigger
+        allowSkip
+        skipLabel="Continue without signing in"
+        onSkip={goToAssistant}
+        onAuthenticated={goToAssistant}
+        title="Sign in to start"
+        description="Create a free guest account for higher limits, saved bookings, and loyalty rewards — or continue without signing in."
+      />
     </main>
   );
 }
