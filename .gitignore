@@ -30,8 +30,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files
-.env*
+# env files (never commit secrets — .env.example is the template)
+.env
+.env.*
+!.env.example
 
 # vercel
 .vercel
@@ -40,10 +42,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-/src/generated/prisma
+# prisma generated client
 /generated/prisma
 
-# database
+# legacy sqlite artifacts
 *.db
 *.db-shm
 *.db-wal

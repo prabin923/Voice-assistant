@@ -18,7 +18,7 @@ A production-ready AI voice receptionist that provides 24/7 multilingual guest s
 | **Seamless Conversation** | Tap once to start, auto-listen loop after each response, tap again to stop |
 | **Guest Feedback** | Thumbs up/down on every AI response, stored and tracked |
 | **Hotel Admin Auth** | JWT + bcrypt, CSRF, session rotation, audit log, optional email password reset |
-| **Admin Dashboard** | 8-tab configuration panel (Persisted to SQLite) — Branding, Contact, Policies, Rooms, Dining, Amenities, FAQ, AI Persona |
+| **Admin Dashboard** | 8-tab configuration panel (Prisma Postgres) — Branding, Contact, Policies, Rooms, Dining, Amenities, FAQ, AI Persona |
 | **Analytics Dashboard** | 7 KPI cards, daily trends, peak hours, language distribution, activity heatmap, guest satisfaction |
 | **Support Inbox** | Priority-sorted escalation tickets with auto-refresh and email alerts |
 | **Email Alerts** | Staff notified via sanitized HTML email when AI escalates a guest issue |
@@ -42,7 +42,7 @@ A production-ready AI voice receptionist that provides 24/7 multilingual guest s
 | STT | Gemini multimodal (audio transcription) |
 | TTS | Web Speech Synthesis API (premium voice selection) |
 | Auth | jose (JWT), bcryptjs, HTTP-only cookies |
-| Database | SQLite (better-sqlite3) |
+| Database | Prisma ORM + Prisma Postgres |
 | Email | Nodemailer (SMTP) |
 | Telephony | TingTing/Twilio webhooks |
 
@@ -60,7 +60,14 @@ npm install
 
 ### 2. Environment setup
 
-Create a `.env.local` file (see `.env.example` for a minimal template):
+Create a `.env.local` for app secrets (see `.env.example`). Link Prisma Postgres for the database:
+
+```bash
+npx prisma postgres link --database <your-database-id>
+# writes DATABASE_URL to .env — never commit that file
+npx prisma migrate dev
+npx prisma db seed   # optional sample data
+```
 
 ```bash
 # Required: Gemini API Key
@@ -83,9 +90,7 @@ SMTP_PASS=your-app-password
 SMTP_FROM=ai-receptionist@yourhotel.com
 ```
 
-SQLite data is stored in `hotel.db` at the project root locally, or `/tmp/hotel.db` on Vercel (see `src/lib/db.ts`). The file is gitignored; back it up if you rely on local data.
-
-**Vercel auth checklist:** set `JWT_SECRET` (≥8 characters) and `NEXT_PUBLIC_APP_URL` to your production URL in Project → Settings → Environment Variables, then redeploy. Without `JWT_SECRET`, login and protected routes will fail in production.
+**Vercel checklist:** set `DATABASE_URL`, `JWT_SECRET` (≥32 characters), and `NEXT_PUBLIC_APP_URL` in Project → Settings → Environment Variables, then redeploy.
 
 ### 3. Run the dev server
 
@@ -100,8 +105,8 @@ Open [http://localhost:3000](http://localhost:3000) — the voice assistant is r
 ## Project Structure
 
 ```
-scripts/                            # One-off utilities (reports, model checks)
-docs/                               # Project reports and logs
+scripts/                            # Dev utilities (whisper setup, model checks, db verify)
+prisma/                             # Schema, migrations, seed
 src/
 ├── app/
 │   ├── page.tsx                    # Main voice assistant UI
@@ -115,20 +120,21 @@ src/
 │   │   └── support/page.tsx        # Support inbox (escalation tickets)
 │   ├── api/
 │   │   ├── chat/route.ts           # Gemini chat with conversation memory
-│   │   ├── stt/route.ts            # Gemini speech-to-text
+│   │   ├── stt/route.ts            # Speech-to-text
 │   │   ├── config/route.ts         # Hotel config CRUD
 │   │   ├── analytics/route.ts      # Analytics data aggregation
 │   │   ├── support/route.ts        # Support ticket management
 │   │   ├── feedback/route.ts       # Guest feedback (thumbs up/down)
 │   │   ├── auth/                   # Auth (register/login/logout/me/csrf/audit/forgot/reset)
-│   │   └── telephony/webhook/      # Phone call webhook
+│   │   └── telephony/              # Telnyx + generic phone webhooks
 │   ├── globals.css                 # Design system & animations
 │   └── layout.tsx                  # Root layout
 ├── lib/
 │   ├── responseEngine.ts           # Gemini AI with conversation memory + retry
 │   ├── hotelConfig.ts              # Hotel configuration schema
 │   ├── auth.ts                     # JWT + password utilities
-│   ├── db.ts                       # SQLite (interactions, tickets, feedback)
+│   ├── prisma.ts                   # Prisma client singleton (server-only)
+│   ├── db/                         # Repository layer over Prisma
 │   ├── email.ts                    # Nodemailer escalation alerts
 │   └── rateLimit.ts                # In-memory rate limiter
 ├── components/

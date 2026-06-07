@@ -9,6 +9,7 @@ import {
   transcribeWithLocalWhisper,
   transcribeWithWhisperServer,
 } from '@/lib/selfHostedStt';
+import { isMaiTranscribeConfigured, transcribeWithMai } from '@/lib/maiTranscribe';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,7 @@ const ALLOWED_AUDIO_TYPES = new Set([
 ]);
 
 function isSttAvailable(): boolean {
-  return isSelfHostedSttConfigured() || Boolean(getGeminiApiKey());
+  return isMaiTranscribeConfigured() || isSelfHostedSttConfigured() || Boolean(getGeminiApiKey());
 }
 
 export async function POST(req: Request) {
@@ -72,7 +73,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error: "Speech-to-text not configured.",
-          details: "Set WHISPER_STT_ENDPOINT or WHISPER_MODEL_PATH (local), or GOOGLE_GENERATIVE_AI_API_KEY as fallback.",
+          details: "Set AZURE_SPEECH_KEY + AZURE_SPEECH_ENDPOINT (MAI), WHISPER_STT_ENDPOINT, or GOOGLE_GENERATIVE_AI_API_KEY.",
         },
         { status: 501 }
       );
@@ -81,7 +82,19 @@ export async function POST(req: Request) {
     const safeLang = (language || "en-US").replace(/[^a-zA-Z0-9\-]/g, "").slice(0, 10);
     const audioBuffer = Buffer.from(await audioBlob.arrayBuffer());
 
-    // 1) Self-hosted Whisper HTTP server (your own STT — no Gemini quota)
+    // 1) Microsoft MAI-Transcribe (Azure Speech — best accuracy, 43 languages)
+    if (isMaiTranscribeConfigured()) {
+      const maiResult = await transcribeWithMai(
+        new Blob([audioBuffer], { type: baseMime }),
+        baseMime,
+        { language: safeLang }
+      );
+      if (maiResult.text) {
+        return NextResponse.json({ text: maiResult.text, provider: "mai-transcribe" });
+      }
+    }
+
+    // 2) Self-hosted Whisper HTTP server
     const serverResult = await transcribeWithWhisperServer(
       new Blob([audioBuffer], { type: baseMime }),
       safeLang
@@ -90,13 +103,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ text: serverResult.text, provider: "whisper-server" });
     }
 
-    // 2) Local whisper-cpp on dev machine
+    // 3) Local whisper-cpp on dev machine
     const localResult = await transcribeWithLocalWhisper(audioBuffer);
     if (localResult.text) {
       return NextResponse.json({ text: localResult.text, provider: "whisper-local" });
     }
 
-    // 3) Gemini multimodal fallback (uses API quota)
+    // 4) Gemini multimodal fallback (uses API quota)
     const apiKey = getGeminiApiKey();
     if (!apiKey) {
       const err = serverResult.error || localResult.error || "STT unavailable";
