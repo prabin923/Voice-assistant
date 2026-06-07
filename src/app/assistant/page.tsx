@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Mic, Volume2, Loader2, PhoneCall, ChevronDown, ChevronLeft, ChevronRight, Check, ThumbsUp, ThumbsDown, History, Sparkles, Bot, ChevronUp, Send, MessageSquare, Globe2, X } from "lucide-react";
+import { Mic, Volume2, Loader2, PhoneCall, ChevronDown, ChevronLeft, ChevronRight, Check, ThumbsUp, ThumbsDown, History, ChevronUp, Send, MessageSquare, Globe2, X } from "lucide-react";
 import CallOverlay, { type CallHistoryRecord } from "@/components/CallOverlay";
 import { BookingSummaryCard, type BookingSummary } from "@/components/BookingSummaryCard";
 import { GuestAuthPanel, loadGuestProfile } from "@/components/GuestAuthPanel";
@@ -13,10 +13,20 @@ import { useHotelPublicConfig } from "@/hooks/useHotelPublicConfig";
 import { GUEST_STAFF_HANDOFF_MESSAGE } from "@/lib/escalationMessages";
 import {
   VOICE_MAX_RECORD_MS,
+  VOICE_MIC_WARMUP_MS,
+  VOICE_MIN_BLOB_BYTES,
+  VOICE_RECORDER_TIMESLICE_MS,
+  VOICE_RESUME_LISTEN_MS,
+  VOICE_RMS_THRESHOLD,
   VOICE_SILENCE_SUBMIT_MS,
-  VOICE_SILENCE_THRESHOLD,
   VOICE_SPEECH_MIN_MS,
+  VOICE_STT_RETRY_MS,
 } from "@/lib/voiceSilence";
+import { measureMicRms, isSpeechLevel } from "@/lib/voiceActivity";
+import { createMaiVoiceSpeaker, type MaiVoiceSpeaker, unlockBrowserAudio } from "@/lib/clientMaiVoice";
+import { sanitizeForSpeech, VOICE_STATUS } from "@/lib/humanizeSpeech";
+import { VoicePresenceBar } from "@/components/VoicePresenceBar";
+import { ConciergeAvatar } from "@/components/ConciergeAvatar";
 
 type VoiceStyle = "warm" | "professional" | "energetic";
 type InputMode = "voice" | "text";
@@ -214,7 +224,7 @@ const ALL_LANGUAGES: LanguageOption[] = [
 
 // UI translations
 const UI_TRANSLATIONS: Record<string, UIStrings> = {
-  en: { tapToSpeak: "Tap to Speak", listening: "Listening...", speaking: "Speaking...", ready: "Ready", configure: "Configure", searchLanguage: "Search language...", welcomeHint: "Tap the microphone and ask me anything.", speakingIn: "Speaking in", footer: "Universal Voice Receptionist", you: "You", errorNetwork: "Network error", errorMicDenied: "Mic access denied", errorNoSpeech: "No speech detected", errorGeneric: "Error", errorUnsupported: "Not supported", errorConnection: "Connection error", virtualReceptionist: "Virtual Receptionist", poweredByAI: "AI Assistant", languagesSupported: "Languages", suggestedQuestions: "Try asking" },
+  en: { tapToSpeak: "Tap to Speak", listening: "Listening...", speaking: "Speaking...", ready: "Ready", configure: "Configure", searchLanguage: "Search language...", welcomeHint: "Tap the microphone and ask me anything.", speakingIn: "Speaking in", footer: "Universal Voice Receptionist", you: "You", errorNetwork: "Network error", errorMicDenied: "Mic access denied", errorNoSpeech: "I didn't catch that — tap the mic and speak a little closer.", errorGeneric: "Error", errorUnsupported: "Not supported", errorConnection: "Connection error", virtualReceptionist: "Virtual Receptionist", poweredByAI: "AI Assistant", languagesSupported: "Languages", suggestedQuestions: "Try asking" },
 };
 
 function getUI(langCode: string): UIStrings {
@@ -251,6 +261,7 @@ export default function VoiceAssistant() {
   const [voiceStyle, setVoiceStyle] = useState<VoiceStyle>("warm");
   const [aiReady, setAiReady] = useState<boolean | null>(null);
   const [sttReady, setSttReady] = useState<boolean | null>(null);
+  const [maiVoiceReady, setMaiVoiceReady] = useState(false);
   const [geminiLiveReady, setGeminiLiveReady] = useState<boolean | null>(null);
   const [guestProfile, setGuestProfile] = useState<GuestProfile | null>(null);
   const [showGuestAuth, setShowGuestAuth] = useState(false);
@@ -258,6 +269,11 @@ export default function VoiceAssistant() {
   const [inputMode, setInputMode] = useState<InputMode>("voice");
   const [chatDraft, setChatDraft] = useState("");
   const chatInputRef = useRef<HTMLInputElement>(null);
+  const conciergeName = useMemo(() => {
+    const match = hotelConfig?.receptionistPersona?.match(/You are (\w+)/i);
+    return match?.[1] ?? "Alex";
+  }, [hotelConfig?.receptionistPersona]);
+
   const ui = useMemo(() => getUI(selectedLanguage.code), [selectedLanguage]);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const nativeSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -265,12 +281,16 @@ export default function VoiceAssistant() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const synthRef = useRef<SpeechSynthesis | null>(null);
+  const maiVoiceRef = useRef<MaiVoiceSpeaker | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const langMenuRef = useRef<HTMLDivElement>(null);
   const [useServerSTT, setUseServerSTT] = useState(false);
   const useServerSTTRef = useRef(false);
   useServerSTTRef.current = useServerSTT;
   const lastServerSttAtRef = useRef(0);
+  const serverSttFailCountRef = useRef(0);
   const autoListenAfterSpeakRef = useRef(false);
   const cachedVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
   const selectedLanguageRef = useRef(selectedLanguage);
@@ -313,6 +333,7 @@ export default function VoiceAssistant() {
   useEffect(() => {
     setAiReady(typeof hotelConfig.aiReady === "boolean" ? hotelConfig.aiReady : null);
     setSttReady(typeof hotelConfig.sttReady === "boolean" ? hotelConfig.sttReady : null);
+    setMaiVoiceReady(hotelConfig.maiVoiceReady === true);
     setGeminiLiveReady(typeof hotelConfig.geminiLiveReady === "boolean" ? hotelConfig.geminiLiveReady : null);
     if (hotelConfig.voiceStyle && ["warm", "professional", "energetic"].includes(hotelConfig.voiceStyle)) {
       setVoiceStyle(hotelConfig.voiceStyle as VoiceStyle);
@@ -327,7 +348,7 @@ export default function VoiceAssistant() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, isProcessing]);
 
   useEffect(() => {
     if (!showLanguageMenu) return;
@@ -344,6 +365,11 @@ export default function VoiceAssistant() {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [showLanguageMenu]);
+
+  useEffect(() => {
+    maiVoiceRef.current = createMaiVoiceSpeaker();
+    return () => maiVoiceRef.current?.cancel();
+  }, []);
 
   // Preload voices — some browsers lazy-load them
   useEffect(() => {
@@ -391,19 +417,7 @@ export default function VoiceAssistant() {
     return scored[0].voice;
   }, []);
 
-  const toHumanSpeechText = useCallback((text: string) => {
-    return text
-      // Hide image markup from TTS
-      .replace(/^IMAGE:\s*\S+\s*$/gim, "")
-      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, "$1")
-      .replace(/\*\*(.*?)\*\*/g, "$1")
-      .replace(/\*(.*?)\*/g, "$1")
-      .replace(/`([^`]+)`/g, "$1")
-      .replace(/\s+/g, " ")
-      .replace(/\s*([,.;!?])\s*/g, "$1 ")
-      .replace(/([a-z])\s*-\s*([a-z])/gi, "$1 $2")
-      .trim();
-  }, []);
+  const toHumanSpeechText = useCallback((text: string) => sanitizeForSpeech(text), []);
 
   const renderAssistantMessageContent = (content: string) => {
     const lines = content.split("\n");
@@ -493,6 +507,7 @@ export default function VoiceAssistant() {
   const startListeningInternal = useCallback(() => {
     setErrorMessage(null);
     synthRef.current?.cancel();
+    maiVoiceRef.current?.cancel();
     setIsSpeaking(false);
 
     if (aiReady === false && sttReady === false) {
@@ -537,7 +552,7 @@ export default function VoiceAssistant() {
         if (text) {
           handleUserAudioCompleteRef.current(text);
         } else if (autoListenAfterSpeakRef.current) {
-          setTimeout(() => startListeningInternalRef.current(), 300);
+          setTimeout(() => startListeningInternalRef.current(), VOICE_STT_RETRY_MS);
         }
       }, VOICE_SILENCE_SUBMIT_MS);
     };
@@ -571,7 +586,7 @@ export default function VoiceAssistant() {
       } else if (e.error === "no-speech" && autoListenAfterSpeakRef.current) {
         setTimeout(() => {
           if (inConversationRef.current) startListeningInternalRef.current();
-        }, 400);
+        }, VOICE_STT_RETRY_MS);
       }
       setIsListening(false);
       if (e.error !== "no-speech") autoListenAfterSpeakRef.current = false;
@@ -590,7 +605,7 @@ export default function VoiceAssistant() {
   const startServerRecordingRef = useRef(() => {});
   const handleUserAudioCompleteRef = useRef<(incomingText: string) => void>(() => {});
 
-  const speakText = useCallback((text: string) => {
+  const speakWithBrowser = useCallback((text: string) => {
     if (!synthRef.current) return;
     synthRef.current.cancel();
 
@@ -598,21 +613,19 @@ export default function VoiceAssistant() {
     const lang = selectedLanguageRef.current.ttsLang;
     utterance.lang = lang;
 
-    // Use cached voice or find the best one
     if (!cachedVoiceRef.current || cachedVoiceRef.current.lang.split("-")[0] !== lang.split("-")[0]) {
       cachedVoiceRef.current = pickBestVoice(lang);
     }
     if (cachedVoiceRef.current) utterance.voice = cachedVoiceRef.current;
 
-    // Natural speech tuning
     if (voiceStyle === "professional") {
-      utterance.rate = 0.88;
+      utterance.rate = 0.92;
       utterance.pitch = 0.95;
     } else if (voiceStyle === "energetic") {
-      utterance.rate = 0.97;
+      utterance.rate = 1.0;
       utterance.pitch = 1.04;
     } else {
-      utterance.rate = 0.9;   // Warm default
+      utterance.rate = 0.95;
       utterance.pitch = 0.98;
     }
     utterance.volume = 1.0;
@@ -620,13 +633,12 @@ export default function VoiceAssistant() {
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => {
       setIsSpeaking(false);
-      // Auto-listen after AI finishes — only if conversation is still active
       if (inConversationRef.current) {
         setTimeout(() => {
           if (inConversationRef.current) {
             startListeningInternalRef.current();
           }
-        }, 400);
+        }, VOICE_RESUME_LISTEN_MS);
       }
     };
     utterance.onerror = () => {
@@ -634,6 +646,34 @@ export default function VoiceAssistant() {
     };
     synthRef.current.speak(utterance);
   }, [pickBestVoice, toHumanSpeechText, voiceStyle]);
+
+  const speakText = useCallback(async (text: string) => {
+    synthRef.current?.cancel();
+    maiVoiceRef.current?.cancel();
+
+    if (maiVoiceReady && maiVoiceRef.current) {
+      const used = await maiVoiceRef.current.speak({
+        text,
+        language: selectedLanguageRef.current.ttsLang,
+        voiceStyle,
+        onStart: () => setIsSpeaking(true),
+        onEnd: () => {
+          setIsSpeaking(false);
+          if (inConversationRef.current) {
+            setTimeout(() => {
+              if (inConversationRef.current) {
+                startListeningInternalRef.current();
+              }
+            }, VOICE_RESUME_LISTEN_MS);
+          }
+        },
+        onError: () => setIsSpeaking(false),
+      });
+      if (used) return;
+    }
+
+    speakWithBrowser(text);
+  }, [maiVoiceReady, speakWithBrowser, voiceStyle]);
 
   const handleUserMessage = useCallback(async (text: string, speakReply = inputModeRef.current === "voice") => {
     setIsListening(false);
@@ -648,7 +688,8 @@ export default function VoiceAssistant() {
         body: JSON.stringify({
           message: text,
           language: selectedLanguage.code,
-          history: messages.slice(-10),
+          history: messagesRef.current.slice(-8),
+          channel: inputModeRef.current === "voice" ? "voice" : "text",
         }),
       });
       const data = await response.json();
@@ -693,7 +734,7 @@ export default function VoiceAssistant() {
         autoListenAfterSpeakRef.current = false;
       } else if (speakReply) {
         autoListenAfterSpeakRef.current = true;
-        speakText(reply);
+        void speakText(reply);
       } else {
         autoListenAfterSpeakRef.current = false;
       }
@@ -733,26 +774,44 @@ export default function VoiceAssistant() {
   handleUserAudioCompleteRef.current = handleUserAudioComplete;
 
   const handleSttFailure = useCallback((message: string, status?: number) => {
-    setErrorMessage(message);
     setIsListening(false);
     if (status === 429) {
+      setErrorMessage(message);
       setUseServerSTT(false);
       autoListenAfterSpeakRef.current = false;
       inConversationRef.current = false;
       setInConversation(false);
+      return;
     }
+    const noSpeech =
+      status === 422 ||
+      /no speech detected|recording too short|too short/i.test(message);
+    if (noSpeech && inConversationRef.current) {
+      setErrorMessage(null);
+      setTimeout(() => startListeningInternalRef.current(), VOICE_STT_RETRY_MS);
+      return;
+    }
+    setErrorMessage(message);
   }, []);
 
   const startServerRecording = async () => {
     const now = Date.now();
-    if (now - lastServerSttAtRef.current < 3000) {
-      setErrorMessage("Please wait a moment before speaking again.");
+    if (now - lastServerSttAtRef.current < 600) {
+      if (inConversationRef.current) {
+        setTimeout(() => startListeningInternalRef.current(), VOICE_STT_RETRY_MS);
+      }
       return;
     }
     lastServerSttAtRef.current = now;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       const mimeType = pickRecorderMimeType();
       const recorder = mimeType
         ? new MediaRecorder(stream, { mimeType })
@@ -760,103 +819,145 @@ export default function VoiceAssistant() {
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
       const blobType = recorder.mimeType || mimeType || "audio/webm";
+      const heardSpeechRef = { current: false };
+
+      const retryListen = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        if (inConversationRef.current) {
+          setErrorMessage(null);
+          setTimeout(() => startListeningInternalRef.current(), VOICE_STT_RETRY_MS);
+        } else {
+          setIsListening(false);
+        }
+      };
 
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.onstop = async () => {
+        if (!heardSpeechRef.current) {
+          retryListen();
+          return;
+        }
+
         const audioBlob = new Blob(chunksRef.current, { type: blobType });
+        if (audioBlob.size < VOICE_MIN_BLOB_BYTES) {
+          retryListen();
+          return;
+        }
+
         const formData = new FormData();
         formData.append('audio', audioBlob);
-        formData.append('language', selectedLanguage.code);
+        formData.append('language', selectedLanguageRef.current.code);
         try {
           const res = await fetch('/api/stt', { method: 'POST', body: formData });
           const data = await res.json();
           const transcribed = typeof data.text === "string" ? data.text.trim() : "";
           if (transcribed) {
+            stream.getTracks().forEach((t) => t.stop());
+            serverSttFailCountRef.current = 0;
             handleUserAudioComplete(transcribed);
-          } else if (inConversationRef.current && autoListenAfterSpeakRef.current) {
-            setTimeout(() => startListeningInternalRef.current(), 400);
+          } else if (inConversationRef.current) {
+            stream.getTracks().forEach((t) => t.stop());
+            if (data.fallbackNative && serverSttFailCountRef.current >= 1) {
+              const win = window as Window & { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor };
+              if (win.SpeechRecognition || win.webkitSpeechRecognition) {
+                serverSttFailCountRef.current = 0;
+                setUseServerSTT(false);
+                useServerSTTRef.current = false;
+                setErrorMessage(null);
+                setTimeout(() => startListeningInternalRef.current(), VOICE_STT_RETRY_MS);
+                return;
+              }
+            }
+            serverSttFailCountRef.current += 1;
+            handleSttFailure(
+              typeof data.error === "string" && data.error.trim() ? data.error.trim() : ui.errorNoSpeech,
+              res.status
+            );
           } else {
+            stream.getTracks().forEach((t) => t.stop());
             handleSttFailure(
               typeof data.error === "string" && data.error.trim() ? data.error.trim() : ui.errorNoSpeech,
               res.status
             );
           }
         } catch {
-          handleSttFailure(ui.errorNetwork);
-        } finally {
           stream.getTracks().forEach((t) => t.stop());
+          handleSttFailure(ui.errorNetwork);
         }
       };
 
-      // ── Silence detection using Web Audio API ──
       const audioCtx = new AudioContext();
+      void audioCtx.resume();
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 512;
-      analyser.smoothingTimeConstant = 0.3;
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.4;
       source.connect(analyser);
 
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      const SILENCE_THRESHOLD = VOICE_SILENCE_THRESHOLD;
+      const timeDomainBuffer = new Uint8Array(analyser.fftSize);
       const SILENCE_DURATION_MS = VOICE_SILENCE_SUBMIT_MS;
       const MAX_RECORD_MS = VOICE_MAX_RECORD_MS;
 
       let silenceStart: number | null = null;
-      let hasHeardSpeech = false;
+      let speechStartedAt: number | null = null;
       const recordStart = Date.now();
       let stopped = false;
+
+      const stopRecording = () => {
+        if (stopped) return;
+        stopped = true;
+        try {
+          if (recorder.state === "recording") recorder.requestData();
+        } catch { /* ignore */ }
+        try {
+          if (recorder.state === "recording") recorder.stop();
+        } catch { /* ignore */ }
+        void audioCtx.close();
+      };
 
       const checkSilence = () => {
         if (stopped) return;
         if (recorder.state !== "recording") return;
 
-        analyser.getByteFrequencyData(dataArray);
-        const avg = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
+        const rms = measureMicRms(analyser, timeDomainBuffer);
 
-        if (avg > SILENCE_THRESHOLD) {
-          // Sound detected
-          hasHeardSpeech = true;
+        if (isSpeechLevel(rms, VOICE_RMS_THRESHOLD)) {
+          heardSpeechRef.current = true;
+          if (speechStartedAt === null) speechStartedAt = Date.now();
           silenceStart = null;
-        } else {
-          // Silence
-          if (silenceStart === null) silenceStart = Date.now();
+        } else if (heardSpeechRef.current && silenceStart === null) {
+          silenceStart = Date.now();
         }
 
         const elapsed = Date.now() - recordStart;
+        const speechMs = speechStartedAt ? Date.now() - speechStartedAt : 0;
 
-        // Auto-stop: silence detected after speech was heard
         if (
-          hasHeardSpeech &&
+          heardSpeechRef.current &&
           silenceStart &&
           Date.now() - silenceStart > SILENCE_DURATION_MS &&
-          elapsed > VOICE_SPEECH_MIN_MS
+          speechMs >= VOICE_SPEECH_MIN_MS
         ) {
-          stopped = true;
-          recorder.stop();
-          audioCtx.close();
+          stopRecording();
           return;
         }
 
-        // Safety timeout
         if (elapsed > MAX_RECORD_MS) {
-          stopped = true;
-          recorder.stop();
-          audioCtx.close();
+          stopRecording();
           return;
         }
 
         requestAnimationFrame(checkSilence);
       };
 
-      recorder.start(250);
+      recorder.start(VOICE_RECORDER_TIMESLICE_MS);
       setIsListening(true);
 
-      // Wait a moment before starting silence detection to let mic warm up
       setTimeout(() => {
         if (!stopped && recorder.state === "recording") {
           checkSilence();
         }
-      }, 300);
+      }, VOICE_MIC_WARMUP_MS);
 
     } catch {
       setErrorMessage(ui.errorMicDenied);
@@ -886,6 +987,7 @@ export default function VoiceAssistant() {
     }
     // Stop speech
     synthRef.current?.cancel();
+    maiVoiceRef.current?.cancel();
     setIsListening(false);
     setIsSpeaking(false);
     setIsProcessing(false);
@@ -908,9 +1010,11 @@ export default function VoiceAssistant() {
     } else {
       // START conversation
       setErrorMessage(null);
+      unlockBrowserAudio();
       inConversationRef.current = true;
       setInConversation(true);
       autoListenAfterSpeakRef.current = true;
+      serverSttFailCountRef.current = 0;
       startListeningInternal();
     }
   };
@@ -949,8 +1053,26 @@ export default function VoiceAssistant() {
 
   const formatCallDuration = (secs: number) => `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, "0")}s`;
 
+  const conciergeLabel = conciergeName;
+
   const voiceStatusLabel =
-    isListening ? ui.listening : isSpeaking ? ui.speaking : isProcessing ? "Processing" : inConversation ? "Tap to end" : ui.ready;
+    isListening
+      ? VOICE_STATUS.listening
+      : isSpeaking
+        ? VOICE_STATUS.speaking
+        : isProcessing
+          ? VOICE_STATUS.thinking
+          : inConversation
+            ? VOICE_STATUS.tapToEnd
+            : VOICE_STATUS.ready;
+
+  const voicePresenceMode = isListening
+    ? "listening"
+    : isSpeaking
+      ? "speaking"
+      : isProcessing
+        ? "thinking"
+        : "idle";
 
   const panelShell = vapiPanelShell;
 
@@ -973,7 +1095,7 @@ export default function VoiceAssistant() {
         <div
           className={`glass-circle relative z-10 ${size} rounded-full flex flex-col items-center justify-center overflow-hidden border hover:scale-[1.03] active:scale-95 transition-all duration-500 ease-out animate-morph ${
             isListening ? "scale-105 glass-circle-listening" : isDark ? "border-white/[0.08] group-hover:border-white/20" : "border-neutral-200 group-hover:border-neutral-300"
-          } ${isProcessing ? "animate-pulse" : ""} ${isSpeaking ? "scale-[1.02] glass-circle-speaking" : ""}`}
+          } ${isProcessing ? "animate-pulse" : ""} ${isSpeaking ? "scale-[1.02] glass-circle-speaking concierge-speaking" : ""}`}
         >
           {isProcessing ? (
             <Loader2 className={`${iconSize} animate-spin ${isDark ? "text-white/80" : "text-neutral-700"}`} />
@@ -990,6 +1112,15 @@ export default function VoiceAssistant() {
           )}
           <div className={`absolute inset-0 rounded-full pointer-events-none ${isDark ? "bg-gradient-to-b from-white/[0.06] to-transparent" : "bg-gradient-to-b from-white/70 via-white/20 to-transparent"}`} />
         </div>
+
+        {!compact && (
+          <VoicePresenceBar
+            active={isListening || isSpeaking || isProcessing}
+            mode={voicePresenceMode}
+            accentColor={branding.accentColor}
+            className="mt-4 w-full max-w-[200px] mx-auto"
+          />
+        )}
       </div>
     );
   };
@@ -1267,15 +1398,15 @@ export default function VoiceAssistant() {
             {/* Chat header strip */}
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-iron-border px-4 py-3.5 sm:px-5">
               <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0"
-                  style={{ background: `linear-gradient(135deg, ${branding.accentColor}33, rgba(var(--hotel-accent-rgb), 0.15))` }}
-                >
-                  <Sparkles className="w-4 h-4" style={{ color: "rgb(var(--hotel-accent-bright-rgb))" }} />
-                </div>
+                <ConciergeAvatar
+                  name={conciergeName}
+                  accentColor={branding.accentColor}
+                  size="sm"
+                  isDark={isDark}
+                />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-cream-text">
-                    {messages.length === 0 ? welcomeHeadline : "Conversation"}
+                    {messages.length === 0 ? welcomeHeadline : `${conciergeName}, your concierge`}
                   </p>
                   <p className="truncate text-[11px] text-zinc-mute">
                     {selectedLanguage.flag} {selectedLanguage.nativeName} · {messages.length === 0 ? welcomeSubtext : ui.welcomeHint}
@@ -1293,13 +1424,13 @@ export default function VoiceAssistant() {
             <div className="flex-1 overflow-y-auto scrollbar-premium px-4 sm:px-5 py-5">
               {messages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center py-8 sm:py-12">
-                  <div
-                    className={`mb-5 h-16 w-16 rounded-2xl flex items-center justify-center border ${
-                      isDark ? "border-white/10 bg-white/[0.04]" : "border-neutral-200 bg-white"
-                    }`}
-                  >
-                    <Bot className={`w-8 h-8 ${isDark ? "text-neutral-400" : "text-neutral-500"}`} />
-                  </div>
+                  <ConciergeAvatar
+                    name={conciergeName}
+                    accentColor={branding.accentColor}
+                    size="md"
+                    isDark={isDark}
+                    className="mb-5"
+                  />
                   <h2 className="va-welcome-title text-2xl sm:text-3xl text-gradient-brand mb-2 max-w-md text-balance">
                     {welcomeHeadline}
                   </h2>
@@ -1322,24 +1453,23 @@ export default function VoiceAssistant() {
                       key={i}
                       className={`flex gap-3 animate-in slide-in-from-bottom-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
                     >
-                      <div
-                        className={`shrink-0 h-8 w-8 rounded-xl flex items-center justify-center mt-0.5 ${
-                          msg.role === "user"
-                            ? isDark ? "bg-white/10 text-neutral-300" : "bg-neutral-200 text-neutral-700"
-                            : isDark ? "bg-white/[0.06] text-amber-200" : "bg-amber-50 text-amber-700"
-                        }`}
-                        style={
-                          msg.role === "assistant"
-                            ? { boxShadow: `0 0 0 1px rgba(var(--hotel-accent-rgb), 0.25)` }
-                            : undefined
-                        }
-                      >
-                        {msg.role === "user" ? (
+                      {msg.role === "user" ? (
+                        <div
+                          className={`shrink-0 h-8 w-8 rounded-xl flex items-center justify-center mt-0.5 ${
+                            isDark ? "bg-white/10 text-neutral-300" : "bg-neutral-200 text-neutral-700"
+                          }`}
+                        >
                           <span className="text-[10px] font-black uppercase">{ui.you.charAt(0)}</span>
-                        ) : (
-                          <Bot className="w-4 h-4" />
-                        )}
-                      </div>
+                        </div>
+                      ) : (
+                        <ConciergeAvatar
+                          name={conciergeName}
+                          accentColor={branding.accentColor}
+                          size="sm"
+                          isDark={isDark}
+                          className="mt-0.5"
+                        />
+                      )}
 
                       <div className={`flex flex-col gap-1.5 min-w-0 max-w-[85%] ${msg.role === "user" ? "items-end" : "items-start"}`}>
                         <div
@@ -1367,7 +1497,7 @@ export default function VoiceAssistant() {
 
                         <div className={`flex items-center gap-2 px-1 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
                           <span className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? "text-neutral-600" : "text-neutral-400"}`}>
-                            {msg.role === "user" ? ui.you : branding.hotelName}
+                            {msg.role === "user" ? ui.you : conciergeName}
                           </span>
                           {msg.role === "assistant" && (
                             <div className="flex items-center gap-0.5">
@@ -1405,6 +1535,30 @@ export default function VoiceAssistant() {
                       </div>
                     </div>
                   ))}
+                  {isProcessing && (
+                    <div className="flex gap-3 animate-in slide-in-from-bottom-2">
+                      <ConciergeAvatar
+                        name={conciergeName}
+                        accentColor={branding.accentColor}
+                        size="sm"
+                        isDark={isDark}
+                        className="mt-0.5"
+                      />
+                      <div
+                        className={`px-4 py-3 rounded-2xl rounded-tl-md border text-[14px] ${
+                          isDark ? "glass border-white/10 text-neutral-300" : "bg-white border-neutral-200 text-neutral-600 shadow-sm"
+                        }`}
+                        style={{ borderColor: "rgba(var(--hotel-accent-rgb), 0.28)" }}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60 animate-bounce" style={{ animationDelay: "0ms" }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60 animate-bounce" style={{ animationDelay: "120ms" }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60 animate-bounce" style={{ animationDelay: "240ms" }} />
+                          <span className="ml-1 text-[13px]">{VOICE_STATUS.thinking}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div ref={messagesEndRef} />
                 </div>
               )}
@@ -1419,7 +1573,7 @@ export default function VoiceAssistant() {
           <div className={`flex flex-col items-center gap-4 rounded-[5.6px] p-5 ${panelShell}`}>
             <div className="flex w-full items-center justify-between">
               <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-zinc-mute">
-                Voice
+                {conciergeName}
               </span>
               <button
                 type="button"
@@ -1608,6 +1762,7 @@ export default function VoiceAssistant() {
           languageCode={selectedLanguage.code}
           ttsLang={selectedLanguage.ttsLang}
           voiceStyle={voiceStyle}
+          maiVoiceReady={maiVoiceReady}
           aiReady={aiReady !== false}
           geminiLiveReady={geminiLiveReady === true}
           onEnd={handleCallEnd}

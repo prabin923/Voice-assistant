@@ -6,10 +6,18 @@ import { GUEST_STAFF_HANDOFF_MESSAGE } from "@/lib/escalationMessages";
 import { GeminiLiveSession } from "@/lib/geminiLiveSession";
 import {
   VOICE_MAX_RECORD_MS,
+  VOICE_MIC_WARMUP_MS,
+  VOICE_MIN_BLOB_BYTES,
+  VOICE_RECORDER_TIMESLICE_MS,
+  VOICE_RESUME_LISTEN_MS,
+  VOICE_RMS_THRESHOLD,
   VOICE_SILENCE_SUBMIT_MS,
-  VOICE_SILENCE_THRESHOLD,
   VOICE_SPEECH_MIN_MS,
+  VOICE_STT_RETRY_MS,
 } from "@/lib/voiceSilence";
+import { measureMicRms, isSpeechLevel } from "@/lib/voiceActivity";
+import { createMaiVoiceSpeaker, type MaiVoiceSpeaker, unlockBrowserAudio } from "@/lib/clientMaiVoice";
+import { sanitizeForSpeech, VOICE_STATUS } from "@/lib/humanizeSpeech";
 
 type CallState = "ringing" | "connected" | "ended";
 
@@ -73,6 +81,7 @@ interface CallOverlayProps {
   voiceStyle: "warm" | "professional" | "energetic";
   aiReady?: boolean;
   geminiLiveReady?: boolean;
+  maiVoiceReady?: boolean;
   onEnd: (record?: CallHistoryRecord) => void;
 }
 
@@ -84,6 +93,7 @@ export default function CallOverlay({
   voiceStyle,
   aiReady = true,
   geminiLiveReady = false,
+  maiVoiceReady = false,
   onEnd,
 }: CallOverlayProps) {
   const [callState, setCallState] = useState<CallState>("ringing");
@@ -106,6 +116,7 @@ export default function CallOverlay({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const synthRef = useRef<SpeechSynthesis | null>(null);
+  const maiVoiceRef = useRef<MaiVoiceSpeaker | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const autoListenRef = useRef(true);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -170,6 +181,10 @@ export default function CallOverlay({
 
   // Init TTS
   useEffect(() => { synthRef.current = window.speechSynthesis; }, []);
+  useEffect(() => {
+    maiVoiceRef.current = createMaiVoiceSpeaker();
+    return () => maiVoiceRef.current?.cancel();
+  }, []);
 
   // Cleanup audio context on unmount
   useEffect(() => {
@@ -204,24 +219,13 @@ export default function CallOverlay({
     return scored[0].voice;
   }, []);
 
-  const toHumanSpeechText = useCallback((text: string) => {
-    return text
-      .replace(/\*\*(.*?)\*\*/g, "$1")
-      .replace(/\*(.*?)\*/g, "$1")
-      .replace(/`([^`]+)`/g, "$1")
-      .replace(/\s+/g, " ")
-      .replace(/\s*([,.;!?])\s*/g, "$1 ")
-      .replace(/([a-z])\s*-\s*([a-z])/gi, "$1 $2")
-      .trim();
-  }, []);
+  const toHumanSpeechText = useCallback((text: string) => sanitizeForSpeech(text), []);
 
-  // Speak helper
-  const speak = useCallback((text: string) => {
+  const speakWithBrowser = useCallback((text: string) => {
     if (!synthRef.current || isSpeakerOff) {
-      // If speaker off, skip TTS but still auto-listen after
       setTimeout(() => {
         if (autoListenRef.current) startListeningRef.current();
-      }, 500);
+      }, VOICE_RESUME_LISTEN_MS);
       return;
     }
     synthRef.current.cancel();
@@ -230,25 +234,53 @@ export default function CallOverlay({
     const bestVoice = pickBestVoice(ttsLang);
     if (bestVoice) utt.voice = bestVoice;
     if (voiceStyle === "professional") {
-      utt.rate = 0.88;
+      utt.rate = 0.92;
       utt.pitch = 0.95;
     } else if (voiceStyle === "energetic") {
-      utt.rate = 0.97;
+      utt.rate = 1.0;
       utt.pitch = 1.04;
     } else {
-      utt.rate = 0.9;
+      utt.rate = 0.95;
       utt.pitch = 0.98;
     }
     utt.volume = 1.0;
     utt.onstart = () => setIsSpeaking(true);
     utt.onend = () => {
       setIsSpeaking(false);
-      // Auto-listen after speaking (continuous call)
-      if (autoListenRef.current) setTimeout(() => startListeningRef.current(), 400);
+      if (autoListenRef.current) setTimeout(() => startListeningRef.current(), VOICE_RESUME_LISTEN_MS);
     };
     utt.onerror = () => setIsSpeaking(false);
     synthRef.current.speak(utt);
   }, [ttsLang, isSpeakerOff, pickBestVoice, toHumanSpeechText, voiceStyle]);
+
+  const speak = useCallback(async (text: string) => {
+    if (isSpeakerOff) {
+      setTimeout(() => {
+        if (autoListenRef.current) startListeningRef.current();
+      }, VOICE_RESUME_LISTEN_MS);
+      return;
+    }
+
+    synthRef.current?.cancel();
+    maiVoiceRef.current?.cancel();
+
+    if (maiVoiceReady && maiVoiceRef.current) {
+      const used = await maiVoiceRef.current.speak({
+        text,
+        language: ttsLang,
+        voiceStyle,
+        onStart: () => setIsSpeaking(true),
+        onEnd: () => {
+          setIsSpeaking(false);
+          if (autoListenRef.current) setTimeout(() => startListeningRef.current(), VOICE_RESUME_LISTEN_MS);
+        },
+        onError: () => setIsSpeaking(false),
+      });
+      if (used) return;
+    }
+
+    speakWithBrowser(text);
+  }, [isSpeakerOff, maiVoiceReady, speakWithBrowser, ttsLang, voiceStyle]);
 
   // Send to chat API
   const sendMessage = useCallback(async (text: string) => {
@@ -264,7 +296,7 @@ export default function CallOverlay({
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, language: languageCode }),
+        body: JSON.stringify({ message: text, language: languageCode, channel: "voice" }),
       });
       const data = await res.json();
       const reply =
@@ -319,6 +351,7 @@ export default function CallOverlay({
     liveSessionRef.current?.disconnect();
     liveSessionRef.current = null;
     synthRef.current?.cancel();
+    maiVoiceRef.current?.cancel();
     if (audioContextRef.current && audioContextRef.current.state !== "closed") {
       audioContextRef.current.close().catch(() => {});
     }
@@ -450,7 +483,9 @@ export default function CallOverlay({
   const startServerListening = useCallback(async () => {
     if (isMuted || !autoListenRef.current) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
       const mimeType = pickCallRecorderMimeType();
       const recorder = mimeType
         ? new MediaRecorder(stream, { mimeType })
@@ -458,10 +493,10 @@ export default function CallOverlay({
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
       const blobType = recorder.mimeType || mimeType || "audio/webm";
+      const heardSpeechRef = { current: false };
 
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.onstop = async () => {
-        // Stop audio level monitoring
         if (audioLevelFrameRef.current) {
           cancelAnimationFrame(audioLevelFrameRef.current);
           audioLevelFrameRef.current = 0;
@@ -470,7 +505,19 @@ export default function CallOverlay({
         lastAudioLevelUpdateRef.current = 0;
         setAudioLevel(0);
 
+        if (!heardSpeechRef.current) {
+          stream.getTracks().forEach((t) => t.stop());
+          if (autoListenRef.current) setTimeout(() => startListeningRef.current(), VOICE_STT_RETRY_MS);
+          return;
+        }
+
         const blob = new Blob(chunksRef.current, { type: blobType });
+        if (blob.size < VOICE_MIN_BLOB_BYTES) {
+          stream.getTracks().forEach((t) => t.stop());
+          if (autoListenRef.current) setTimeout(() => startListeningRef.current(), VOICE_STT_RETRY_MS);
+          return;
+        }
+
         const fd = new FormData();
         fd.append('audio', blob);
         fd.append('language', languageCode);
@@ -479,42 +526,46 @@ export default function CallOverlay({
           const data = await res.json();
           const transcribed = typeof data.text === "string" ? data.text.trim() : "";
           if (transcribed) sendMessage(transcribed);
-          else if (autoListenRef.current) setTimeout(() => startListeningRef.current(), 400);
+          else if (autoListenRef.current) setTimeout(() => startListeningRef.current(), VOICE_STT_RETRY_MS);
         } catch {
-          if (autoListenRef.current) setTimeout(() => startListeningRef.current(), 1000);
+          if (autoListenRef.current) setTimeout(() => startListeningRef.current(), VOICE_STT_RETRY_MS);
         } finally { stream.getTracks().forEach(t => t.stop()); }
       };
 
-      // ── Silence detection using Web Audio API ──
       const audioCtx = new AudioContext();
+      void audioCtx.resume();
       audioContextRef.current = audioCtx;
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 512;
-      analyser.smoothingTimeConstant = 0.3;
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.4;
       source.connect(analyser);
       analyserRef.current = analyser;
 
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      const SILENCE_THRESHOLD = VOICE_SILENCE_THRESHOLD;
-      const SILENCE_DURATION_MS = VOICE_SILENCE_SUBMIT_MS;
-      const SPEECH_MIN_MS = VOICE_SPEECH_MIN_MS;
-      const MAX_RECORD_MS = VOICE_MAX_RECORD_MS;
-
+      const timeDomainBuffer = new Uint8Array(analyser.fftSize);
       let silenceStart: number | null = null;
-      let hasHeardSpeech = false;
+      let speechStartedAt: number | null = null;
       const recordStart = Date.now();
       let stopped = false;
+
+      const stopRecording = () => {
+        if (stopped) return;
+        stopped = true;
+        try {
+          if (recorder.state === "recording") recorder.requestData();
+        } catch { /* ignore */ }
+        try {
+          if (recorder.state === "recording") recorder.stop();
+        } catch { /* ignore */ }
+        void audioCtx.close().catch(() => {});
+      };
 
       const checkSilence = () => {
         if (stopped) return;
         if (recorder.state !== "recording") return;
 
-        analyser.getByteFrequencyData(dataArray);
-        const avg = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
-
-        // Throttle visual updates to avoid rerendering the full call UI on every frame.
-        const normalized = Math.min(avg / 80, 1);
+        const rms = measureMicRms(analyser, timeDomainBuffer);
+        const normalized = Math.min(rms / 35, 1);
         const now = Date.now();
         if (
           now - lastAudioLevelUpdateRef.current > 80 ||
@@ -525,43 +576,43 @@ export default function CallOverlay({
           setAudioLevel(normalized);
         }
 
-        if (avg > SILENCE_THRESHOLD) {
-          hasHeardSpeech = true;
+        if (isSpeechLevel(rms, VOICE_RMS_THRESHOLD)) {
+          heardSpeechRef.current = true;
+          if (speechStartedAt === null) speechStartedAt = Date.now();
           silenceStart = null;
-        } else {
-          if (silenceStart === null) silenceStart = Date.now();
+        } else if (heardSpeechRef.current && silenceStart === null) {
+          silenceStart = Date.now();
         }
 
         const elapsed = Date.now() - recordStart;
+        const speechMs = speechStartedAt ? Date.now() - speechStartedAt : 0;
 
-        // Auto-stop: silence detected after speech was heard
-        if (hasHeardSpeech && silenceStart && (Date.now() - silenceStart > SILENCE_DURATION_MS) && elapsed > SPEECH_MIN_MS) {
-          stopped = true;
-          recorder.stop();
-          audioCtx.close().catch(() => {});
+        if (
+          heardSpeechRef.current &&
+          silenceStart &&
+          Date.now() - silenceStart > VOICE_SILENCE_SUBMIT_MS &&
+          speechMs >= VOICE_SPEECH_MIN_MS
+        ) {
+          stopRecording();
           return;
         }
 
-        // Safety timeout
-        if (elapsed > MAX_RECORD_MS) {
-          stopped = true;
-          recorder.stop();
-          audioCtx.close().catch(() => {});
+        if (elapsed > VOICE_MAX_RECORD_MS) {
+          stopRecording();
           return;
         }
 
         audioLevelFrameRef.current = requestAnimationFrame(checkSilence);
       };
 
-      recorder.start(250);
+      recorder.start(VOICE_RECORDER_TIMESLICE_MS);
       setIsListening(true);
 
-      // Wait before starting silence detection to let mic warm up
       setTimeout(() => {
         if (!stopped && recorder.state === "recording") {
           checkSilence();
         }
-      }, 300);
+      }, VOICE_MIC_WARMUP_MS);
 
     } catch { setIsListening(false); }
   }, [isMuted, languageCode, sendMessage]);
@@ -610,7 +661,7 @@ export default function CallOverlay({
         if (text) {
           sendMessage(text);
         } else {
-          setTimeout(() => startListeningRef.current(), 300);
+          setTimeout(() => startListeningRef.current(), VOICE_STT_RETRY_MS);
         }
       }, VOICE_SILENCE_SUBMIT_MS);
     };
@@ -640,7 +691,7 @@ export default function CallOverlay({
         setUseServerMode(true);
         setTimeout(() => startServerListening(), 100);
       } else if (e.error === "no-speech" && autoListenRef.current) {
-        setTimeout(() => startListeningRef.current(), 500);
+        setTimeout(() => startListeningRef.current(), VOICE_STT_RETRY_MS);
       }
     };
 
@@ -662,6 +713,7 @@ export default function CallOverlay({
   useEffect(() => {
     if (callState === "ringing") {
       const t = setTimeout(() => {
+        unlockBrowserAudio();
         setCallState("connected");
         if (geminiLiveReady) {
           setCallLog([]);
@@ -804,13 +856,13 @@ export default function CallOverlay({
               {isSpeaking && (
                 <div className="flex flex-col items-center gap-2">
                   <WaveBars level={0.7} color="#4ade80" />
-                  <p className="text-green-400/70 text-xs">Receptionist speaking...</p>
+                  <p className="text-green-400/70 text-xs">{VOICE_STATUS.speaking}</p>
                 </div>
               )}
               {isListening && !isSpeaking && (
                 <div className="flex flex-col items-center gap-2">
                   <WaveBars level={audioLevel} color="#f87171" />
-                  <p className="text-neutral-400 text-xs">{liveTranscript || "Listening..."}</p>
+                  <p className="text-neutral-400 text-xs">{liveTranscript || VOICE_STATUS.listening}</p>
                 </div>
               )}
               {isProcessing && (
@@ -820,11 +872,11 @@ export default function CallOverlay({
                     <span className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: "150ms" }} />
                     <span className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: "300ms" }} />
                   </div>
-                  <p className="text-neutral-500 text-xs">Processing...</p>
+                  <p className="text-neutral-500 text-xs">{VOICE_STATUS.thinking}</p>
                 </div>
               )}
               {!isListening && !isSpeaking && !isProcessing && (
-                <p className="text-neutral-600 text-xs">Waiting...</p>
+                <p className="text-neutral-600 text-xs">{VOICE_STATUS.ready}</p>
               )}
             </div>
           )}
@@ -835,7 +887,7 @@ export default function CallOverlay({
               {callLog.map((entry, i) => (
                 <div key={i} className={`text-xs px-3 py-2 rounded-xl ${entry.role === "user" ? "bg-neutral-800/60 text-neutral-300 ml-8" : "bg-green-900/20 text-green-300/80 mr-8"}`}>
                   <span className="font-medium text-[10px] uppercase tracking-wider opacity-60 block mb-0.5">
-                    {entry.role === "user" ? "You" : "Receptionist"}
+                    {entry.role === "user" ? "You" : "Concierge"}
                   </span>
                   {entry.text}
                 </div>

@@ -166,7 +166,7 @@ export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
     { question: "airport shuttle", answer: "We offer complimentary airport shuttle service. Please contact the front desk to arrange your pickup." },
     { question: "laundry", answer: "Laundry and dry cleaning services are available. Please check the in-room menu card for pricing and pickup times." },
   ],
-  receptionistPersona: "You are a warm, professional, and highly courteous virtual hotel receptionist. You speak clearly and concisely. You always try to provide helpful answers and offer to connect the guest with a human agent when you cannot help.",
+  receptionistPersona: "You are Alex, the front-desk concierge — warm, calm, and genuinely helpful, like a trusted hotel host who knows every guest by name. You speak in natural, conversational sentences (never robotic lists). You acknowledge feelings, use contractions, and sound like you're smiling when you greet someone.",
   voiceStyle: "warm",
   language: "en-US",
   supportedLanguages: ["en-US", "es-ES", "fr-FR", "de-DE", "ja-JP", "zh-CN", "hi-IN", "ne-NP", "ko-KR", "ar-SA", "pt-BR", "ru-RU", "it-IT", "tr-TR", "th-TH", "vi-VN", "id-ID", "nl-NL", "pl-PL", "sv-SE"],
@@ -229,6 +229,12 @@ export async function updateHotelConfig(updates: Partial<HotelConfig>): Promise<
   updated.branding = sanitizeBranding(updated.branding);
 
   currentConfig = updated;
+  try {
+    const { invalidateResponseEngineCache } = await import("@/lib/responseEngine");
+    invalidateResponseEngineCache();
+  } catch {
+    /* response engine optional at bootstrap */
+  }
 
   // Persist to DB (for the first hotel found)
   try {

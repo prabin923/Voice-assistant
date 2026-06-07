@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getAssistantResponse } from '@/lib/responseEngine';
-import { notifyHotelStaff } from '@/lib/escalation';
+import { handleGuestBookingFlow } from '@/lib/bookingFlow';
+import { ensureHotelConfigLoaded } from '@/lib/hotelConfig';
+import { notifyHotelStaff, type EscalationReason } from '@/lib/escalation';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 
 // SECURITY: Verify webhook requests via shared secret
@@ -63,7 +65,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ action: 'speak', text: 'I didn\'t catch that. Could you repeat?' });
     }
 
-    const { reply: aiReply, escalate, reason } = await getAssistantResponse(sanitizedInput, language);
+    const config = await ensureHotelConfigLoaded();
+    const bookingFlow = await handleGuestBookingFlow({
+      message: sanitizedInput,
+      langCode: language,
+      config,
+      history: [],
+    });
+
+    let aiReply: string;
+    let escalate = false;
+    let reason: EscalationReason | undefined;
+
+    if (bookingFlow.handled) {
+      aiReply = bookingFlow.reply || "I can help with that booking.";
+      escalate = Boolean(bookingFlow.escalate);
+      reason = bookingFlow.reason;
+    } else {
+      const result = await getAssistantResponse(sanitizedInput, language, [], "voice");
+      aiReply = result.reply;
+      escalate = result.escalate;
+      reason = result.reason;
+    }
 
     if (escalate) {
       await notifyHotelStaff({

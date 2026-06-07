@@ -10,16 +10,17 @@ export type AiAccessResult =
   | { allowed: true; guestId?: string; tier: AiAccessTier }
   | { allowed: false; response: NextResponse };
 
-const ANON_LIMITS: Record<"chat" | "stt" | "live", number> = {
+const ANON_LIMITS: Record<"chat" | "stt" | "live" | "tts", number> = {
   chat: 30,
   stt: 15,
   live: 5,
+  tts: 25,
 };
 
 /** Gate expensive AI endpoints: admin, guest session, demo API key, or rate-limited anonymous. */
 export async function requireAiAccess(
   req: Request,
-  scope: "chat" | "stt" | "live"
+  scope: "chat" | "stt" | "live" | "tts"
 ): Promise<AiAccessResult> {
   const admin = await getSession();
   if (admin) return { allowed: true, tier: "admin" };

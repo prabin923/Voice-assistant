@@ -1,3 +1,5 @@
+import { normalizeSpeechEndpoint } from "@/lib/azureSpeech";
+
 /**
  * Microsoft MAI-Transcribe via Azure LLM Speech API.
  * @see https://learn.microsoft.com/en-us/azure/ai-services/speech-service/mai-transcribe
@@ -29,7 +31,7 @@ export function getMaiTranscribeConfig(): MaiTranscribeConfig | undefined {
 
   return {
     apiKey,
-    endpoint: endpoint.replace(/\/$/, ""),
+    endpoint: normalizeSpeechEndpoint(endpoint),
     model,
   };
 }

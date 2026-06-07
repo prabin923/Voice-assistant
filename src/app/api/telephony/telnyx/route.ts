@@ -9,7 +9,9 @@
  */
 
 import { getAssistantResponse } from "@/lib/responseEngine";
-import { notifyHotelStaff } from "@/lib/escalation";
+import { handleGuestBookingFlow } from "@/lib/bookingFlow";
+import { ensureHotelConfigLoaded } from "@/lib/hotelConfig";
+import { notifyHotelStaff, type EscalationReason } from "@/lib/escalation";
 import { getClientIP } from "@/lib/rateLimit";
 import { checkRateLimitAsync } from "@/lib/rateLimitDistributed";
 import { getHotelConfig } from "@/lib/hotelConfig";
@@ -117,16 +119,33 @@ async function handleGather(req: Request, language: string, transcript: string):
   let escalate = false;
 
   try {
-    const result = await getAssistantResponse(sanitized, language);
-    aiReply = result.reply;
-    escalate = result.escalate;
+    const config = await ensureHotelConfigLoaded();
+    const bookingFlow = await handleGuestBookingFlow({
+      message: sanitized,
+      langCode: language,
+      config,
+      history: [],
+    });
+
+    let escalationReason: EscalationReason | undefined;
+
+    if (bookingFlow.handled) {
+      aiReply = bookingFlow.reply || "I can help with that booking.";
+      escalate = Boolean(bookingFlow.escalate);
+      escalationReason = bookingFlow.reason;
+    } else {
+      const result = await getAssistantResponse(sanitized, language, [], "voice");
+      aiReply = result.reply;
+      escalate = result.escalate;
+      escalationReason = result.reason;
+    }
 
     if (escalate) {
       await notifyHotelStaff({
         guestMessage: sanitized,
         aiResponse: aiReply,
         language,
-        reason: result.reason,
+        reason: escalationReason,
       });
     }
   } catch (err) {

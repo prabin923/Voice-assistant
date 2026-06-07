@@ -1,4 +1,5 @@
 /** Shared Gemini API key resolution for chat, STT, and concierge routes. */
+import { isMaiTranscribeConfigured } from "@/lib/maiTranscribe";
 import { isSelfHostedSttConfigured } from "@/lib/selfHostedStt";
 export function getGeminiApiKey(): string | undefined {
   const candidates = [
@@ -18,9 +19,9 @@ export function isGeminiConfigured(): boolean {
   return Boolean(getGeminiApiKey());
 }
 
-/** STT: self-hosted Whisper and/or Gemini fallback. */
+/** STT: MAI-Transcribe, self-hosted Whisper, and/or Gemini fallback. */
 export function isSttConfigured(): boolean {
-  return isSelfHostedSttConfigured() || isGeminiConfigured();
+  return isMaiTranscribeConfigured() || isSelfHostedSttConfigured() || isGeminiConfigured();
 }
 
 export function geminiNotConfiguredResponse() {

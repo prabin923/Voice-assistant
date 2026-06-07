@@ -1,8 +1,10 @@
 # StayNep AI Voice Receptionist
 
-> **An intelligent, multilingual voice assistant for hotel guest services — powered by Next.js 16 and Google Gemini 2.5 Flash Lite.**
+> **An intelligent, multilingual voice assistant for hotel guest services — powered by Next.js 16, Google Gemini, and autonomous booking.**
 
-A production-ready AI voice receptionist that provides 24/7 multilingual guest support for hotels. Guests speak in any of 34 supported languages and receive instant, spoken responses with hotel-specific knowledge. Built as the foundation for **StayNep** — a comprehensive hotel management platform for Nepal's hospitality industry.
+A production-ready AI voice receptionist that provides 24/7 multilingual guest support for hotels. Guests speak in any of 34 supported languages and receive instant, spoken responses with hotel-specific knowledge. The assistant handles **live availability checks**, **end-to-end bookings**, **modifications**, and **cancellations** on its own — staff are notified only when a booking is completed (FYI) or when a situation truly needs a human.
+
+Built as the foundation for **StayNep** — a comprehensive hotel management platform for Nepal's hospitality industry.
 
 ---
 
@@ -11,24 +13,17 @@ A production-ready AI voice receptionist that provides 24/7 multilingual guest s
 | Feature | Description |
 |---------|-------------|
 | **Voice-to-Voice Chat** | Tap to speak, get spoken AI responses in real-time |
-| **Conversation Memory** | Multi-turn context — the AI remembers what you said earlier in the session |
+| **Autonomous Booking** | Check availability, book, modify, and cancel — without front-desk handoff |
+| **Live Inventory** | Real-time room availability from Prisma Postgres |
+| **Smart Alternatives** | Suggests other room types or nearby dates when sold out |
+| **Tiered Staff Alerts** | FYI emails on completed bookings; escalation tickets only when critical |
+| **Rich Hotel Context** | Dining, FAQ, full policies, amenities, and room details in AI prompt |
+| **Conversation Memory** | Multi-turn booking — collect dates, room, name, and phone across messages |
 | **34 Languages** | Full multilingual support via Gemini — Arabic to Vietnamese |
-| **Natural TTS** | Smart voice selection prefers premium voices, 0.93x speech rate for human-like pacing |
-| **Silence Detection** | Auto-stops recording when the user stops talking (Web Audio API) |
-| **Seamless Conversation** | Tap once to start, auto-listen loop after each response, tap again to stop |
-| **Guest Feedback** | Thumbs up/down on every AI response, stored and tracked |
-| **Hotel Admin Auth** | JWT + bcrypt, CSRF, session rotation, audit log, optional email password reset |
-| **Admin Dashboard** | 8-tab configuration panel (Prisma Postgres) — Branding, Contact, Policies, Rooms, Dining, Amenities, FAQ, AI Persona |
-| **Analytics Dashboard** | 7 KPI cards, daily trends, peak hours, language distribution, activity heatmap, guest satisfaction |
-| **Support Inbox** | Priority-sorted escalation tickets with auto-refresh and email alerts |
-| **Email Alerts** | Staff notified via sanitized HTML email when AI escalates a guest issue |
-| **Toast Notifications** | Visual feedback on add/delete actions in settings |
-| **Telephony Integration** | Phone call support via TingTing/Twilio webhook (Secured with WEBHOOK_SECRET) |
-| **Concierge Call Mode** | In-app telephony interface |
-| **Rate Limiting** | Brute-force protection (5/min for login, 3/hr for register, 60/min for chat) |
-| **Security Hardened** | Masked error messages, crypto IDs, SSL/SameSite strict cookies, path-traversal protection |
-| **Mobile Responsive** | Fully responsive across all pages |
-| **Performance Optimized** | GPU-friendly CSS, no stacked backdrop-filter blurs |
+| **MAI-Voice TTS** | Azure MAI-Voice with browser fallback |
+| **Guest Accounts** | Sign-in pre-fills name, phone, and links bookings |
+| **Admin Dashboard** | Settings, analytics, calendar inventory, support inbox |
+| **Telephony** | Telnyx / generic webhook voice integration |
 
 ---
 
@@ -38,13 +33,11 @@ A production-ready AI voice receptionist that provides 24/7 multilingual guest s
 |----------|-----------|
 | Frontend | Next.js 16, React 19, TypeScript |
 | Styling | Tailwind CSS v4, Glassmorphism |
-| AI Engine | Google Gemini 2.5 Flash Lite |
-| STT | Gemini multimodal (audio transcription) |
-| TTS | Web Speech Synthesis API (premium voice selection) |
-| Auth | jose (JWT), bcryptjs, HTTP-only cookies |
+| AI Engine | Google Gemini / OpenAI (configurable) |
+| STT | MAI-Transcribe (Azure) + Gemini + browser |
+| TTS | MAI-Voice (Azure) + Web Speech Synthesis |
 | Database | Prisma ORM + Prisma Postgres |
-| Email | Nodemailer (SMTP) |
-| Telephony | TingTing/Twilio webhooks |
+| Email | Nodemailer (guest confirmations + staff FYI + escalations) |
 
 ---
 
@@ -64,25 +57,21 @@ Create a `.env.local` for app secrets (see `.env.example`). Link Prisma Postgres
 
 ```bash
 npx prisma postgres link --database <your-database-id>
-# writes DATABASE_URL to .env — never commit that file
 npx prisma migrate dev
 npx prisma db seed   # optional sample data
 ```
 
 ```bash
-# Required: Gemini API Key
 GOOGLE_GENERATIVE_AI_API_KEY=your_key_from_aistudio.google.com
-
-# JWT Secret for Auth sessions (use a long random value in production)
 JWT_SECRET=your_random_secret_here
-
-# Public URL of the app — used in password-reset emails when set (otherwise the request origin is used)
 NEXT_PUBLIC_APP_URL=https://your-production-domain.com
-
-# Required for telephony webhook authentication
 WEBHOOK_SECRET=your_webhook_shared_secret
 
-# Optional: SMTP for escalation alerts and admin password-reset emails
+# Optional: Azure Speech (MAI-Voice + MAI-Transcribe)
+AZURE_SPEECH_KEY=...
+AZURE_SPEECH_ENDPOINT=https://your-resource.cognitiveservices.azure.com
+
+# Optional: SMTP for guest confirmations, staff FYI, and escalation alerts
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your-email@gmail.com
@@ -90,151 +79,252 @@ SMTP_PASS=your-app-password
 SMTP_FROM=ai-receptionist@yourhotel.com
 ```
 
-**Vercel checklist:** set `DATABASE_URL`, `JWT_SECRET` (≥32 characters), and `NEXT_PUBLIC_APP_URL` in Project → Settings → Environment Variables, then redeploy.
-
 ### 3. Run the dev server
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) — the voice assistant is ready.
+Open [http://localhost:3000/assistant](http://localhost:3000/assistant).
+
+---
+
+## Architecture Flowcharts
+
+### 1. Guest message routing
+
+Every message to `/api/chat` is routed by intent before the general AI is invoked.
+
+```mermaid
+flowchart TD
+  A[Guest message] --> B{Intent router}
+  B -->|Cancel booking| C[Cancel flow]
+  B -->|Modify booking| D[Modify flow]
+  B -->|Availability query| E[Live inventory lookup]
+  B -->|New booking| F[Booking state machine]
+  B -->|Booking context in history| F
+  B -->|General question| G[AI + full hotel context]
+
+  C --> H[Guest reply]
+  D --> H
+  E --> H
+  F --> H
+  G --> I{Escalate?}
+  I -->|No| H
+  I -->|Yes| J[Support ticket + alert email]
+  J --> H
+```
+
+### 2. Autonomous booking flow
+
+Bookings complete without staff involvement during the conversation. Staff receive an **informational FYI email** after success.
+
+```mermaid
+flowchart TD
+  A[Booking intent detected] --> B{Dates known?}
+  B -->|No| C[Ask for check-in / check-out]
+  B -->|Yes| D[Query live availability]
+  D --> E{Room type known?}
+  E -->|No| F[List available rooms + rates]
+  E -->|Yes| G{Room available?}
+  G -->|No| H[Suggest alternatives — other rooms or dates]
+  G -->|Yes| I{Name + phone?}
+  I -->|No| J[Ask for guest details]
+  I -->|Yes| K[createBookingSafe — transactional]
+  K --> L{Success?}
+  L -->|Yes| M[Guest confirmation email]
+  M --> N[Staff FYI email — no ticket]
+  N --> O[BookingSummaryCard in chat]
+  L -->|Conflict| H
+  C --> P[Wait for next message]
+  F --> P
+  J --> P
+  H --> P
+```
+
+### 3. Cancel and modify flows
+
+```mermaid
+flowchart TD
+  A[Cancel or modify intent] --> B{Find booking}
+  B -->|By confirmation ID| C[Lookup in database]
+  B -->|Guest signed in| D[Latest guest booking]
+  B -->|Not found| E[Ask for booking ID or sign-in]
+  C --> F{Action}
+  D --> F
+  F -->|Cancel| G[cancelBookingSafe]
+  F -->|Modify| H{New dates or room?}
+  H -->|Missing| I[Ask what to change]
+  H -->|Provided| J[modifyBookingSafe]
+  G --> K[Staff FYI email]
+  J --> L{Available?}
+  L -->|Yes| K
+  L -->|No| M[Suggest alternatives — no escalation]
+  K --> N[Confirm to guest]
+```
+
+### 4. Staff notification tiers
+
+```mermaid
+flowchart LR
+  subgraph autonomous [Handled by AI — no ticket]
+    A1[FAQ / amenities / dining]
+    A2[Availability check]
+    A3[Book / modify / cancel]
+  end
+
+  subgraph fyi [Staff FYI — informational email]
+    B1[Booking confirmed]
+    B2[Booking modified]
+    B3[Booking cancelled]
+  end
+
+  subgraph escalate [Escalation — ticket + urgent email]
+    C1[Guest asks for human]
+    C2[Emergency / safety]
+    C3[Billing dispute / refund]
+    C4[Serious complaint]
+    C5[Policy exception]
+    C6[AI service failure]
+  end
+
+  autonomous --> Guest[Guest satisfied]
+  fyi --> Guest
+  escalate --> Staff[Support inbox + staff action]
+```
+
+### 5. Voice assistant session
+
+```mermaid
+sequenceDiagram
+  participant G as Guest
+  participant UI as Assistant UI
+  participant STT as STT API
+  participant Chat as /api/chat
+  participant BF as Booking flow
+  participant AI as Response engine
+  participant TTS as MAI-Voice TTS
+
+  G->>UI: Tap orb / speak
+  UI->>STT: Audio
+  STT-->>UI: Transcript
+  UI->>Chat: message + history + channel voice
+  Chat->>BF: handleGuestBookingFlow
+  alt Booking / availability handled
+    BF-->>Chat: reply + booking card
+  else General question
+    Chat->>AI: getAssistantResponse
+    AI-->>Chat: reply
+  end
+  Chat-->>UI: JSON response
+  UI->>TTS: Speak reply
+  TTS-->>G: Audio
+  UI->>UI: Auto-listen for next turn
+```
+
+### 6. Data and configuration
+
+```mermaid
+flowchart TB
+  subgraph config [Hotel config — Settings UI]
+    C1[Branding]
+    C2[Rooms + inventory defaults]
+    C3[Policies + FAQ + Dining]
+    C4[AI persona]
+  end
+
+  subgraph runtime [Runtime]
+    R1[responseEngine — full HOTEL DATA in prompt]
+    R2[bookingFlow — live availability]
+    R3[bookingService — transactional writes]
+  end
+
+  subgraph storage [Prisma Postgres]
+    S1[bookings]
+    S2[room_inventory]
+    S3[support_tickets]
+    S4[interactions]
+  end
+
+  config --> R1
+  config --> R2
+  R2 --> S2
+  R3 --> S1
+  R1 --> S4
+```
 
 ---
 
 ## Project Structure
 
 ```
-scripts/                            # Dev utilities (whisper setup, model checks, db verify)
-prisma/                             # Schema, migrations, seed
-src/
-├── app/
-│   ├── page.tsx                    # Main voice assistant UI
-│   ├── settings/page.tsx           # Admin configuration dashboard
-│   ├── admin/
-│   │   ├── login/page.tsx          # Hotel admin login
-│   │   ├── register/page.tsx       # Hotel admin registration
-│   │   ├── forgot-password/page.tsx
-│   │   ├── reset-password/page.tsx
-│   │   ├── analytics/page.tsx      # Analytics dashboard (KPIs, charts, heatmap)
-│   │   └── support/page.tsx        # Support inbox (escalation tickets)
-│   ├── api/
-│   │   ├── chat/route.ts           # Gemini chat with conversation memory
-│   │   ├── stt/route.ts            # Speech-to-text
-│   │   ├── config/route.ts         # Hotel config CRUD
-│   │   ├── analytics/route.ts      # Analytics data aggregation
-│   │   ├── support/route.ts        # Support ticket management
-│   │   ├── feedback/route.ts       # Guest feedback (thumbs up/down)
-│   │   ├── auth/                   # Auth (register/login/logout/me/csrf/audit/forgot/reset)
-│   │   └── telephony/              # Telnyx + generic phone webhooks
-│   ├── globals.css                 # Design system & animations
-│   └── layout.tsx                  # Root layout
-├── lib/
-│   ├── responseEngine.ts           # Gemini AI with conversation memory + retry
-│   ├── hotelConfig.ts              # Hotel configuration schema
-│   ├── auth.ts                     # JWT + password utilities
-│   ├── prisma.ts                   # Prisma client singleton (server-only)
-│   ├── db/                         # Repository layer over Prisma
-│   ├── email.ts                    # Nodemailer escalation alerts
-│   └── rateLimit.ts                # In-memory rate limiter
-├── components/
-│   └── CallOverlay.tsx             # Telephony call UI
-└── proxy.ts                        # Route protection (Next.js 16 middleware)
+src/lib/
+├── bookingFlow.ts          # Intent router: book / modify / cancel / availability
+├── bookingService.ts       # Transactional create, modify, cancel
+├── dateParsing.ts          # Natural language + ISO date extraction
+├── availabilityQuery.ts    # Live inventory + alternative suggestions
+├── staffNotifications.ts   # FYI emails after booking events
+├── responseEngine.ts       # AI prompt with full hotel context
+├── escalation.ts           # Support tickets for human handoff
+└── email.ts                # Guest confirmations + staff FYI + escalations
+
+src/app/api/chat/route.ts   # Main guest conversation endpoint
 ```
 
 ---
 
-## Voice Assistant Flow
+## Booking API
 
-```
-Guest taps orb → Microphone activates
-     ↓
-Guest speaks → Silence detected → Auto-stops recording
-     ↓
-Audio sent to Gemini STT → Transcribed text
-     ↓
-Text + conversation history sent to Gemini Chat
-     ↓
-AI responds (with hotel context + memory)
-     ↓
-Response spoken via premium TTS voice
-     ↓
-400ms pause → Auto-listens for next message
-     ↓
-Guest taps orb again → Everything stops
-```
+| Endpoint | Auth | Purpose |
+|----------|------|---------|
+| `POST /api/chat` | Guest rate limit | Conversation + autonomous booking |
+| `POST /api/bookings` | Guest / public | Direct booking creation |
+| `PATCH /api/bookings/[id]` | Guest session | Modify booking |
+| `GET /api/availability` | Admin | Calendar inventory (Settings) |
 
 ---
 
-## Supported Languages (34)
+## Email notifications
 
-Arabic, Bengali, Bulgarian, Chinese (Mandarin), Croatian, Czech, Danish, Dutch, English (US), English (UK), Estonian, Finnish, French, German, Greek, Hebrew, Hindi, Hungarian, Indonesian, Italian, Japanese, Korean, Lithuanian, Nepali, Norwegian, Polish, Portuguese (BR), Romanian, Russian, Spanish, Swahili, Thai, Turkish, Vietnamese
+| Event | Recipient | Type |
+|-------|-----------|------|
+| Booking confirmed | Guest (if email provided) | Confirmation |
+| Booking confirmed / modified / cancelled | Staff (`contact.email`) | FYI — no ticket |
+| Escalation (complaint, emergency, human request) | Staff | Urgent ticket + email |
+
+Without SMTP, all emails are logged to the server console.
 
 ---
 
 ## Admin Features
 
 ### Settings (`/settings`)
-8-tab configuration panel with toast notifications on add/delete:
-- **Branding** — Hotel name, tagline, accent color, welcome/farewell messages
-- **Contact** — Phone, email, website, address
-- **Policies** — Check-in/out, cancellation, pet, smoking, child policies
-- **Rooms** — Room types with pricing, currency, capacity
-- **Dining** — Restaurants with cuisine and hours
-- **Amenities** — Facilities with descriptions and hours
-- **Custom FAQ** — Trigger keywords mapped to custom responses
-- **AI Persona** — System prompt to shape the receptionist's personality
-
-### Analytics (`/admin/analytics`)
-Real-time dashboard with auto-refresh (30s):
-- 7 KPI cards: Total interactions, Today, Daily avg, Escalation rate, AI handled %, Avg resolution time, Guest satisfaction
-- Daily interaction trend (30-day bar chart)
-- Peak hours heatmap
-- Language distribution
-- Escalation summary strip
-- Recent auth audit events (login, logout, password reset, etc.)
+Branding, contact, policies, rooms, dining, amenities, FAQ, AI persona, calendar inventory, bookings list, and staff notification center.
 
 ### Support Inbox (`/admin/support`)
-Priority-sorted escalation tickets with auto-refresh (15s):
-- Urgent/High/Medium/Normal priority detection
-- Color-coded borders and ticket age display
-- Staff resolution with toast feedback
-- Email alert to staff on new escalations
+Priority-sorted **escalation** tickets only — not routine bookings.
 
----
-
-## Email Alerts
-
-When the AI detects a guest issue requiring human help (complaint, booking change, emergency), it:
-1. Adds `[ESCALATE]` to the response
-2. Creates a support ticket in the database
-3. Sends a styled HTML email to the hotel's configured email address
-
-To enable email alerts and password-reset emails, add SMTP credentials to `.env.local` (see Setup section). Without SMTP config, escalation and reset flows log details to the server console instead of sending mail.
+### Analytics (`/admin/analytics`)
+Interaction volume, escalation rate, language distribution, guest satisfaction.
 
 ---
 
 ## Auth Flow
 
 1. Hotel admin registers at `/admin/register`
-2. Login at `/admin/login` (optional **Forgot password** at `/admin/forgot-password` → email link → `/admin/reset-password`)
+2. Login at `/admin/login`
 3. Authenticated users access `/settings`, analytics, and support
-4. Protected routes redirect unauthenticated users
-5. Sessions stored as HTTP-only JWT cookies (24-hour expiry, SameSite: Strict) with a server-side session version; successful login or password reset issues a new token and invalidates older ones
-6. Logout clears cookies and writes an audit entry without bumping session version (other devices keep valid sessions until expiry or the next login/reset rotation)
-7. Brute-force protection on auth endpoints and expensive AI routes (STT/Chat)
-8. Auth inputs are normalized and validated (trimmed/lowercased email, minimum password length)
-9. Auth events are stored for the hotel (see Analytics **Auth Activity**); old audit rows and used reset tokens are pruned periodically (90-day audit retention by default)
+4. Guest sign-in on the assistant pre-fills booking details
 
 ---
 
 ## About StayNep
 
-This voice assistant is a core module of **StayNep** — a hotel management system being built for Nepal's growing hospitality industry. Future integrations include booking management, housekeeping coordination, and multi-property support.
+This voice assistant is a core module of **StayNep** — a hotel management system for Nepal's hospitality industry.
 
 ---
 
 ## License & Credits
 
 Built by **Prabin Sharma** ([@prabin923](https://github.com/prabin923)).
-Powered by Next.js 16, Tailwind CSS v4, and Google Gemini.
+Powered by Next.js 16, Tailwind CSS v4, Google Gemini, and Azure Speech.

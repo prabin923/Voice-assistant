@@ -83,15 +83,18 @@ export async function POST(req: Request) {
     const audioBuffer = Buffer.from(await audioBlob.arrayBuffer());
 
     // 1) Microsoft MAI-Transcribe (Azure Speech — best accuracy, 43 languages)
+    let maiError: string | undefined;
     if (isMaiTranscribeConfigured()) {
       const maiResult = await transcribeWithMai(
         new Blob([audioBuffer], { type: baseMime }),
         baseMime,
-        { language: safeLang }
+        { language: safeLang, transcribeStyle: "verbatim" }
       );
       if (maiResult.text) {
         return NextResponse.json({ text: maiResult.text, provider: "mai-transcribe" });
       }
+      maiError = maiResult.error;
+      console.warn("[STT] MAI transcribe did not return text:", maiError ?? "empty");
     }
 
     // 2) Self-hosted Whisper HTTP server
@@ -133,7 +136,12 @@ export async function POST(req: Request) {
     }
 
     if (!transcription || transcription.toUpperCase() === "EMPTY") {
-      return NextResponse.json({ error: 'No speech detected. Please try again.' }, { status: 422 });
+      const detail = maiError ? ` (${maiError})` : "";
+      console.warn("[STT] All providers returned empty.", detail);
+      return NextResponse.json(
+        { error: "No speech detected. Please try again.", fallbackNative: true },
+        { status: 422 }
+      );
     }
 
     return NextResponse.json({ text: transcription, provider: "gemini" });

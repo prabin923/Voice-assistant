@@ -9,6 +9,8 @@ import {
   sendBookingEmailIfNeeded,
   publicBookingRow,
 } from "@/lib/bookingService";
+import { ensureHotelConfigLoaded } from "@/lib/hotelConfig";
+import { notifyStaffBookingComplete } from "@/lib/staffNotifications";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +65,12 @@ export async function POST(req: Request) {
     }
 
     sendBookingEmailIfNeeded(result.booking);
+    const config = await ensureHotelConfigLoaded();
+    void notifyStaffBookingComplete({
+      hotelName: config.branding.hotelName,
+      action: "confirmed",
+      booking: result.booking,
+    });
 
     return NextResponse.json({ success: true, booking: publicBookingRow(result.booking) });
   } catch {

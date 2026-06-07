@@ -150,6 +150,74 @@ export async function sendEscalationEmail(data: EscalationEmailData): Promise<vo
   console.log(`[EMAIL] Escalation alert sent to ${data.staffEmail} for ticket #${data.ticketId}`);
 }
 
+export interface StaffBookingCompleteEmailData {
+  staffEmail: string;
+  hotelName: string;
+  action: "confirmed" | "modified" | "cancelled";
+  booking: BookingConfirmationEmailData["booking"] & {
+    guestPhone?: string | null;
+    guestEmail?: string | null;
+  };
+  guestMessage?: string;
+}
+
+export async function sendStaffBookingCompleteEmail(data: StaffBookingCompleteEmailData): Promise<void> {
+  const transporter = getTransporter();
+  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || "ai-receptionist@hotel.local";
+  const safeHotelName = escapeHtml(data.hotelName);
+  const shortId = escapeHtml(data.booking.id.slice(0, 8).toUpperCase());
+  const safeGuest = escapeHtml(data.booking.guestName);
+  const safeRoom = escapeHtml(data.booking.roomType);
+  const actionLabel =
+    data.action === "confirmed"
+      ? "New booking — no action needed"
+      : data.action === "modified"
+        ? "Booking updated — no action needed"
+        : "Booking cancelled — FYI only";
+
+  const subject = `✅ ${actionLabel} — ${data.hotelName} (#${data.booking.id.slice(0, 8).toUpperCase()})`;
+  const html = `
+    <div style="font-family: -apple-system, system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 20px;">
+      <div style="background: linear-gradient(135deg, #163a5f, #2d6a4f); padding: 18px 22px; border-radius: 14px 14px 0 0;">
+        <h2 style="color: #fff; margin: 0; font-size: 18px;">${escapeHtml(actionLabel)}</h2>
+        <p style="color: rgba(255,255,255,0.85); margin: 4px 0 0; font-size: 13px;">${safeHotelName} AI Concierge</p>
+      </div>
+      <div style="background: #1a1a1a; border-radius: 0 0 14px 14px; padding: 22px; color: #e5e5e5;">
+        <p style="font-family: monospace; color: #86efac; font-size: 14px;">#${shortId}</p>
+        <ul style="line-height: 1.8; padding-left: 18px;">
+          <li><strong>Guest:</strong> ${safeGuest}</li>
+          <li><strong>Room:</strong> ${safeRoom} (${data.booking.rooms} room${data.booking.rooms === 1 ? "" : "s"})</li>
+          <li><strong>Check-in:</strong> ${escapeHtml(data.booking.checkIn)}</li>
+          <li><strong>Check-out:</strong> ${escapeHtml(data.booking.checkOut)}</li>
+          <li><strong>Phone:</strong> ${escapeHtml(data.booking.guestPhone || "—")}</li>
+          <li><strong>Email:</strong> ${escapeHtml(data.booking.guestEmail || "—")}</li>
+          <li><strong>Status:</strong> ${escapeHtml(data.booking.status)}</li>
+        </ul>
+        ${
+          data.guestMessage
+            ? `<p style="color: #a3a3a3; font-size: 12px;">Guest request: ${escapeHtml(data.guestMessage.slice(0, 300))}</p>`
+            : ""
+        }
+        <p style="color: #737373; font-size: 12px; margin-bottom: 0;">This is an informational notice only — no support ticket was created.</p>
+      </div>
+    </div>
+  `;
+
+  if (!transporter) {
+    console.log("[EMAIL] Staff booking FYI (SMTP not configured):");
+    console.log(`  To: ${data.staffEmail}`);
+    console.log(`  Subject: ${subject}`);
+    return;
+  }
+
+  await transporter.sendMail({
+    from: `"${data.hotelName} AI" <${fromEmail}>`,
+    to: data.staffEmail,
+    subject,
+    html,
+  });
+}
+
 export async function sendBookingConfirmationEmail(data: BookingConfirmationEmailData): Promise<void> {
   const transporter = getTransporter();
   const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || "ai-receptionist@hotel.local";

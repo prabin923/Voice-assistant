@@ -13,7 +13,7 @@
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "db:verify": "tsx scripts/verify-prisma.ts",
+    "speech:verify": "tsx scripts/verify-azure-speech.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

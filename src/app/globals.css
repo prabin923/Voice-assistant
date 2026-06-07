@@ -1721,10 +1721,23 @@ html.light .glass-outer-ring {
   will-change: border-radius;
 }
 
-@keyframes pulse-soft {
-  0%, 100% { opacity: 0.8; transform: scale3d(1,1,1); }
-  50% { opacity: 1; transform: scale3d(1.04,1.04,1); }
+@keyframes voice-bar-breathe {
+  0%, 100% { transform: scaleY(0.35); opacity: 0.45; }
+  50% { transform: scaleY(1); opacity: 1; }
 }
+.voice-presence-bar-active {
+  animation: voice-bar-breathe 0.85s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes concierge-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--hotel-accent-rgb), 0.25); }
+  50% { box-shadow: 0 0 24px 4px rgba(var(--hotel-accent-rgb), 0.35); }
+}
+.concierge-speaking {
+  animation: concierge-glow 2s ease-in-out infinite;
+}
+
 .animate-pulse-soft {
   animation: pulse-soft 3s ease-in-out infinite;
   will-change: transform, opacity;

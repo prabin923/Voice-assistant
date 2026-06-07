@@ -364,6 +364,16 @@ export const bookings = {
     return row ? mapBooking(row) : undefined;
   },
 
+  async findByIdPrefix(prefix: string): Promise<Booking | undefined> {
+    const normalized = prefix.trim().toLowerCase();
+    if (normalized.length < 4) return undefined;
+    const row = await prisma.booking.findFirst({
+      where: { id: { startsWith: normalized }, status: "confirmed" },
+      orderBy: { createdAt: "desc" },
+    });
+    return row ? mapBooking(row) : undefined;
+  },
+
   async cancel(bookingId: string): Promise<Booking | null> {
     const existing = await this.getById(bookingId);
     if (!existing || existing.status === "cancelled") return null;

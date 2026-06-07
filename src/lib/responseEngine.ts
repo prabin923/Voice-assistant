@@ -1,69 +1,142 @@
-import { GoogleGenerativeAI, Content } from "@google/generative-ai";
+import { GoogleGenerativeAI, Content, GenerativeModel } from "@google/generative-ai";
 import OpenAI from "openai";
 import { getActiveAiProvider } from "@/lib/ai";
 import { getGeminiApiKey } from "@/lib/gemini";
 import { GEMINI_MODEL } from "@/lib/geminiModel";
 import { getOpenAiApiKey } from "@/lib/openai";
 import { resolveEscalation, type EscalationReason } from "@/lib/escalation";
-import { getHotelConfig } from "./hotelConfig";
+import { getHotelConfig, type HotelConfig } from "./hotelConfig";
+
+let genAiSingleton: GoogleGenerativeAI | null = null;
+let openAiSingleton: OpenAI | null = null;
+const geminiModelCache = new Map<string, GenerativeModel>();
+
+let instructionCache: {
+  config: HotelConfig;
+  voice: string;
+  text: string;
+} | null = null;
 
 function getGenAI() {
-  return new GoogleGenerativeAI(getGeminiApiKey() || "");
+  if (!genAiSingleton) {
+    genAiSingleton = new GoogleGenerativeAI(getGeminiApiKey() || "");
+  }
+  return genAiSingleton;
 }
 
-export function buildSystemInstruction(): string {
+function getOpenAI() {
+  if (!openAiSingleton) {
+    openAiSingleton = new OpenAI({ apiKey: getOpenAiApiKey() });
+  }
+  return openAiSingleton;
+}
+
+function historyLimit(channel: "voice" | "text"): number {
+  return channel === "voice" ? 6 : 8;
+}
+
+function getGeminiModel(channel: "voice" | "text"): GenerativeModel {
+  const cacheKey = `${GEMINI_MODEL}:${channel}`;
+  const cached = geminiModelCache.get(cacheKey);
+  if (cached) return cached;
+
+  const model = getGenAI().getGenerativeModel({
+    model: GEMINI_MODEL,
+    systemInstruction: getCachedSystemInstruction(channel),
+    generationConfig: {
+      maxOutputTokens: channel === "voice" ? 140 : 320,
+      temperature: channel === "voice" ? 0.6 : 0.45,
+    },
+  });
+  geminiModelCache.set(cacheKey, model);
+  return model;
+}
+
+/** Invalidate cached prompts/models after hotel config changes in settings. */
+export function invalidateResponseEngineCache(): void {
+  instructionCache = null;
+  geminiModelCache.clear();
+}
+
+function buildHotelDataBlock(config: HotelConfig, compact: boolean): string {
+  if (compact) {
+    return `- ${config.branding.hotelName}, ${config.contact.city}
+- Check-in ${config.policies.checkInTime}, check-out ${config.policies.checkOutTime}
+- Rooms: ${config.rooms.map((r) => `${r.name} ${r.currency}${r.pricePerNight}/night`).join("; ")}
+- Amenities: ${config.amenities.map((a) => a.name).join(", ")}
+- Dining: ${config.dining.map((d) => d.name).join(", ") || "see FAQ"}`;
+  }
+
+  const diningBlock =
+    config.dining?.length > 0
+      ? config.dining.map((d) => `${d.name} (${d.cuisine}): ${d.hours}`).join("; ")
+      : "None configured.";
+  const faqBlock =
+    config.customFAQ?.length > 0
+      ? config.customFAQ.map((f) => `${f.question} → ${f.answer}`).join("; ")
+      : "None configured.";
+
+  return `- Hotel: ${config.branding.hotelName}, ${config.contact.address}, ${config.contact.city}
+- Phone: ${config.contact.phone}, Email: ${config.contact.email}
+- Check-in/out: ${config.policies.checkInTime} / ${config.policies.checkOutTime}
+- Cancellation: ${config.policies.cancellationPolicy}
+- Pets: ${config.policies.petPolicy}
+- Smoking: ${config.policies.smokingPolicy}
+- Children: ${config.policies.childPolicy}
+- Amenities: ${config.amenities.map((a) => `${a.name}${a.hours ? ` (${a.hours})` : ""}`).join("; ")}
+- Dining: ${diningBlock}
+- FAQ: ${faqBlock}
+- Rooms: ${config.rooms
+    .map(
+      (r) =>
+        `${r.name}: ${r.currency}${r.pricePerNight}/night, max ${r.maxOccupancy} — ${r.description}`,
+    )
+    .join("; ")}`;
+}
+
+function buildSystemInstructionRaw(channel: "voice" | "text" = "text"): string {
   const config = getHotelConfig();
+  const compact = channel === "voice";
+  const hotelData = buildHotelDataBlock(config, compact);
 
-  return `You are the Senior AI Receptionist at ${config.branding.hotelName}.
+  const voiceRules = compact
+    ? `VOICE STYLE: Warm concierge on a phone call. 1–2 short sentences. No lists, markdown, or IMAGE lines.`
+    : "";
 
-PERSONA:
+  const escalationRules = compact
+    ? `[ESCALATE] only for: human request, emergency, billing dispute, serious complaint. NOT for FAQ, amenities, or booking help.`
+    : `WHEN TO [ESCALATE]: human request, emergency, billing/refund dispute, serious complaint, policy exception.
+DO NOT [ESCALATE]: FAQ, amenities, dining, policies, booking/availability help.`;
+
+  return `You are the AI concierge at ${config.branding.hotelName}.
 ${config.receptionistPersona}
-You are hospitable, professional, and helpful. You do NOT make up your own questions. You ONLY answer the guest's question.
-
-CRITICAL RULES:
-- NEVER invent or fabricate questions on behalf of the guest.
-- NEVER repeat the guest's question back to them as if you asked it.
-- Read the guest's message carefully and respond DIRECTLY to what they said.
-- If the message is a greeting like "hello" or "hi", greet them back warmly and ask how you can help.
-- You REMEMBER the full conversation. Use context from earlier messages when relevant.
+${voiceRules}
+Answer ONLY what the guest asked. Use conversation context when relevant.
 
 HOTEL DATA:
-- Hotel Name: ${config.branding.hotelName}
-- Phone: ${config.contact.phone}
-- Email: ${config.contact.email}
-- Address: ${config.contact.address}
-- Check-in: ${config.policies.checkInTime}
-- Check-out: ${config.policies.checkOutTime}
-- Cancellation: ${config.policies.cancellationPolicy}
-- Amenities: ${config.amenities.map(a => `${a.name} (${a.description})`).join(", ")}
-- Room Types: ${config.rooms
-      .map(
-        (r) =>
-          `${r.name} (category: ${r.category || "General"}): ${r.currency}${r.pricePerNight}/night, max ${r.maxOccupancy} guests. Image: ${r.imageUrl || "none"}`,
-      )
-      .join("; ")}
+${hotelData}
 
-RESPONSE RULES:
-1. Respond strictly in the language matching this code: the language the guest uses.
-2. Keep responses concise and warm — this is a voice interaction.
-3. If the guest asks about something NOT in the hotel data, OR makes a complaint, OR needs human action (booking changes, billing, emergencies), add [ESCALATE] at the very end of your response.
-4. If the guest asks to speak to a human/staff/manager/front desk, add [ESCALATE] at the end.
-5. If the guest's message is unclear, garbled, incomplete, off-topic, or you cannot confidently determine what they need, apologize briefly, say a staff member will help, and add [ESCALATE].
-6. If you cannot answer confidently from HOTEL DATA alone (missing info, ambiguous policy, special requests), do NOT guess — add [ESCALATE] and tell the guest staff will follow up.
-7. Do NOT add [ESCALATE] for normal informational questions you can answer from HOTEL DATA.
-8. Give fresh, natural replies. Do not just list facts unless the guest specifically asks for a list.
+${escalationRules}
+For availability with specific dates, ask for check-in/check-out — live inventory is checked automatically when booking.
+${compact ? "" : 'Room images: optional line "IMAGE: <url>" using URLs from HOTEL DATA only.'}`;
+}
 
-ROOM IMAGES:
-- If (and only if) you include a room image, add a standalone line using this exact format:
-  IMAGE: <imageUrl>
-- Only use imageUrl values provided in HOTEL DATA (do not invent new image links).
-- If a room has no imageUrl, do not output an IMAGE line for it.
-- When the guest asks about room types (e.g. "what room types are available/offer"), list the relevant rooms and include IMAGE lines for each room with imageUrl.
+function getCachedSystemInstruction(channel: "voice" | "text"): string {
+  const config = getHotelConfig();
+  if (instructionCache?.config === config) {
+    return channel === "voice" ? instructionCache.voice : instructionCache.text;
+  }
+  instructionCache = {
+    config,
+    voice: buildSystemInstructionRaw("voice"),
+    text: buildSystemInstructionRaw("text"),
+  };
+  geminiModelCache.clear();
+  return channel === "voice" ? instructionCache.voice : instructionCache.text;
+}
 
-AVAILABILITY QUESTIONS:
-- If the guest asks what room types are available, you may safely say which room types the hotel offers.
-- Do NOT claim exact date-by-date inventory unless the guest provides dates and you can answer using HOTEL DATA.
-- Ask for check-in/check-out dates if you want to confirm availability.`;
+export function buildSystemInstruction(channel: "voice" | "text" = "text"): string {
+  return getCachedSystemInstruction(channel);
 }
 
 export interface ChatMessage {
@@ -74,23 +147,24 @@ export interface ChatMessage {
 async function getAssistantResponseWithOpenAI(
   message: string,
   langCode: string,
-  conversationHistory: ChatMessage[]
+  conversationHistory: ChatMessage[],
+  channel: "voice" | "text" = "text"
 ): Promise<{ reply: string; escalate: boolean; reason?: EscalationReason }> {
-  const openai = new OpenAI({ apiKey: getOpenAiApiKey() });
+  const limit = historyLimit(channel);
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "system", content: buildSystemInstruction() },
-    ...conversationHistory.slice(-10).map((msg) => ({
+    { role: "system", content: getCachedSystemInstruction(channel) },
+    ...conversationHistory.slice(-limit).map((msg) => ({
       role: msg.role as "user" | "assistant",
       content: msg.content,
     })),
-    { role: "user", content: `[Guest speaks in ${langCode}]: ${message}` },
+    { role: "user", content: message },
   ];
 
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4o-mini",
     messages,
-    max_tokens: 400,
-    temperature: 0.5,
+    max_tokens: channel === "voice" ? 140 : 320,
+    temperature: channel === "voice" ? 0.6 : 0.45,
   });
 
   const text = completion.choices[0]?.message?.content?.trim() ?? "";
@@ -101,26 +175,22 @@ async function getAssistantResponseWithOpenAI(
 async function getAssistantResponseWithGemini(
   message: string,
   langCode: string,
-  conversationHistory: ChatMessage[]
+  conversationHistory: ChatMessage[],
+  channel: "voice" | "text" = "text"
 ): Promise<{ reply: string; escalate: boolean; reason?: EscalationReason }> {
-  const model = getGenAI().getGenerativeModel({
-    model: GEMINI_MODEL,
-    systemInstruction: buildSystemInstruction(),
-    generationConfig: {
-      maxOutputTokens: 400,
-      temperature: 0.5,
-    },
+  const limit = historyLimit(channel);
+  const history: Content[] = conversationHistory.slice(-limit).map((msg) => ({
+    role: msg.role === "user" ? "user" : "model",
+    parts: [{ text: msg.content }],
+  }));
+
+  const model = getGeminiModel(channel);
+  const result = await model.generateContent({
+    contents: [
+      ...history,
+      { role: "user", parts: [{ text: message }] },
+    ],
   });
-
-  const history: Content[] = conversationHistory
-    .slice(-10)
-    .map((msg) => ({
-      role: msg.role === "user" ? "user" : "model",
-      parts: [{ text: msg.content }],
-    }));
-
-  const chat = model.startChat({ history });
-  const result = await chat.sendMessage(`[Guest speaks in ${langCode}]: ${message}`);
   const text = result.response.text().trim();
   const { reply, escalate, reason } = resolveEscalation(text);
   return { reply, escalate, reason: escalate ? reason : undefined };
@@ -129,28 +199,30 @@ async function getAssistantResponseWithGemini(
 export async function getAssistantResponse(
   message: string,
   language: string,
-  conversationHistory: ChatMessage[] = []
+  conversationHistory: ChatMessage[] = [],
+  channel: "voice" | "text" = "text"
 ): Promise<{ reply: string; escalate: boolean; reason?: EscalationReason }> {
   const config = getHotelConfig();
   const langCode = language || config.language || "en-US";
   const provider = getActiveAiProvider();
 
   const MAX_RETRIES = 1;
+  const RETRY_DELAY_MS = 350;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       if (provider === "openai") {
-        return await getAssistantResponseWithOpenAI(message, langCode, conversationHistory);
+        return await getAssistantResponseWithOpenAI(message, langCode, conversationHistory, channel);
       }
 
-      return await getAssistantResponseWithGemini(message, langCode, conversationHistory);
+      return await getAssistantResponseWithGemini(message, langCode, conversationHistory, channel);
     } catch (error: any) {
       const isRetryable =
         !error?.status || error.status >= 500 || error.message?.includes("fetch");
 
       if (attempt < MAX_RETRIES && isRetryable) {
-        console.warn(`[Response Engine] Attempt ${attempt + 1} failed, retrying in 1s...`, error.message);
-        await new Promise((r) => setTimeout(r, 1000));
+        console.warn(`[Response Engine] Attempt ${attempt + 1} failed, retrying...`, error.message);
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
         continue;
       }
 

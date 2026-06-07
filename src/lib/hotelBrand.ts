@@ -92,11 +92,19 @@ const DEFAULT_SUGGESTED_QUESTIONS = [
 
 export type PublicHotelConfig = Pick<
   HotelConfig,
-  "branding" | "customFAQ" | "policies" | "amenities" | "rooms" | "voiceStyle" | "language"
+  | "branding"
+  | "customFAQ"
+  | "policies"
+  | "amenities"
+  | "rooms"
+  | "voiceStyle"
+  | "language"
+  | "receptionistPersona"
 > & {
   aiReady?: boolean;
   sttReady?: boolean;
   geminiLiveReady?: boolean;
+  maiVoiceReady?: boolean;
 };
 
 export const DEFAULT_PUBLIC_HOTEL_CONFIG: PublicHotelConfig = {
@@ -131,6 +139,8 @@ export const DEFAULT_PUBLIC_HOTEL_CONFIG: PublicHotelConfig = {
   ],
   voiceStyle: "warm",
   language: "en-US",
+  receptionistPersona:
+    "You are Alex, the front-desk concierge — warm, calm, and genuinely helpful, like a trusted hotel host who knows every guest by name.",
 };
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -243,8 +253,11 @@ export function mergePublicHotelConfig(data: Partial<PublicHotelConfig> | null |
     rooms: data?.rooms ?? DEFAULT_PUBLIC_HOTEL_CONFIG.rooms,
     voiceStyle: data?.voiceStyle ?? DEFAULT_PUBLIC_HOTEL_CONFIG.voiceStyle,
     language: data?.language ?? DEFAULT_PUBLIC_HOTEL_CONFIG.language,
+    receptionistPersona:
+      data?.receptionistPersona ?? DEFAULT_PUBLIC_HOTEL_CONFIG.receptionistPersona,
     aiReady: data?.aiReady,
     sttReady: data?.sttReady,
     geminiLiveReady: data?.geminiLiveReady,
+    maiVoiceReady: data?.maiVoiceReady,
   };
 }
