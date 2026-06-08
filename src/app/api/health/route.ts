@@ -1,21 +1,27 @@
 import { NextResponse } from "next/server";
 import { isAiConfigured } from "@/lib/ai";
-import { isGeminiConfigured, isSttConfigured } from "@/lib/gemini";
-import { isOpenAiConfigured } from "@/lib/openai";
-import { isSelfHostedSttConfigured } from "@/lib/selfHostedStt";
+import { ensureDbReady } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ ok: true });
+  let dbOk = false;
+  try {
+    await ensureDbReady();
+    dbOk = true;
+  } catch {
+    dbOk = false;
   }
+
   return NextResponse.json({
-    openai: isOpenAiConfigured(),
-    gemini: isGeminiConfigured(),
     ai: isAiConfigured(),
-    stt: isSttConfigured(),
-    selfHostedStt: isSelfHostedSttConfigured(),
-    env: process.env.VERCEL ? "vercel" : process.env.NODE_ENV ?? "development",
+    db: dbOk,
+    stt: Boolean(
+      process.env.AZURE_SPEECH_KEY?.trim() ||
+        process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() ||
+        process.env.OPENAI_API_KEY?.trim()
+    ),
+    sms: Boolean(process.env.TINGTING_API_KEY?.trim()),
+    email: Boolean(process.env.SMTP_HOST?.trim() && process.env.SMTP_USER?.trim()),
   });
 }

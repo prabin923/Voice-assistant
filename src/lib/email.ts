@@ -157,6 +157,7 @@ export interface StaffBookingCompleteEmailData {
   booking: BookingConfirmationEmailData["booking"] & {
     guestPhone?: string | null;
     guestEmail?: string | null;
+    specialRequests?: string | null;
   };
   guestMessage?: string;
 }
@@ -192,6 +193,11 @@ export async function sendStaffBookingCompleteEmail(data: StaffBookingCompleteEm
           <li><strong>Phone:</strong> ${escapeHtml(data.booking.guestPhone || "—")}</li>
           <li><strong>Email:</strong> ${escapeHtml(data.booking.guestEmail || "—")}</li>
           <li><strong>Status:</strong> ${escapeHtml(data.booking.status)}</li>
+          ${
+            data.booking.specialRequests
+              ? `<li><strong>Special requests:</strong> ${escapeHtml(data.booking.specialRequests)}</li>`
+              : ""
+          }
         </ul>
         ${
           data.guestMessage

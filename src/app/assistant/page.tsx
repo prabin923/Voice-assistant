@@ -4,7 +4,14 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { Mic, Volume2, Loader2, PhoneCall, ChevronDown, ChevronLeft, ChevronRight, Check, ThumbsUp, ThumbsDown, History, ChevronUp, Send, MessageSquare, Globe2, X } from "lucide-react";
 import CallOverlay, { type CallHistoryRecord } from "@/components/CallOverlay";
-import { BookingSummaryCard, type BookingSummary } from "@/components/BookingSummaryCard";
+import {
+  BookingSummaryCard,
+  type BookingSummary,
+  type PendingBooking,
+} from "@/components/BookingSummaryCard";
+import { MyStayPanel } from "@/components/MyStayPanel";
+import { QuickActionsBar } from "@/components/QuickActionsBar";
+import { ServiceHealthBar } from "@/components/ServiceHealthBar";
 import { GuestAuthPanel, loadGuestProfile } from "@/components/GuestAuthPanel";
 import type { GuestProfile } from "@/lib/clientGuestAuth";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
@@ -268,6 +275,9 @@ export default function VoiceAssistant() {
   const [showCallHistory, setShowCallHistory] = useState(false);
   const [inputMode, setInputMode] = useState<InputMode>("voice");
   const [chatDraft, setChatDraft] = useState("");
+  const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null);
+  const pendingBookingRef = useRef<PendingBooking | null>(null);
+  pendingBookingRef.current = pendingBooking;
   const chatInputRef = useRef<HTMLInputElement>(null);
   const conciergeName = useMemo(() => {
     const match = hotelConfig?.receptionistPersona?.match(/You are (\w+)/i);
@@ -675,26 +685,20 @@ export default function VoiceAssistant() {
     speakWithBrowser(text);
   }, [maiVoiceReady, speakWithBrowser, voiceStyle]);
 
-  const handleUserMessage = useCallback(async (text: string, speakReply = inputModeRef.current === "voice") => {
-    setIsListening(false);
-    setIsProcessing(true);
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
-
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          message: text,
-          language: selectedLanguage.code,
-          history: messagesRef.current.slice(-8),
-          channel: inputModeRef.current === "voice" ? "voice" : "text",
-        }),
-      });
-      const data = await response.json();
-      const apiError =
-        typeof data.error === "string" && data.error.trim() ? data.error.trim() : "";
+  const applyChatPayload = useCallback(
+    (
+      data: {
+        reply?: string;
+        error?: string;
+        requiresGuestAuth?: boolean;
+        escalated?: boolean;
+        guest?: { loyaltyTier?: GuestProfile["loyaltyTier"] };
+        booking?: BookingSummary;
+        pendingBooking?: PendingBooking | null;
+      },
+      ok: boolean
+    ) => {
+      const apiError = typeof data.error === "string" && data.error.trim() ? data.error.trim() : "";
       if (data.requiresGuestAuth) {
         setShowGuestAuth(true);
         setErrorMessage(apiError || "Sign in for higher limits and saved bookings.");
@@ -704,7 +708,7 @@ export default function VoiceAssistant() {
           ? data.reply.trim()
           : apiError
             ? apiError
-            : !response.ok
+            : !ok
               ? ui.errorConnection
               : ui.errorGeneric;
       if (apiError && !data.requiresGuestAuth) setErrorMessage(apiError);
@@ -714,22 +718,180 @@ export default function VoiceAssistant() {
             ? {
                 ...prev,
                 messageCount: prev.messageCount + 1,
-                loyaltyTier: data.guest.loyaltyTier ?? prev.loyaltyTier,
+                loyaltyTier: data.guest?.loyaltyTier ?? prev.loyaltyTier,
               }
             : prev
         );
       }
+      if (data.pendingBooking !== undefined) {
+        setPendingBooking(data.pendingBooking);
+      }
       const booking =
-        data.booking &&
-        typeof data.booking === "object" &&
-        typeof data.booking.id === "string"
-          ? (data.booking as BookingSummary)
+        data.booking && typeof data.booking === "object" && typeof data.booking.id === "string"
+          ? data.booking
           : undefined;
+      return { reply, booking, escalated: Boolean(data.escalated) };
+    },
+    [guestProfile, ui.errorConnection, ui.errorGeneric]
+  );
+
+  const handleUserMessage = useCallback(async (text: string, speakReply = inputModeRef.current === "voice") => {
+    setIsListening(false);
+    setIsProcessing(true);
+    setMessages((prev) => [...prev, { role: "user", content: text }]);
+
+    const payload = {
+      message: text,
+      language: selectedLanguage.code,
+      history: messagesRef.current.slice(-8),
+      channel: inputModeRef.current === "voice" ? "voice" : "text",
+      pendingBooking: pendingBookingRef.current,
+    };
+
+    try {
+      if (speakReply) {
+        const response = await fetch("/api/chat/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok || !response.body) {
+          const fallback = await response.json().catch(() => ({}));
+          const { reply, booking, escalated } = applyChatPayload(fallback, response.ok);
+          setMessages((prev) => [...prev, { role: "assistant", content: reply, ...(booking ? { booking } : {}) }]);
+          if (escalated) {
+            setMessages((prev) => [...prev, { role: "assistant", content: GUEST_STAFF_HANDOFF_MESSAGE }]);
+          } else {
+            autoListenAfterSpeakRef.current = true;
+            void speakText(reply);
+          }
+          return;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let fullReply = "";
+        let donePayload: Record<string, unknown> | null = null;
+        let spokenUpTo = 0;
+        const sentenceQueue: string[] = [];
+        let drainingQueue = false;
+
+        const drainSentenceQueue = async () => {
+          if (drainingQueue) return;
+          drainingQueue = true;
+          while (sentenceQueue.length > 0) {
+            const sentence = sentenceQueue.shift();
+            if (sentence) await speakText(sentence);
+          }
+          drainingQueue = false;
+        };
+
+        const enqueueNewSentences = (text: string) => {
+          const slice = text.slice(spokenUpTo);
+          const parts = slice.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g);
+          if (!parts) return;
+          for (const part of parts) {
+            const trimmed = part.trim();
+            if (!trimmed) continue;
+            if (/[.!?]$/.test(trimmed)) {
+              sentenceQueue.push(trimmed);
+              spokenUpTo += part.length;
+            }
+          }
+          void drainSentenceQueue();
+        };
+
+        setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const event = JSON.parse(line.slice(6)) as {
+                type?: string;
+                text?: string;
+                reply?: string;
+                escalated?: boolean;
+                booking?: BookingSummary;
+                pendingBooking?: PendingBooking | null;
+              };
+              if (event.type === "delta" && event.text) {
+                fullReply += event.text;
+                setMessages((prev) => {
+                  const next = [...prev];
+                  const last = next[next.length - 1];
+                  if (last?.role === "assistant") {
+                    next[next.length - 1] = { ...last, content: fullReply };
+                  }
+                  return next;
+                });
+                enqueueNewSentences(fullReply);
+              } else if (event.type === "done") {
+                donePayload = event;
+              }
+            } catch {
+              /* ignore malformed SSE */
+            }
+          }
+        }
+
+        const finalReply =
+          (typeof donePayload?.reply === "string" && donePayload.reply.trim()) || fullReply.trim();
+        const { booking, escalated } = applyChatPayload(
+          {
+            reply: finalReply,
+            escalated: Boolean(donePayload?.escalated),
+            booking: donePayload?.booking as BookingSummary | undefined,
+            pendingBooking: donePayload?.pendingBooking as PendingBooking | null | undefined,
+          },
+          true
+        );
+
+        setMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last?.role === "assistant") {
+            next[next.length - 1] = { ...last, content: finalReply, ...(booking ? { booking } : {}) };
+          }
+          return next;
+        });
+
+        const tail = finalReply.slice(spokenUpTo).trim();
+        if (tail) {
+          sentenceQueue.push(tail);
+          void drainSentenceQueue();
+        }
+
+        if (escalated) {
+          setMessages((prev) => [...prev, { role: "assistant", content: GUEST_STAFF_HANDOFF_MESSAGE }]);
+          autoListenAfterSpeakRef.current = false;
+        } else {
+          autoListenAfterSpeakRef.current = true;
+        }
+        return;
+      }
+
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      const { reply, booking, escalated } = applyChatPayload(data, response.ok);
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: reply, ...(booking ? { booking } : {}) },
       ]);
-      if (data.escalated) {
+      if (escalated) {
         setMessages((prev) => [...prev, { role: "assistant", content: GUEST_STAFF_HANDOFF_MESSAGE }]);
         autoListenAfterSpeakRef.current = false;
       } else if (speakReply) {
@@ -743,7 +905,7 @@ export default function VoiceAssistant() {
     } finally {
       setIsProcessing(false);
     }
-  }, [messages, selectedLanguage, speakText, ui.errorConnection, ui.errorGeneric, guestProfile]);
+  }, [applyChatPayload, selectedLanguage, speakText, ui.errorConnection]);
 
   const handleUserAudioComplete = useCallback(
     (text: string) => handleUserMessage(text, inputModeRef.current === "voice"),
@@ -1564,6 +1726,14 @@ export default function VoiceAssistant() {
               )}
             </div>
 
+            {messages.length > 0 && inputMode === "text" ? (
+              <QuickActionsBar
+                isDark={isDark}
+                disabled={isProcessing || isListening || isSpeaking || aiReady === false}
+                onAction={(message) => void handleUserMessage(message, false)}
+              />
+            ) : null}
+
             {renderChatComposer()}
           </div>
         </main>
@@ -1610,6 +1780,19 @@ export default function VoiceAssistant() {
               </div>
             )}
           </div>
+
+          {guestProfile ? (
+            <MyStayPanel
+              guest={guestProfile}
+              isDark={isDark}
+              onAskAboutBooking={(booking) => {
+                void handleUserMessage(
+                  `I have a question about my booking #${booking.id.slice(0, 8)} for ${booking.roomType}, ${booking.checkIn} to ${booking.checkOut}.`,
+                  inputModeRef.current === "voice"
+                );
+              }}
+            />
+          ) : null}
 
           <button
             onClick={async () => {
@@ -1690,6 +1873,8 @@ export default function VoiceAssistant() {
               </div>
             )}
           </div>
+
+          <ServiceHealthBar isDark={isDark} className="justify-center" />
 
           <p className={`text-[10px] font-semibold text-center uppercase tracking-[0.14em] leading-relaxed px-2 ${isDark ? "text-neutral-600" : "text-neutral-500"}`}>
             {branding.tagline}

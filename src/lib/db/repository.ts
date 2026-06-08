@@ -314,6 +314,7 @@ type CreateBookingData = {
   guestEmail?: string | null;
   guestId?: string | null;
   status?: "confirmed" | "cancelled";
+  specialRequests?: string | null;
 };
 
 export const bookings = {
@@ -344,6 +345,7 @@ export const bookings = {
           guestEmail: data.guestEmail?.trim() || null,
           guestId: data.guestId ?? null,
           status,
+          specialRequests: data.specialRequests?.trim() || null,
         },
       });
 
@@ -393,6 +395,21 @@ export const bookings = {
       }
     }
 
+    return (await this.getById(bookingId)) ?? null;
+  },
+
+  async appendSpecialRequest(bookingId: string, note: string): Promise<Booking | null> {
+    const existing = await this.getById(bookingId);
+    if (!existing || existing.status !== "confirmed") return null;
+    const trimmed = note.trim().slice(0, 500);
+    if (!trimmed) return existing;
+    const merged = existing.special_requests
+      ? `${existing.special_requests}; ${trimmed}`
+      : trimmed;
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: { specialRequests: merged.slice(0, 2000) },
+    });
     return (await this.getById(bookingId)) ?? null;
   },
 

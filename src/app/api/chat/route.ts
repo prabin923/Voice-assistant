@@ -3,7 +3,12 @@ import { ensureHotelConfigLoaded } from '@/lib/hotelConfig';
 import { getAssistantResponse } from '@/lib/responseEngine';
 import { guests, ensureDbReady } from '@/lib/db';
 import type { EscalationReason } from '@/lib/escalation';
-import { handleGuestBookingFlow, shouldRunBookingFlow, type BookingSummary } from '@/lib/bookingFlow';
+import {
+  handleGuestBookingFlow,
+  shouldRunBookingFlow,
+  type BookingSummary,
+  type PendingBooking,
+} from '@/lib/bookingFlow';
 import { scheduleChatSideEffects } from '@/lib/chatSideEffects';
 import { getClientIP } from '@/lib/rateLimit';
 import { aiNotConfiguredResponse, isAiConfigured } from '@/lib/ai';
@@ -23,6 +28,7 @@ export async function POST(req: Request) {
       language?: string;
       history?: unknown;
       channel?: string;
+      pendingBooking?: PendingBooking | null;
     }>;
 
     const [guestSession, body] = await Promise.all([getGuestSession(), bodyPromise]);
@@ -82,6 +88,7 @@ export async function POST(req: Request) {
     let escalate = false;
     let reason: EscalationReason | undefined;
     let booking: BookingSummary | undefined;
+    let pendingBooking: PendingBooking | null | undefined = body.pendingBooking ?? null;
 
     const guestProfile = guestRecord
       ? {
@@ -96,7 +103,8 @@ export async function POST(req: Request) {
       message,
       conversationHistory,
       langCode,
-      config.rooms.map((r) => r.name)
+      config.rooms.map((r) => r.name),
+      pendingBooking
     );
 
     if (runBookingFlow) {
@@ -106,6 +114,7 @@ export async function POST(req: Request) {
         config,
         history: conversationHistory,
         guestProfile,
+        pendingBooking,
       });
 
       if (bookingFlow.handled) {
@@ -113,6 +122,9 @@ export async function POST(req: Request) {
         escalate = Boolean(bookingFlow.escalate);
         reason = bookingFlow.reason;
         booking = bookingFlow.booking;
+        if (bookingFlow.pendingBooking !== undefined) {
+          pendingBooking = bookingFlow.pendingBooking;
+        }
       }
     }
 
@@ -139,6 +151,7 @@ export async function POST(req: Request) {
       reply,
       escalated: escalate,
       booking,
+      pendingBooking: pendingBooking ?? null,
       guest: guestRecord
         ? {
             name: guestRecord.name,

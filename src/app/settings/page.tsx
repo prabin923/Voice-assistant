@@ -60,6 +60,9 @@ export default function SettingsPage() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "delete" | "info" } | null>(null);
   const [loadError, setLoadError] = useState("");
   const [openHandoffCount, setOpenHandoffCount] = useState(0);
+  const [knowledgeGaps, setKnowledgeGaps] = useState<
+    { id: string; question: string; guest_message: string; language: string; status: string; created_at: string }[]
+  >([]);
 
   const showToast = useCallback((message: string, type: "success" | "delete" | "info" = "success") => {
     setToast({ message, type });
@@ -84,6 +87,10 @@ export default function SettingsPage() {
 
     fetchJsonWithAuth<{ openCount: number }>("/api/support?status=open")
       .then((data) => setOpenHandoffCount(data.openCount))
+      .catch(() => {});
+
+    fetchJsonWithAuth<{ gaps: typeof knowledgeGaps }>("/api/knowledge-gaps")
+      .then((data) => setKnowledgeGaps(data.gaps ?? []))
       .catch(() => {});
   }, []);
 
@@ -638,6 +645,63 @@ export default function SettingsPage() {
                   <div><label className={labelCls}>Response</label><textarea className={inputCls + " h-20 resize-none"} value={faq.answer} onChange={e => { const f = [...config.customFAQ]; f[i] = { ...f[i], answer: e.target.value }; setConfig({ ...config, customFAQ: f }); }} /></div>
                 </div>
               ))}
+
+              <div className="mt-8 pt-6 border-t border-neutral-800/60 space-y-4">
+                <div>
+                  <h3 className="text-base font-semibold text-neutral-200">FAQ gaps from guest escalations</h3>
+                  <p className="text-neutral-500 text-sm mt-1">
+                    Questions the AI could not answer are logged here. Add them to Custom FAQ above or dismiss.
+                  </p>
+                </div>
+                {knowledgeGaps.length === 0 ? (
+                  <p className="text-sm text-neutral-500">No open gaps — great coverage!</p>
+                ) : (
+                  knowledgeGaps.map((gap) => (
+                    <div key={gap.id} className="bg-neutral-800/30 rounded-xl p-4 border border-neutral-800/50 space-y-3">
+                      <p className="text-sm font-medium text-neutral-200">{gap.question}</p>
+                      <p className="text-xs text-neutral-500 line-clamp-2">{gap.guest_message}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConfig({
+                              ...config,
+                              customFAQ: [...config.customFAQ, { question: gap.question, answer: "" }],
+                            });
+                            void fetchJsonWithAuth("/api/knowledge-gaps", {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ id: gap.id, status: "added_to_faq" }),
+                            }).then(() => {
+                              setKnowledgeGaps((prev) => prev.filter((g) => g.id !== gap.id));
+                              showToast("Added to FAQ draft — fill in the answer and save", "success");
+                            });
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs bg-emerald-500/15 text-emerald-400 border border-emerald-500/25"
+                        >
+                          Add to FAQ
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void fetchJsonWithAuth("/api/knowledge-gaps", {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ id: gap.id, status: "dismissed" }),
+                            }).then(() => {
+                              setKnowledgeGaps((prev) => prev.filter((g) => g.id !== gap.id));
+                              showToast("Gap dismissed", "info");
+                            });
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs bg-neutral-800 text-neutral-400 border border-neutral-700"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           )}
 

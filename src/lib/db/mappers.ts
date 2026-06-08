@@ -72,6 +72,7 @@ export function mapBooking(row: PrismaBooking): Booking {
     guest_email: row.guestEmail,
     guest_id: row.guestId,
     status: row.status,
+    special_requests: row.specialRequests ?? null,
     created_at: row.createdAt.toISOString(),
   };
 }

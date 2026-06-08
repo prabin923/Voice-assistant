@@ -239,3 +239,56 @@ export async function getAssistantResponse(
   // Fallback (unreachable in practice)
   return { reply: "Something went wrong. Please try again.", escalate: false };
 }
+
+export type StreamChunk =
+  | { type: "delta"; text: string }
+  | { type: "done"; reply: string; escalate: boolean; reason?: EscalationReason };
+
+/** Stream Gemini tokens for faster voice playback. Falls back to single chunk for OpenAI. */
+export async function* streamAssistantResponse(
+  message: string,
+  language: string,
+  conversationHistory: ChatMessage[] = [],
+  channel: "voice" | "text" = "voice"
+): AsyncGenerator<StreamChunk> {
+  const config = getHotelConfig();
+  const langCode = language || config.language || "en-US";
+  const provider = getActiveAiProvider();
+
+  if (provider !== "gemini") {
+    const result = await getAssistantResponse(message, langCode, conversationHistory, channel);
+    yield { type: "delta", text: result.reply };
+    yield { type: "done", reply: result.reply, escalate: result.escalate, reason: result.reason };
+    return;
+  }
+
+  const limit = historyLimit(channel);
+  const history: Content[] = conversationHistory.slice(-limit).map((msg) => ({
+    role: msg.role === "user" ? "user" : "model",
+    parts: [{ text: msg.content }],
+  }));
+
+  try {
+    const model = getGeminiModel(channel);
+    const stream = await model.generateContentStream({
+      contents: [...history, { role: "user", parts: [{ text: message }] }],
+    });
+
+    let fullText = "";
+    for await (const chunk of stream.stream) {
+      const text = chunk.text();
+      if (!text) continue;
+      fullText += text;
+      yield { type: "delta", text };
+    }
+
+    const { reply, escalate, reason } = resolveEscalation(fullText.trim());
+    yield { type: "done", reply, escalate, reason: escalate ? reason : undefined };
+  } catch (error) {
+    console.error("Stream Response Engine Error:", error);
+    const fallback =
+      "I apologize — I'm having trouble right now. I've alerted our front desk team.";
+    yield { type: "delta", text: fallback };
+    yield { type: "done", reply: fallback, escalate: true, reason: "ai_error" };
+  }
+}

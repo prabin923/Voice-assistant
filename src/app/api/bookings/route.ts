@@ -4,13 +4,8 @@ import { requireAuth } from "@/lib/auth";
 import { getClientIP } from "@/lib/rateLimit";
 import { checkRateLimitAsync } from "@/lib/rateLimitDistributed";
 import { getGuestSession } from "@/lib/guestAuth";
-import {
-  createBookingSafe,
-  sendBookingEmailIfNeeded,
-  publicBookingRow,
-} from "@/lib/bookingService";
-import { ensureHotelConfigLoaded } from "@/lib/hotelConfig";
-import { notifyStaffBookingComplete } from "@/lib/staffNotifications";
+import { createBookingSafe, publicBookingRow } from "@/lib/bookingService";
+import { notifyBookingComplete } from "@/lib/bookingNotify";
 
 export const dynamic = "force-dynamic";
 
@@ -64,13 +59,7 @@ export async function POST(req: Request) {
       );
     }
 
-    sendBookingEmailIfNeeded(result.booking);
-    const config = await ensureHotelConfigLoaded();
-    void notifyStaffBookingComplete({
-      hotelName: config.branding.hotelName,
-      action: "confirmed",
-      booking: result.booking,
-    });
+    notifyBookingComplete(result.booking, "confirmed");
 
     return NextResponse.json({ success: true, booking: publicBookingRow(result.booking) });
   } catch {

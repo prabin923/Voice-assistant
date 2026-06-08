@@ -64,21 +64,34 @@ model RoomInventoryOverride {
 }
 
 model Booking {
-  id         String   @id
-  roomType   String   @map("room_type")
-  checkIn    String   @map("check_in")
-  checkOut   String   @map("check_out")
-  rooms      Int
-  guestName  String   @map("guest_name")
-  guestPhone String   @map("guest_phone")
-  guestEmail String?  @map("guest_email")
-  guestId    String?  @map("guest_id")
-  status     String   @default("confirmed")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id               String   @id
+  roomType         String   @map("room_type")
+  checkIn          String   @map("check_in")
+  checkOut         String   @map("check_out")
+  rooms            Int
+  guestName        String   @map("guest_name")
+  guestPhone       String   @map("guest_phone")
+  guestEmail       String?  @map("guest_email")
+  guestId          String?  @map("guest_id")
+  status           String   @default("confirmed")
+  specialRequests  String?  @map("special_requests")
+  createdAt        DateTime @default(now()) @map("created_at")
 
   @@index([guestId])
   @@index([status, checkIn, checkOut])
   @@map("bookings")
+}
+
+model KnowledgeGap {
+  id           String   @id
+  question     String
+  guestMessage String   @map("guest_message")
+  language     String   @default("en-US")
+  status       String   @default("open")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([status])
+  @@map("knowledge_gaps")
 }
 
 model Feedback {

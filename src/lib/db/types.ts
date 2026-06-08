@@ -52,6 +52,7 @@ export interface Booking {
   guest_email: string | null;
   guest_id: string | null;
   status: string;
+  special_requests: string | null;
   created_at: string;
 }
 

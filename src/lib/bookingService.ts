@@ -1,6 +1,6 @@
 import { availability, bookings, type Booking } from "@/lib/db";
 import { getHotelConfig, type HotelConfig } from "@/lib/hotelConfig";
-import { sendBookingConfirmationEmail, bookingRowToEmailPayload } from "@/lib/email";
+import { notifyBookingComplete } from "@/lib/bookingNotify";
 
 export function isIsoDate(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -20,6 +20,7 @@ export type CreateBookingInput = {
   guestPhone: string;
   guestEmail?: string | null;
   guestId?: string | null;
+  specialRequests?: string | null;
 };
 
 export type CreateBookingResult =
@@ -66,6 +67,7 @@ export async function createBookingSafe(input: CreateBookingInput): Promise<Crea
       guestPhone,
       guestEmail: input.guestEmail?.trim() || null,
       guestId: input.guestId ?? null,
+      specialRequests: input.specialRequests?.trim() || null,
       status: "confirmed",
     });
     return { ok: true, booking };
@@ -165,13 +167,7 @@ export async function modifyBookingSafe(
 }
 
 export function sendBookingEmailIfNeeded(booking: Booking) {
-  if (!booking.guest_email) return;
-  const config = getHotelConfig();
-  void sendBookingConfirmationEmail({
-    toEmail: booking.guest_email,
-    hotelName: config.branding.hotelName,
-    booking: bookingRowToEmailPayload(booking),
-  }).catch((err) => console.error("[EMAIL] Booking confirmation failed:", err));
+  notifyBookingComplete(booking, "confirmed");
 }
 
 export function publicBookingRow(booking: Booking) {
@@ -185,6 +181,7 @@ export function publicBookingRow(booking: Booking) {
     guestPhone: booking.guest_phone,
     guestEmail: booking.guest_email,
     status: booking.status,
+    specialRequests: booking.special_requests,
     createdAt: booking.created_at,
   };
 }

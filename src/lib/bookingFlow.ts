@@ -5,9 +5,8 @@ import {
   cancelBookingSafe,
   createBookingSafe,
   modifyBookingSafe,
-  sendBookingEmailIfNeeded,
 } from "@/lib/bookingService";
-import { notifyStaffBookingComplete } from "@/lib/staffNotifications";
+import { notifyBookingComplete } from "@/lib/bookingNotify";
 import {
   formatAlternativeSuggestions,
   formatAvailabilityList,
@@ -29,12 +28,24 @@ export type BookingSummary = {
   status: string;
 };
 
+export type PendingBooking = {
+  roomType: string;
+  checkIn: string;
+  checkOut: string;
+  rooms: number;
+  guestName: string;
+  guestPhone: string;
+  guestEmail?: string | null;
+  specialRequests?: string | null;
+};
+
 export type BookingFlowResult = {
   handled: boolean;
   reply?: string;
   escalate?: boolean;
   reason?: EscalationReason;
   booking?: BookingSummary;
+  pendingBooking?: PendingBooking | null;
 };
 
 type GuestProfile = { id: string; name: string; phone: string | null; email: string };
@@ -72,6 +83,186 @@ export function isCancelIntent(message: string): boolean {
 export function isModifyIntent(message: string): boolean {
   return /\b(change|modify|update|move|reschedule)\b.*\b(booking|reservation|dates?|room)\b/i.test(message) ||
     /\b(booking|reservation)\b.*\b(change|modify|update)\b/i.test(message);
+}
+
+export function isAffirmative(message: string): boolean {
+  const trimmed = message.trim();
+  if (/^(yes|yeah|yep|yup|correct|confirm|confirmed|ok|okay|sure|absolutely)\b/i.test(trimmed)) return true;
+  return /\b(yes|yeah|confirm|go ahead|sounds good|that's right|book it)\b/i.test(trimmed) && trimmed.length < 48;
+}
+
+export function isNegative(message: string): boolean {
+  const trimmed = message.trim();
+  if (/^(no|nope|nah|wait|stop|cancel|don't|not yet)\b/i.test(trimmed)) return true;
+  return /\b(no|nope|not yet|hold on|change that)\b/i.test(trimmed) && trimmed.length < 40;
+}
+
+export function isSpecialRequestIntent(message: string): boolean {
+  return /\b(special request|note for|add a note|request for my (?:stay|booking|room)|late checkout|early check-?in|extra (?:pillow|bed|towel)|allerg|dietary|accessibility|wheelchair|quiet room|high floor|low floor|anniversary|birthday)\b/i.test(
+    message
+  );
+}
+
+function extractSpecialRequestNote(message: string): string | null {
+  const patterns = [
+    /\b(?:special request|note|request)[:—-]\s*(.+)/i,
+    /\b(?:please|can you)\s+(?:add|note|arrange)\s+(.+)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = message.match(pattern);
+    if (match?.[1]?.trim()) return match[1].trim().slice(0, 500);
+  }
+  if (isSpecialRequestIntent(message) && message.trim().length > 12) {
+    return message.trim().slice(0, 500);
+  }
+  return null;
+}
+
+function buildConfirmationResponse(pending: PendingBooking, config: HotelConfig): BookingFlowResult {
+  const note = pending.specialRequests ? ` Note: ${pending.specialRequests}.` : "";
+  return {
+    handled: true,
+    reply: `Just to confirm: ${pending.rooms} ${pending.roomType} room(s), ${pending.checkIn} to ${pending.checkOut}, for ${pending.guestName} at ${config.branding.hotelName}.${note} Reply yes to book, or tell me what to change.`,
+    pendingBooking: pending,
+    escalate: false,
+  };
+}
+
+function mergePendingBooking(
+  message: string,
+  history: ChatHistoryMessage[],
+  pending: PendingBooking,
+  config: HotelConfig
+): PendingBooking {
+  const roomNames = config.rooms.map((r) => r.name);
+  const dateRange = detectDateRange(message, history);
+  const details = extractGuestDetails(message, history);
+  const note = extractSpecialRequestNote(message);
+  return {
+    roomType: detectRoomType(message, history, roomNames) ?? pending.roomType,
+    checkIn: dateRange.checkIn ?? pending.checkIn,
+    checkOut: dateRange.checkOut ?? pending.checkOut,
+    rooms: extractRequestedRooms(message, history) || pending.rooms,
+    guestName: details.guestName ?? pending.guestName,
+    guestPhone: details.guestPhone ?? pending.guestPhone,
+    guestEmail: details.guestEmail ?? pending.guestEmail,
+    specialRequests: note ? (pending.specialRequests ? `${pending.specialRequests}; ${note}` : note) : pending.specialRequests,
+  };
+}
+
+async function handlePendingBookingConfirmation(
+  message: string,
+  history: ChatHistoryMessage[],
+  pending: PendingBooking,
+  config: HotelConfig,
+  guestProfile?: GuestProfile
+): Promise<BookingFlowResult> {
+  if (isNegative(message)) {
+    return {
+      handled: true,
+      reply: "No problem — what would you like to change? You can update dates, room type, or guest details.",
+      pendingBooking: null,
+      escalate: false,
+    };
+  }
+
+  if (isAffirmative(message)) {
+    const bookingResult = await createBookingSafe({
+      roomType: pending.roomType,
+      checkIn: pending.checkIn,
+      checkOut: pending.checkOut,
+      rooms: pending.rooms,
+      guestName: pending.guestName,
+      guestPhone: pending.guestPhone,
+      guestEmail: pending.guestEmail,
+      guestId: guestProfile?.id,
+      specialRequests: pending.specialRequests,
+    });
+
+    if (!bookingResult.ok) {
+      if (bookingResult.status === 409) {
+        const alternatives = await suggestAlternatives(config, pending.checkIn, pending.checkOut, pending.roomType);
+        return {
+          handled: true,
+          reply: `That room just became unavailable. ${formatAlternativeSuggestions(alternatives)}`,
+          pendingBooking: null,
+          escalate: false,
+        };
+      }
+      return {
+        handled: true,
+        reply: "I couldn't complete the booking just now. Please try again in a moment.",
+        pendingBooking: pending,
+        escalate: bookingResult.status >= 500,
+        reason: bookingResult.status >= 500 ? "ai_error" : undefined,
+      };
+    }
+
+    const booking = bookingResult.booking;
+    notifyBookingComplete(booking, "confirmed", message);
+
+    return {
+      handled: true,
+      reply: serializeBookingReply({
+        hotelName: config.branding.hotelName,
+        roomType: pending.roomType,
+        checkIn: pending.checkIn,
+        checkOut: pending.checkOut,
+        rooms: pending.rooms,
+        guestName: pending.guestName,
+        bookingId: booking.id,
+      }),
+      booking: toSummary(booking),
+      pendingBooking: null,
+      escalate: false,
+    };
+  }
+
+  const updated = mergePendingBooking(message, history, pending, config);
+  return buildConfirmationResponse(updated, config);
+}
+
+async function handleSpecialRequest(
+  message: string,
+  history: ChatHistoryMessage[],
+  config: HotelConfig,
+  guestProfile?: GuestProfile
+): Promise<BookingFlowResult> {
+  const note = extractSpecialRequestNote(message);
+  if (!note) {
+    return {
+      handled: true,
+      reply: "I'd be happy to add a note to your stay — what would you like us to arrange? For example, late checkout, extra pillows, or dietary needs.",
+      escalate: false,
+    };
+  }
+
+  const record = await resolveBookingRecord(message, history, guestProfile);
+  if (!record) {
+    return {
+      handled: true,
+      reply: "I can add that note once I find your booking — share your confirmation number (first 8 characters) or sign in.",
+      escalate: false,
+    };
+  }
+
+  const updated = await bookings.appendSpecialRequest(record.id, note);
+  if (!updated) {
+    return {
+      handled: true,
+      reply: "I couldn't add that note to your booking. Please try again or ask for our front desk team.",
+      escalate: false,
+    };
+  }
+
+  void notifyBookingComplete(updated, "modified", `Special request: ${note}`);
+
+  return {
+    handled: true,
+    reply: `Got it — I've added your request to booking #${record.id.slice(0, 8).toUpperCase()}. Our team has been notified.`,
+    booking: toSummary(updated),
+    escalate: false,
+  };
 }
 
 function detectRoomType(message: string, history: ChatHistoryMessage[], roomNames: string[]): string | null {
@@ -258,12 +449,7 @@ async function handleCancel(
     };
   }
 
-  void notifyStaffBookingComplete({
-    hotelName: config.branding.hotelName,
-    action: "cancelled",
-    booking: result.booking,
-    guestMessage: message,
-  });
+  notifyBookingComplete(result.booking, "cancelled", message);
 
   return {
     handled: true,
@@ -342,13 +528,7 @@ async function handleModify(
     };
   }
 
-  sendBookingEmailIfNeeded(result.booking);
-  void notifyStaffBookingComplete({
-    hotelName: config.branding.hotelName,
-    action: "modified",
-    booking: result.booking,
-    guestMessage: message,
-  });
+  notifyBookingComplete(result.booking, "modified", message);
 
   return {
     handled: true,
@@ -455,7 +635,8 @@ async function handleNewBooking(
     };
   }
 
-  const bookingResult = await createBookingSafe({
+  const note = extractSpecialRequestNote(message);
+  const pending: PendingBooking = {
     roomType,
     checkIn: dateRange.checkIn,
     checkOut: dateRange.checkOut,
@@ -463,49 +644,10 @@ async function handleNewBooking(
     guestName,
     guestPhone,
     guestEmail,
-    guestId: guestProfile?.id,
-  });
-
-  if (!bookingResult.ok) {
-    if (bookingResult.status === 409) {
-      const alternatives = await suggestAlternatives(config, dateRange.checkIn, dateRange.checkOut, roomType);
-      return {
-        handled: true,
-        reply: `That room just became unavailable. ${formatAlternativeSuggestions(alternatives)}`,
-        escalate: false,
-      };
-    }
-    return {
-      handled: true,
-      reply: "I couldn't complete the booking just now. Please try again in a moment, or ask to speak with our team if it keeps failing.",
-      escalate: bookingResult.status >= 500,
-      reason: bookingResult.status >= 500 ? "ai_error" : undefined,
-    };
-  }
-
-  const booking = bookingResult.booking;
-  sendBookingEmailIfNeeded(booking);
-  void notifyStaffBookingComplete({
-    hotelName: config.branding.hotelName,
-    action: "confirmed",
-    booking,
-    guestMessage: message,
-  });
-
-  return {
-    handled: true,
-    reply: serializeBookingReply({
-      hotelName: config.branding.hotelName,
-      roomType,
-      checkIn: booking.check_in,
-      checkOut: booking.check_out,
-      rooms: booking.rooms,
-      guestName: booking.guest_name,
-      bookingId: booking.id,
-    }),
-    booking: toSummary(booking),
-    escalate: false,
+    specialRequests: note,
   };
+
+  return buildConfirmationResponse(pending, config);
 }
 
 const BOOKING_CONTEXT_RE = /\b(book|reserv|check-in|check-out|room type|confirmation|available)\b/i;
@@ -514,8 +656,15 @@ export function shouldRunBookingFlow(
   message: string,
   history: ChatHistoryMessage[],
   langCode: string,
-  roomNames: string[] = []
+  roomNames: string[] = [],
+  pendingBooking?: PendingBooking | null
 ): boolean {
+  if (pendingBooking) return true;
+  if (isAffirmative(message) || isNegative(message)) {
+    const recent = history.slice(-2);
+    if (recent.some((h) => /\b(confirm|just to confirm|reply yes)\b/i.test(h.content))) return true;
+  }
+  if (isSpecialRequestIntent(message)) return true;
   if (isCancelIntent(message) || isModifyIntent(message)) return true;
   if (isAvailabilityIntent(message, langCode)) return true;
   if (isBookingIntent(message, langCode)) return true;
@@ -538,8 +687,17 @@ export async function handleGuestBookingFlow(params: {
   config: HotelConfig;
   history: ChatHistoryMessage[];
   guestProfile?: GuestProfile;
+  pendingBooking?: PendingBooking | null;
 }): Promise<BookingFlowResult> {
-  const { message, langCode, config, history, guestProfile } = params;
+  const { message, langCode, config, history, guestProfile, pendingBooking } = params;
+
+  if (pendingBooking) {
+    return handlePendingBookingConfirmation(message, history, pendingBooking, config, guestProfile);
+  }
+
+  if (isSpecialRequestIntent(message)) {
+    return handleSpecialRequest(message, history, config, guestProfile);
+  }
 
   if (isCancelIntent(message)) {
     return handleCancel(message, history, config, guestProfile);

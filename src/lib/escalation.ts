@@ -1,6 +1,7 @@
 import { getHotelConfig } from "@/lib/hotelConfig";
 import { supportTickets } from "@/lib/db";
 import { sendEscalationEmail } from "@/lib/email";
+import { knowledgeGaps } from "@/lib/knowledgeGaps";
 
 export type EscalationReason =
   | "ai_flagged"
@@ -99,6 +100,16 @@ export async function notifyHotelStaff(input: StaffHandoffInput): Promise<string
       staffEmail: config.contact.email,
       reasonLabel: escalationReasonLabel(input.reason),
     }).catch((err) => console.error("[EMAIL] Failed to send escalation alert:", err));
+
+    if (input.reason === "ai_unclear" || input.reason === "ai_flagged") {
+      void knowledgeGaps
+        .create({
+          question: input.guestMessage.slice(0, 200),
+          guestMessage: input.guestMessage,
+          language: langCode,
+        })
+        .catch((err) => console.error("[FAQ] Failed to log knowledge gap:", err));
+    }
 
     return ticket.id;
   } catch (e) {

@@ -42,6 +42,7 @@ export async function notifyStaffBookingComplete(input: StaffBookingNotification
       guestPhone: input.booking.guest_phone,
       guestEmail: input.booking.guest_email,
       status: input.booking.status,
+      specialRequests: input.booking.special_requests,
     },
     guestMessage: input.guestMessage,
   }).catch((err) => console.error("[EMAIL] Staff booking FYI failed:", err));

@@ -1,6 +1,7 @@
 "use client";
 
-import { CalendarCheck, User } from "lucide-react";
+import { useState } from "react";
+import { CalendarCheck, Copy, Check, User } from "lucide-react";
 
 export interface BookingSummary {
   id: string;
@@ -12,7 +13,19 @@ export interface BookingSummary {
   guestPhone?: string;
   guestEmail?: string | null;
   status: string;
+  specialRequests?: string | null;
 }
+
+export type PendingBooking = {
+  roomType: string;
+  checkIn: string;
+  checkOut: string;
+  rooms: number;
+  guestName: string;
+  guestPhone: string;
+  guestEmail?: string | null;
+  specialRequests?: string | null;
+};
 
 interface Props {
   booking: BookingSummary;
@@ -26,7 +39,16 @@ function formatStayDate(value: string): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+function buildCalendarUrl(booking: BookingSummary, hotelName?: string): string {
+  const title = encodeURIComponent(`${hotelName ?? "Hotel"} stay — ${booking.roomType}`);
+  const start = booking.checkIn.replace(/-/g, "");
+  const end = booking.checkOut.replace(/-/g, "");
+  const details = encodeURIComponent(`Booking #${booking.id.slice(0, 8).toUpperCase()}`);
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}`;
+}
+
 export function BookingSummaryCard({ booking, hotelName, isDark }: Props) {
+  const [copied, setCopied] = useState(false);
   const shortId = booking.id.slice(0, 8).toUpperCase();
   const nights = Math.max(
     1,
@@ -94,6 +116,42 @@ export function BookingSummaryCard({ booking, hotelName, isDark }: Props) {
           <User className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">{booking.guestName}</span>
         </p>
+        {booking.specialRequests ? (
+          <p className={`text-[12px] italic ${isDark ? "text-neutral-500" : "text-neutral-600"}`}>
+            Note: {booking.specialRequests}
+          </p>
+        ) : null}
+      </div>
+
+      <div className={`mt-3 flex flex-wrap gap-2 border-t pt-3 ${isDark ? "border-white/10" : "border-emerald-200/80"}`}>
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(booking.id);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            } catch {
+              /* ignore */
+            }
+          }}
+          className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold ${
+            isDark ? "bg-white/10 text-neutral-300 hover:bg-white/15" : "bg-white border border-neutral-200 text-neutral-700"
+          }`}
+        >
+          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+          {copied ? "Copied" : "Copy ID"}
+        </button>
+        <a
+          href={buildCalendarUrl(booking, hotelName)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold ${
+            isDark ? "bg-white/10 text-neutral-300 hover:bg-white/15" : "bg-white border border-neutral-200 text-neutral-700"
+          }`}
+        >
+          Add to calendar
+        </a>
       </div>
     </div>
   );
