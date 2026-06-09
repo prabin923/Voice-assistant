@@ -12,11 +12,18 @@ Built as the foundation for **StayNep** — a comprehensive hotel management pla
 
 | Feature | Description |
 |---------|-------------|
-| **Voice-to-Voice Chat** | Tap to speak, get spoken AI responses in real-time |
+| **Voice-to-Voice Chat** | Tap to speak; voice mode streams replies and speaks sentence-by-sentence for faster turn-taking |
 | **Autonomous Booking** | Check availability, book, modify, and cancel — without front-desk handoff |
+| **Booking Confirmation** | Summarizes the stay and waits for guest "yes" before creating the reservation |
+| **Special Requests** | Late checkout, dietary needs, accessibility notes — stored on the booking and sent to staff |
 | **Live Inventory** | Real-time room availability from Prisma Postgres |
 | **Smart Alternatives** | Suggests other room types or nearby dates when sold out |
 | **Tiered Staff Alerts** | FYI emails on completed bookings; escalation tickets only when critical |
+| **SMS Confirmations** | Optional TingTing SMS after booking (alongside email) |
+| **My Stay Panel** | Signed-in guests see upcoming bookings, ask about them, or cancel from the assistant sidebar |
+| **Quick Actions** | Sticky shortcuts in chat — book, directions, dining, my booking |
+| **Service Health** | Live AI / DB / STT / SMS / Email readiness indicators in the assistant UI |
+| **FAQ Gap Reporter** | Unanswered guest questions logged on escalation; review and add to FAQ in Settings |
 | **Rich Hotel Context** | Dining, FAQ, full policies, amenities, and room details in AI prompt |
 | **Conversation Memory** | Multi-turn booking — collect dates, room, name, and phone across messages |
 | **34 Languages** | Full multilingual support via Gemini — Arabic to Vietnamese |
@@ -38,6 +45,7 @@ Built as the foundation for **StayNep** — a comprehensive hotel management pla
 | TTS | MAI-Voice (Azure) + Web Speech Synthesis |
 | Database | Prisma ORM + Prisma Postgres |
 | Email | Nodemailer (guest confirmations + staff FYI + escalations) |
+| SMS | TingTing (optional booking confirmations) |
 
 ---
 
@@ -77,6 +85,9 @@ SMTP_PORT=587
 SMTP_USER=your-email@gmail.com
 SMTP_PASS=your-app-password
 SMTP_FROM=ai-receptionist@yourhotel.com
+
+# Optional: TingTing SMS for booking confirmations
+TINGTING_API_KEY=your_tingting_api_key
 ```
 
 ### 3. Run the dev server
@@ -130,9 +141,12 @@ flowchart TD
   G -->|No| H[Suggest alternatives — other rooms or dates]
   G -->|Yes| I{Name + phone?}
   I -->|No| J[Ask for guest details]
-  I -->|Yes| K[createBookingSafe — transactional]
-  K --> L{Success?}
-  L -->|Yes| M[Guest confirmation email]
+  I -->|Yes| K[Show confirmation summary]
+  K --> Q{Guest confirms yes?}
+  Q -->|No| R[Ask what to change]
+  Q -->|Yes| S[createBookingSafe — transactional]
+  S --> L{Success?}
+  L -->|Yes| M[Guest email + optional SMS]
   M --> N[Staff FYI email — no ticket]
   N --> O[BookingSummaryCard in chat]
   L -->|Conflict| H
@@ -140,6 +154,8 @@ flowchart TD
   F --> P
   J --> P
   H --> P
+  R --> P
+  K --> P
 ```
 
 ### 3. Cancel and modify flows
@@ -200,7 +216,7 @@ sequenceDiagram
   participant G as Guest
   participant UI as Assistant UI
   participant STT as STT API
-  participant Chat as /api/chat
+  participant Chat as /api/chat/stream
   participant BF as Booking flow
   participant AI as Response engine
   participant TTS as MAI-Voice TTS
@@ -208,16 +224,16 @@ sequenceDiagram
   G->>UI: Tap orb / speak
   UI->>STT: Audio
   STT-->>UI: Transcript
-  UI->>Chat: message + history + channel voice
+  UI->>Chat: message + history + pendingBooking + channel voice
   Chat->>BF: handleGuestBookingFlow
   alt Booking / availability handled
-    BF-->>Chat: reply + booking card
+    BF-->>Chat: reply + booking or pendingBooking
   else General question
-    Chat->>AI: getAssistantResponse
-    AI-->>Chat: reply
+    Chat->>AI: streamAssistantResponse
+    AI-->>Chat: SSE token chunks
   end
-  Chat-->>UI: JSON response
-  UI->>TTS: Speak reply
+  Chat-->>UI: Streamed response
+  UI->>TTS: Speak each sentence as it arrives
   TTS-->>G: Audio
   UI->>UI: Auto-listen for next turn
 ```
@@ -240,10 +256,11 @@ flowchart TB
   end
 
   subgraph storage [Prisma Postgres]
-    S1[bookings]
+    S1[bookings + special_requests]
     S2[room_inventory]
     S3[support_tickets]
     S4[interactions]
+    S5[knowledge_gaps]
   end
 
   config --> R1
@@ -259,16 +276,28 @@ flowchart TB
 
 ```
 src/lib/
-├── bookingFlow.ts          # Intent router: book / modify / cancel / availability
+├── bookingFlow.ts          # Intent router: book / modify / cancel / availability / special requests
 ├── bookingService.ts       # Transactional create, modify, cancel
+├── bookingNotify.ts        # Unified guest email + SMS + staff FYI after booking events
 ├── dateParsing.ts          # Natural language + ISO date extraction
 ├── availabilityQuery.ts    # Live inventory + alternative suggestions
 ├── staffNotifications.ts   # FYI emails after booking events
-├── responseEngine.ts       # AI prompt with full hotel context
-├── escalation.ts           # Support tickets for human handoff
+├── knowledgeGaps.ts        # FAQ gap logging from escalations
+├── sms.ts                  # TingTing SMS for booking confirmations
+├── responseEngine.ts       # AI prompt + streaming for voice mode
+├── escalation.ts           # Support tickets + knowledge gap creation
 └── email.ts                # Guest confirmations + staff FYI + escalations
 
-src/app/api/chat/route.ts   # Main guest conversation endpoint
+src/components/
+├── MyStayPanel.tsx         # Guest upcoming bookings sidebar
+├── QuickActionsBar.tsx     # Sticky chat shortcuts
+├── ServiceHealthBar.tsx    # AI / DB / STT / SMS / Email status
+└── BookingSummaryCard.tsx  # Confirmation card with copy ID + calendar link
+
+src/app/api/chat/route.ts         # Text chat + booking (JSON)
+src/app/api/chat/stream/route.ts  # Voice chat with SSE streaming
+src/app/api/knowledge-gaps/route.ts
+src/app/api/health/route.ts
 ```
 
 ---
@@ -277,10 +306,15 @@ src/app/api/chat/route.ts   # Main guest conversation endpoint
 
 | Endpoint | Auth | Purpose |
 |----------|------|---------|
-| `POST /api/chat` | Guest rate limit | Conversation + autonomous booking |
+| `POST /api/chat` | Guest rate limit | Text conversation + autonomous booking |
+| `POST /api/chat/stream` | Guest rate limit | Voice conversation with SSE streaming |
 | `POST /api/bookings` | Guest / public | Direct booking creation |
 | `PATCH /api/bookings/[id]` | Guest session | Modify booking |
+| `GET /api/guest/bookings` | Guest session | List guest's bookings (My Stay panel) |
 | `GET /api/availability` | Admin | Calendar inventory (Settings) |
+| `GET /api/knowledge-gaps` | Admin | Open FAQ gaps from escalations |
+| `PATCH /api/knowledge-gaps` | Admin | Mark gap as added to FAQ or dismissed |
+| `GET /api/health` | Public | Service readiness (AI, DB, STT, SMS, email) |
 
 ---
 
@@ -288,18 +322,21 @@ src/app/api/chat/route.ts   # Main guest conversation endpoint
 
 | Event | Recipient | Type |
 |-------|-----------|------|
-| Booking confirmed | Guest (if email provided) | Confirmation |
-| Booking confirmed / modified / cancelled | Staff (`contact.email`) | FYI — no ticket |
+| Booking confirmed | Guest (if email provided) | Confirmation email |
+| Booking confirmed | Guest (if phone provided) | SMS via TingTing (optional) |
+| Booking confirmed / modified / cancelled | Staff (`contact.email`) | FYI — no ticket (includes special requests) |
+| Special request added | Staff | FYI — booking modified |
 | Escalation (complaint, emergency, human request) | Staff | Urgent ticket + email |
+| AI could not answer | Settings → FAQ gaps | Logged for admin review |
 
-Without SMTP, all emails are logged to the server console.
+Without SMTP, emails are logged to the server console. Without `TINGTING_API_KEY`, SMS is logged to the console.
 
 ---
 
 ## Admin Features
 
 ### Settings (`/settings`)
-Branding, contact, policies, rooms, dining, amenities, FAQ, AI persona, calendar inventory, bookings list, and staff notification center.
+Branding, contact, policies, rooms, dining, amenities, custom FAQ (with **FAQ gap reporter** from escalations), AI persona, calendar inventory, bookings list, and staff notification center.
 
 ### Support Inbox (`/admin/support`)
 Priority-sorted **escalation** tickets only — not routine bookings.
