@@ -71,10 +71,10 @@ describe("availability formatting", () => {
 });
 
 describe("buildSystemInstruction", () => {
-  it("includes dining and FAQ in hotel context", async () => {
+  it("includes escalation rules and RAG hotel-facts guidance", async () => {
     const { buildSystemInstruction } = await import("@/lib/responseEngine");
     const prompt = buildSystemInstruction("text");
-    expect(prompt).toContain("HOTEL DATA");
+    expect(prompt).toContain("HOTEL FACTS");
     expect(prompt).toContain("[ESCALATE]");
   });
 });

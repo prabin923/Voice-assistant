@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import {
   mapAuthAuditLog,
   mapBooking,
+  mapDiningReservation,
   mapFeedback,
   mapGuest,
   mapHotel,
@@ -12,6 +13,7 @@ import {
 import type {
   AuthAuditLog,
   Booking,
+  DiningReservation,
   Guest,
   Hotel,
   Interaction,
@@ -674,6 +676,60 @@ export const passwordResetTokens = {
       where: { hotelId, usedAt: null },
       data: { usedAt: new Date() },
     });
+  },
+};
+
+export const diningReservations = {
+  async create(data: {
+    id: string;
+    venueName: string;
+    reservationDate: string;
+    reservationTime: string;
+    partySize: number;
+    guestName: string;
+    guestPhone: string;
+    guestEmail?: string | null;
+    guestId?: string | null;
+    specialRequests?: string | null;
+  }): Promise<DiningReservation> {
+    const row = await prisma.diningReservation.create({
+      data: {
+        id: data.id,
+        venueName: data.venueName,
+        reservationDate: data.reservationDate,
+        reservationTime: data.reservationTime,
+        partySize: Math.max(1, Math.floor(data.partySize)),
+        guestName: data.guestName.trim(),
+        guestPhone: data.guestPhone.trim(),
+        guestEmail: data.guestEmail?.trim() || null,
+        guestId: data.guestId ?? null,
+        status: "confirmed",
+        specialRequests: data.specialRequests?.trim() || null,
+      },
+    });
+    return mapDiningReservation(row);
+  },
+
+  async getById(reservationId: string): Promise<DiningReservation | undefined> {
+    const row = await prisma.diningReservation.findUnique({ where: { id: reservationId } });
+    return row ? mapDiningReservation(row) : undefined;
+  },
+
+  async listByGuestId(guestId: string, limit = 50): Promise<DiningReservation[]> {
+    const rows = await prisma.diningReservation.findMany({
+      where: { guestId },
+      orderBy: { createdAt: "desc" },
+      take: Math.max(1, Math.floor(limit)),
+    });
+    return rows.map(mapDiningReservation);
+  },
+
+  async listRecent(limit = 50): Promise<DiningReservation[]> {
+    const rows = await prisma.diningReservation.findMany({
+      orderBy: { createdAt: "desc" },
+      take: Math.max(1, Math.floor(limit)),
+    });
+    return rows.map(mapDiningReservation);
   },
 };
 

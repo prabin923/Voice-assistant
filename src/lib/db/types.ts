@@ -56,6 +56,21 @@ export interface Booking {
   created_at: string;
 }
 
+export interface DiningReservation {
+  id: string;
+  venue_name: string;
+  reservation_date: string;
+  reservation_time: string;
+  party_size: number;
+  guest_name: string;
+  guest_phone: string;
+  guest_email: string | null;
+  guest_id: string | null;
+  status: string;
+  special_requests: string | null;
+  created_at: string;
+}
+
 export interface RoomAvailability {
   roomType: string;
   checkIn: string;

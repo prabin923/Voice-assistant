@@ -5,6 +5,8 @@ import { getGeminiApiKey } from "@/lib/gemini";
 import { GEMINI_MODEL } from "@/lib/geminiModel";
 import { getOpenAiApiKey } from "@/lib/openai";
 import { resolveEscalation, type EscalationReason } from "@/lib/escalation";
+import { augmentUserMessageWithHotelContext } from "@/lib/rag/augmentMessage";
+import { buildHotelDataBlock } from "@/lib/rag/augmentMessage";
 import { getHotelConfig, type HotelConfig } from "./hotelConfig";
 
 let genAiSingleton: GoogleGenerativeAI | null = null;
@@ -58,67 +60,43 @@ export function invalidateResponseEngineCache(): void {
   geminiModelCache.clear();
 }
 
-function buildHotelDataBlock(config: HotelConfig, compact: boolean): string {
-  if (compact) {
-    return `- ${config.branding.hotelName}, ${config.contact.city}
-- Check-in ${config.policies.checkInTime}, check-out ${config.policies.checkOutTime}
-- Rooms: ${config.rooms.map((r) => `${r.name} ${r.currency}${r.pricePerNight}/night`).join("; ")}
-- Amenities: ${config.amenities.map((a) => a.name).join(", ")}
-- Dining: ${config.dining.map((d) => d.name).join(", ") || "see FAQ"}`;
-  }
-
-  const diningBlock =
-    config.dining?.length > 0
-      ? config.dining.map((d) => `${d.name} (${d.cuisine}): ${d.hours}`).join("; ")
-      : "None configured.";
-  const faqBlock =
-    config.customFAQ?.length > 0
-      ? config.customFAQ.map((f) => `${f.question} → ${f.answer}`).join("; ")
-      : "None configured.";
-
-  return `- Hotel: ${config.branding.hotelName}, ${config.contact.address}, ${config.contact.city}
-- Phone: ${config.contact.phone}, Email: ${config.contact.email}
-- Check-in/out: ${config.policies.checkInTime} / ${config.policies.checkOutTime}
-- Cancellation: ${config.policies.cancellationPolicy}
-- Pets: ${config.policies.petPolicy}
-- Smoking: ${config.policies.smokingPolicy}
-- Children: ${config.policies.childPolicy}
-- Amenities: ${config.amenities.map((a) => `${a.name}${a.hours ? ` (${a.hours})` : ""}`).join("; ")}
-- Dining: ${diningBlock}
-- FAQ: ${faqBlock}
-- Rooms: ${config.rooms
-    .map(
-      (r) =>
-        `${r.name}: ${r.currency}${r.pricePerNight}/night, max ${r.maxOccupancy} — ${r.description}`,
-    )
-    .join("; ")}`;
-}
-
-function buildSystemInstructionRaw(channel: "voice" | "text" = "text"): string {
+function buildSystemInstructionRaw(channel: "voice" | "text" = "text", fullHotelData = false): string {
   const config = getHotelConfig();
   const compact = channel === "voice";
-  const hotelData = buildHotelDataBlock(config, compact);
 
   const voiceRules = compact
     ? `VOICE STYLE: Warm concierge on a phone call. 1–2 short sentences. No lists, markdown, or IMAGE lines.`
     : "";
 
   const escalationRules = compact
-    ? `[ESCALATE] only for: human request, emergency, billing dispute, serious complaint. NOT for FAQ, amenities, or booking help.`
-    : `WHEN TO [ESCALATE]: human request, emergency, billing/refund dispute, serious complaint, policy exception.
-DO NOT [ESCALATE]: FAQ, amenities, dining, policies, booking/availability help.`;
+    ? `[ESCALATE] only for: guest explicitly asks for a human, emergency, billing dispute, serious complaint. NEVER for FAQ, rooms, dining, policies, or reservations.`
+    : `WHEN TO [ESCALATE]: guest explicitly requests a human, emergency, billing/refund dispute, serious complaint.
+NEVER [ESCALATE]: FAQ, amenities, dining hours, policies, room availability, room bookings, or restaurant table reservations — you handle these autonomously.`;
+
+  const autonomousRules = `AUTONOMOUS CONCIERGE — no staff needed for:
+- Any hotel information (policies, amenities, dining, rooms, FAQ, directions, contact)
+- Room availability, booking, modification, cancellation (handled by the system when guests provide dates/details)
+- Restaurant table reservations at hotel venues (handled by the system)
+Answer confidently from HOTEL FACTS. Never say you cannot book rooms or tables.`;
+
+  const hotelFactsRule = fullHotelData
+    ? ""
+    : `Each guest message includes HOTEL FACTS retrieved for that question. Use only those facts for hotel-specific answers.`;
+
+  const hotelDataBlock = fullHotelData
+    ? `\nHOTEL DATA:\n${buildHotelDataBlock(config, compact)}\n`
+    : "";
 
   return `You are the AI concierge at ${config.branding.hotelName}.
 ${config.receptionistPersona}
 ${voiceRules}
 Answer ONLY what the guest asked. Use conversation context when relevant.
-
-HOTEL DATA:
-${hotelData}
-
+${autonomousRules}
+${hotelFactsRule}${hotelDataBlock}
 ${escalationRules}
-For availability with specific dates, ask for check-in/check-out — live inventory is checked automatically when booking.
-${compact ? "" : 'Room images: optional line "IMAGE: <url>" using URLs from HOTEL DATA only.'}`;
+For room availability with dates, ask for check-in/check-out — inventory is checked automatically.
+For dining reservations, guests can say "book a table" — the system completes it when venue, date, time, and contact are provided.
+${compact ? "" : 'Room images: optional line "IMAGE: <url>" using URLs from hotel facts only.'}`;
 }
 
 function getCachedSystemInstruction(channel: "voice" | "text"): string {
@@ -135,13 +113,35 @@ function getCachedSystemInstruction(channel: "voice" | "text"): string {
   return channel === "voice" ? instructionCache.voice : instructionCache.text;
 }
 
-export function buildSystemInstruction(channel: "voice" | "text" = "text"): string {
+/** System prompt for the LLM. Use fullHotelData for Gemini Live (no per-turn RAG). */
+export function buildSystemInstruction(
+  channel: "voice" | "text" = "text",
+  options?: { fullHotelData?: boolean }
+): string {
+  if (options?.fullHotelData) {
+    return buildSystemInstructionRaw(channel, true);
+  }
   return getCachedSystemInstruction(channel);
 }
 
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+async function prepareUserMessage(
+  message: string,
+  conversationHistory: ChatMessage[],
+  channel: "voice" | "text"
+): Promise<string> {
+  const config = getHotelConfig();
+  const { message: augmented } = await augmentUserMessageWithHotelContext(
+    message,
+    conversationHistory,
+    config,
+    channel
+  );
+  return augmented;
 }
 
 async function getAssistantResponseWithOpenAI(
@@ -151,13 +151,14 @@ async function getAssistantResponseWithOpenAI(
   channel: "voice" | "text" = "text"
 ): Promise<{ reply: string; escalate: boolean; reason?: EscalationReason }> {
   const limit = historyLimit(channel);
+  const userContent = await prepareUserMessage(message, conversationHistory, channel);
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: getCachedSystemInstruction(channel) },
     ...conversationHistory.slice(-limit).map((msg) => ({
       role: msg.role as "user" | "assistant",
       content: msg.content,
     })),
-    { role: "user", content: message },
+    { role: "user", content: userContent },
   ];
 
   const completion = await getOpenAI().chat.completions.create({
@@ -179,6 +180,7 @@ async function getAssistantResponseWithGemini(
   channel: "voice" | "text" = "text"
 ): Promise<{ reply: string; escalate: boolean; reason?: EscalationReason }> {
   const limit = historyLimit(channel);
+  const userContent = await prepareUserMessage(message, conversationHistory, channel);
   const history: Content[] = conversationHistory.slice(-limit).map((msg) => ({
     role: msg.role === "user" ? "user" : "model",
     parts: [{ text: msg.content }],
@@ -186,10 +188,7 @@ async function getAssistantResponseWithGemini(
 
   const model = getGeminiModel(channel);
   const result = await model.generateContent({
-    contents: [
-      ...history,
-      { role: "user", parts: [{ text: message }] },
-    ],
+    contents: [...history, { role: "user", parts: [{ text: userContent }] }],
   });
   const text = result.response.text().trim();
   const { reply, escalate, reason } = resolveEscalation(text);
@@ -236,7 +235,6 @@ export async function getAssistantResponse(
     }
   }
 
-  // Fallback (unreachable in practice)
   return { reply: "Something went wrong. Please try again.", escalate: false };
 }
 
@@ -263,6 +261,7 @@ export async function* streamAssistantResponse(
   }
 
   const limit = historyLimit(channel);
+  const userContent = await prepareUserMessage(message, conversationHistory, channel);
   const history: Content[] = conversationHistory.slice(-limit).map((msg) => ({
     role: msg.role === "user" ? "user" : "model",
     parts: [{ text: msg.content }],
@@ -271,7 +270,7 @@ export async function* streamAssistantResponse(
   try {
     const model = getGeminiModel(channel);
     const stream = await model.generateContentStream({
-      contents: [...history, { role: "user", parts: [{ text: message }] }],
+      contents: [...history, { role: "user", parts: [{ text: userContent }] }],
     });
 
     let fullText = "";

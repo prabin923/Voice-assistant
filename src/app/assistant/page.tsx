@@ -9,6 +9,11 @@ import {
   type BookingSummary,
   type PendingBooking,
 } from "@/components/BookingSummaryCard";
+import {
+  DiningSummaryCard,
+  type DiningSummary,
+  type PendingDining,
+} from "@/components/DiningSummaryCard";
 import { MyStayPanel } from "@/components/MyStayPanel";
 import { QuickActionsBar } from "@/components/QuickActionsBar";
 import { ServiceHealthBar } from "@/components/ServiceHealthBar";
@@ -253,7 +258,7 @@ export default function VoiceAssistant() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [messages, setMessages] = useState<
-    { role: "user" | "assistant"; content: string; booking?: BookingSummary }[]
+    { role: "user" | "assistant"; content: string; booking?: BookingSummary; dining?: DiningSummary }[]
   >([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [inConversation, setInConversation] = useState(false);
@@ -276,8 +281,11 @@ export default function VoiceAssistant() {
   const [inputMode, setInputMode] = useState<InputMode>("voice");
   const [chatDraft, setChatDraft] = useState("");
   const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null);
+  const [pendingDining, setPendingDining] = useState<PendingDining | null>(null);
   const pendingBookingRef = useRef<PendingBooking | null>(null);
+  const pendingDiningRef = useRef<PendingDining | null>(null);
   pendingBookingRef.current = pendingBooking;
+  pendingDiningRef.current = pendingDining;
   const chatInputRef = useRef<HTMLInputElement>(null);
   const conciergeName = useMemo(() => {
     const match = hotelConfig?.receptionistPersona?.match(/You are (\w+)/i);
@@ -694,7 +702,9 @@ export default function VoiceAssistant() {
         escalated?: boolean;
         guest?: { loyaltyTier?: GuestProfile["loyaltyTier"] };
         booking?: BookingSummary;
+        dining?: DiningSummary;
         pendingBooking?: PendingBooking | null;
+        pendingDining?: PendingDining | null;
       },
       ok: boolean
     ) => {
@@ -726,11 +736,18 @@ export default function VoiceAssistant() {
       if (data.pendingBooking !== undefined) {
         setPendingBooking(data.pendingBooking);
       }
+      if (data.pendingDining !== undefined) {
+        setPendingDining(data.pendingDining);
+      }
       const booking =
         data.booking && typeof data.booking === "object" && typeof data.booking.id === "string"
           ? data.booking
           : undefined;
-      return { reply, booking, escalated: Boolean(data.escalated) };
+      const dining =
+        data.dining && typeof data.dining === "object" && typeof data.dining.id === "string"
+          ? data.dining
+          : undefined;
+      return { reply, booking, dining, escalated: Boolean(data.escalated) };
     },
     [guestProfile, ui.errorConnection, ui.errorGeneric]
   );
@@ -746,6 +763,7 @@ export default function VoiceAssistant() {
       history: messagesRef.current.slice(-8),
       channel: inputModeRef.current === "voice" ? "voice" : "text",
       pendingBooking: pendingBookingRef.current,
+      pendingDining: pendingDiningRef.current,
     };
 
     try {
@@ -759,8 +777,11 @@ export default function VoiceAssistant() {
 
         if (!response.ok || !response.body) {
           const fallback = await response.json().catch(() => ({}));
-          const { reply, booking, escalated } = applyChatPayload(fallback, response.ok);
-          setMessages((prev) => [...prev, { role: "assistant", content: reply, ...(booking ? { booking } : {}) }]);
+          const { reply, booking, dining, escalated } = applyChatPayload(fallback, response.ok);
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: reply, ...(booking ? { booking } : {}), ...(dining ? { dining } : {}) },
+          ]);
           if (escalated) {
             setMessages((prev) => [...prev, { role: "assistant", content: GUEST_STAFF_HANDOFF_MESSAGE }]);
           } else {
@@ -821,7 +842,9 @@ export default function VoiceAssistant() {
                 reply?: string;
                 escalated?: boolean;
                 booking?: BookingSummary;
+                dining?: DiningSummary;
                 pendingBooking?: PendingBooking | null;
+                pendingDining?: PendingDining | null;
               };
               if (event.type === "delta" && event.text) {
                 fullReply += event.text;
@@ -845,12 +868,14 @@ export default function VoiceAssistant() {
 
         const finalReply =
           (typeof donePayload?.reply === "string" && donePayload.reply.trim()) || fullReply.trim();
-        const { booking, escalated } = applyChatPayload(
+        const { booking, dining, escalated } = applyChatPayload(
           {
             reply: finalReply,
             escalated: Boolean(donePayload?.escalated),
             booking: donePayload?.booking as BookingSummary | undefined,
+            dining: donePayload?.dining as DiningSummary | undefined,
             pendingBooking: donePayload?.pendingBooking as PendingBooking | null | undefined,
+            pendingDining: donePayload?.pendingDining as PendingDining | null | undefined,
           },
           true
         );
@@ -859,7 +884,12 @@ export default function VoiceAssistant() {
           const next = [...prev];
           const last = next[next.length - 1];
           if (last?.role === "assistant") {
-            next[next.length - 1] = { ...last, content: finalReply, ...(booking ? { booking } : {}) };
+            next[next.length - 1] = {
+              ...last,
+              content: finalReply,
+              ...(booking ? { booking } : {}),
+              ...(dining ? { dining } : {}),
+            };
           }
           return next;
         });
@@ -886,10 +916,10 @@ export default function VoiceAssistant() {
         body: JSON.stringify(payload),
       });
       const data = await response.json();
-      const { reply, booking, escalated } = applyChatPayload(data, response.ok);
+      const { reply, booking, dining, escalated } = applyChatPayload(data, response.ok);
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: reply, ...(booking ? { booking } : {}) },
+        { role: "assistant", content: reply, ...(booking ? { booking } : {}), ...(dining ? { dining } : {}) },
       ]);
       if (escalated) {
         setMessages((prev) => [...prev, { role: "assistant", content: GUEST_STAFF_HANDOFF_MESSAGE }]);
@@ -1655,6 +1685,9 @@ export default function VoiceAssistant() {
 
                         {msg.role === "assistant" && msg.booking ? (
                           <BookingSummaryCard booking={msg.booking} hotelName={branding.hotelName} isDark={isDark} />
+                        ) : null}
+                        {msg.role === "assistant" && msg.dining ? (
+                          <DiningSummaryCard dining={msg.dining} hotelName={branding.hotelName} isDark={isDark} />
                         ) : null}
 
                         <div className={`flex items-center gap-2 px-1 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>

@@ -94,6 +94,40 @@ model KnowledgeGap {
   @@map("knowledge_gaps")
 }
 
+model DiningReservation {
+  id              String   @id
+  venueName       String   @map("venue_name")
+  reservationDate String   @map("reservation_date")
+  reservationTime String   @map("reservation_time")
+  partySize       Int      @map("party_size")
+  guestName       String   @map("guest_name")
+  guestPhone      String   @map("guest_phone")
+  guestEmail      String?  @map("guest_email")
+  guestId         String?  @map("guest_id")
+  status          String   @default("confirmed")
+  specialRequests String?  @map("special_requests")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([guestId])
+  @@index([status, reservationDate])
+  @@map("dining_reservations")
+}
+
+model KnowledgeChunk {
+  id          String   @id
+  chunkKey    String   @unique @map("chunk_key")
+  category    String
+  title       String
+  content     String
+  contentHash String   @map("content_hash")
+  embedding   String
+  embedModel  String   @map("embed_model")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([category])
+  @@map("knowledge_chunks")
+}
+
 model Feedback {
   id             String   @id
   messageContent String   @map("message_content")

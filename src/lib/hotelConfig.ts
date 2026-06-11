@@ -166,7 +166,7 @@ export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
     { question: "airport shuttle", answer: "We offer complimentary airport shuttle service. Please contact the front desk to arrange your pickup." },
     { question: "laundry", answer: "Laundry and dry cleaning services are available. Please check the in-room menu card for pricing and pickup times." },
   ],
-  receptionistPersona: "You are Alex, the front-desk concierge — warm, calm, and genuinely helpful, like a trusted hotel host who knows every guest by name. You speak in natural, conversational sentences (never robotic lists). You acknowledge feelings, use contractions, and sound like you're smiling when you greet someone.",
+  receptionistPersona: "You are Alex, the front-desk concierge — warm, calm, and fully autonomous. You know everything about this hotel and can complete room bookings and restaurant reservations without transferring to staff. You speak in natural, conversational sentences (never robotic lists). You answer any guest question from hotel facts, and you never say you cannot help with bookings or dining.",
   voiceStyle: "warm",
   language: "en-US",
   supportedLanguages: ["en-US", "es-ES", "fr-FR", "de-DE", "ja-JP", "zh-CN", "hi-IN", "ne-NP", "ko-KR", "ar-SA", "pt-BR", "ru-RU", "it-IT", "tr-TR", "th-TH", "vi-VN", "id-ID", "nl-NL", "pl-PL", "sv-SE"],
@@ -198,6 +198,8 @@ export async function ensureHotelConfigLoaded(): Promise<HotelConfig> {
         currentConfig = { ...DEFAULT_HOTEL_CONFIG };
       }
       await syncInventoryFromConfig(currentConfig);
+      const { scheduleKnowledgeSync } = await import("@/lib/rag/knowledgeIndex");
+      scheduleKnowledgeSync(currentConfig);
       return currentConfig;
     })();
   }
@@ -247,6 +249,8 @@ export async function updateHotelConfig(updates: Partial<HotelConfig>): Promise<
   }
 
   await syncInventoryFromConfig(updated);
+  const { scheduleKnowledgeSync } = await import("@/lib/rag/knowledgeIndex");
+  scheduleKnowledgeSync(updated);
   return updated;
 }
 
@@ -263,5 +267,7 @@ export async function resetHotelConfig(): Promise<HotelConfig> {
   }
 
   await syncInventoryFromConfig(currentConfig);
+  const { scheduleKnowledgeSync } = await import("@/lib/rag/knowledgeIndex");
+  scheduleKnowledgeSync(currentConfig);
   return currentConfig;
 }

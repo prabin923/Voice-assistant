@@ -2,10 +2,11 @@ import { ensureHotelConfigLoaded } from "@/lib/hotelConfig";
 import { streamAssistantResponse } from "@/lib/responseEngine";
 import { guests, ensureDbReady } from "@/lib/db";
 import {
-  handleGuestBookingFlow,
-  shouldRunBookingFlow,
+  handleGuestServiceFlow,
+  shouldRunGuestServiceFlow,
   type PendingBooking,
-} from "@/lib/bookingFlow";
+  type PendingDining,
+} from "@/lib/guestServiceFlow";
 import { scheduleChatSideEffects } from "@/lib/chatSideEffects";
 import { getClientIP } from "@/lib/rateLimit";
 import { aiNotConfiguredResponse, isAiConfigured } from "@/lib/ai";
@@ -28,6 +29,7 @@ export async function POST(req: Request) {
       history?: unknown;
       channel?: string;
       pendingBooking?: PendingBooking | null;
+      pendingDining?: PendingDining | null;
     };
 
     const guestSession = await getGuestSession();
@@ -63,6 +65,7 @@ export async function POST(req: Request) {
     const langCode = body.language || config.language || "en-US";
     const conversationHistory = sanitizeChatHistory(body.history);
     const pendingBooking = body.pendingBooking ?? null;
+    const pendingDining = body.pendingDining ?? null;
     const guestProfile = guestRecord
       ? {
           id: guestRecord.id,
@@ -81,32 +84,38 @@ export async function POST(req: Request) {
         let escalate = false;
         let reason: string | undefined;
         let booking: unknown;
+        let dining: unknown;
         let nextPending: PendingBooking | null | undefined = pendingBooking;
+        let nextDiningPending: PendingDining | null | undefined = pendingDining;
 
-        const runBooking = shouldRunBookingFlow(
+        const runService = shouldRunGuestServiceFlow(
           message,
           conversationHistory,
           langCode,
           config.rooms.map((r) => r.name),
-          pendingBooking
+          pendingBooking,
+          pendingDining
         );
 
-        if (runBooking) {
-          const bookingFlow = await handleGuestBookingFlow({
+        if (runService) {
+          const serviceFlow = await handleGuestServiceFlow({
             message,
             langCode,
             config,
             history: conversationHistory,
             guestProfile,
             pendingBooking,
+            pendingDining,
           });
 
-          if (bookingFlow.handled) {
-            reply = bookingFlow.reply || "";
-            escalate = Boolean(bookingFlow.escalate);
-            reason = bookingFlow.reason;
-            booking = bookingFlow.booking;
-            nextPending = bookingFlow.pendingBooking;
+          if (serviceFlow.handled) {
+            reply = serviceFlow.reply || "";
+            escalate = Boolean(serviceFlow.escalate);
+            reason = serviceFlow.reason;
+            booking = serviceFlow.booking;
+            dining = serviceFlow.dining;
+            nextPending = serviceFlow.pendingBooking;
+            nextDiningPending = serviceFlow.pendingDining;
             push({ type: "delta", text: reply });
             push({
               type: "done",
@@ -114,7 +123,9 @@ export async function POST(req: Request) {
               escalated: escalate,
               reason,
               booking,
+              dining,
               pendingBooking: nextPending,
+              pendingDining: nextDiningPending,
             });
             scheduleChatSideEffects({
               guestMessage: message,
@@ -122,7 +133,7 @@ export async function POST(req: Request) {
               language: langCode,
               guestId: guestSession?.guestId,
               escalate,
-              reason: bookingFlow.reason,
+              reason: serviceFlow.reason,
             });
             controller.close();
             return;
@@ -147,6 +158,7 @@ export async function POST(req: Request) {
               escalated: escalate,
               reason,
               pendingBooking: nextPending,
+              pendingDining: nextDiningPending,
             });
           }
         }

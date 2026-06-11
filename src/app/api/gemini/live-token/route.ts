@@ -40,7 +40,7 @@ export async function POST(req: Request) {
           model: GEMINI_LIVE_MODEL,
           config: {
             responseModalities: [Modality.AUDIO],
-            systemInstruction: { parts: [{ text: buildSystemInstruction() }] },
+            systemInstruction: { parts: [{ text: buildSystemInstruction("voice", { fullHotelData: true }) }] },
             inputAudioTranscription: {},
             outputAudioTranscription: {},
           },

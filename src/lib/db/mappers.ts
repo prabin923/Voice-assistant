@@ -1,6 +1,7 @@
 import type {
   AuthAuditLog,
   Booking,
+  DiningReservation,
   Guest,
   Hotel,
   Interaction,
@@ -9,6 +10,7 @@ import type {
 import type {
   AuthAuditLog as PrismaAuthAuditLog,
   Booking as PrismaBooking,
+  DiningReservation as PrismaDiningReservation,
   Feedback as PrismaFeedback,
   Guest as PrismaGuest,
   Hotel as PrismaHotel,
@@ -67,6 +69,23 @@ export function mapBooking(row: PrismaBooking): Booking {
     check_in: row.checkIn,
     check_out: row.checkOut,
     rooms: row.rooms,
+    guest_name: row.guestName,
+    guest_phone: row.guestPhone,
+    guest_email: row.guestEmail,
+    guest_id: row.guestId,
+    status: row.status,
+    special_requests: row.specialRequests ?? null,
+    created_at: row.createdAt.toISOString(),
+  };
+}
+
+export function mapDiningReservation(row: PrismaDiningReservation): DiningReservation {
+  return {
+    id: row.id,
+    venue_name: row.venueName,
+    reservation_date: row.reservationDate,
+    reservation_time: row.reservationTime,
+    party_size: row.partySize,
     guest_name: row.guestName,
     guest_phone: row.guestPhone,
     guest_email: row.guestEmail,

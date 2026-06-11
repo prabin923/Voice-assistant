@@ -4,6 +4,7 @@ export {
   supportTickets,
   availability,
   bookings,
+  diningReservations,
   guests,
   hotels,
   authAuditLogs,

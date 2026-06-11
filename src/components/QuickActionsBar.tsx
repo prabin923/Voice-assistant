@@ -10,8 +10,9 @@ interface Props {
 
 const ACTIONS = [
   { icon: CalendarCheck, label: "Book a room", message: "I'd like to book a room — what do you have available?" },
+  { icon: UtensilsCrossed, label: "Reserve table", message: "I'd like to reserve a table for dinner — what restaurants do you have?" },
   { icon: MapPin, label: "Directions", message: "How do I get to the hotel and where can I park?" },
-  { icon: UtensilsCrossed, label: "Dining", message: "What dining options do you have and what are the hours?" },
+  { icon: UtensilsCrossed, label: "Dining hours", message: "What dining options do you have and what are the hours?" },
   { icon: HelpCircle, label: "My booking", message: "I need help with my booking." },
 ] as const;
 

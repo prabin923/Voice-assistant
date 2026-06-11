@@ -224,6 +224,58 @@ export async function sendStaffBookingCompleteEmail(data: StaffBookingCompleteEm
   });
 }
 
+export async function sendStaffDiningReservationEmail(data: {
+  staffEmail: string;
+  hotelName: string;
+  reservation: {
+    id: string;
+    venueName: string;
+    reservationDate: string;
+    reservationTime: string;
+    partySize: number;
+    guestName: string;
+    guestPhone: string;
+    guestEmail?: string | null;
+    specialRequests?: string | null;
+  };
+}): Promise<void> {
+  const transporter = getTransporter();
+  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || "ai-receptionist@hotel.local";
+  const shortId = data.reservation.id.slice(0, 8).toUpperCase();
+  const subject = `🍽️ Dining reservation — ${data.hotelName} (#${shortId})`;
+  const html = `
+    <div style="font-family: -apple-system, system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 20px;">
+      <h2 style="margin: 0 0 8px;">New dining reservation</h2>
+      <p style="color: #666;">${escapeHtml(data.hotelName)} AI Concierge</p>
+      <ul style="line-height: 1.8;">
+        <li><strong>Guest:</strong> ${escapeHtml(data.reservation.guestName)}</li>
+        <li><strong>Venue:</strong> ${escapeHtml(data.reservation.venueName)}</li>
+        <li><strong>Date:</strong> ${escapeHtml(data.reservation.reservationDate)}</li>
+        <li><strong>Time:</strong> ${escapeHtml(data.reservation.reservationTime)}</li>
+        <li><strong>Party size:</strong> ${data.reservation.partySize}</li>
+        <li><strong>Phone:</strong> ${escapeHtml(data.reservation.guestPhone)}</li>
+        ${data.reservation.guestEmail ? `<li><strong>Email:</strong> ${escapeHtml(data.reservation.guestEmail)}</li>` : ""}
+        ${data.reservation.specialRequests ? `<li><strong>Notes:</strong> ${escapeHtml(data.reservation.specialRequests)}</li>` : ""}
+      </ul>
+      <p style="color: #888; font-size: 12px;">Informational only — no ticket created.</p>
+    </div>
+  `;
+
+  if (!transporter) {
+    console.log("[EMAIL] Dining reservation FYI (SMTP not configured):");
+    console.log(`  To: ${data.staffEmail}`);
+    console.log(`  Subject: ${subject}`);
+    return;
+  }
+
+  await transporter.sendMail({
+    from: `"${data.hotelName} AI" <${fromEmail}>`,
+    to: data.staffEmail,
+    subject,
+    html,
+  });
+}
+
 export async function sendBookingConfirmationEmail(data: BookingConfirmationEmailData): Promise<void> {
   const transporter = getTransporter();
   const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || "ai-receptionist@hotel.local";
