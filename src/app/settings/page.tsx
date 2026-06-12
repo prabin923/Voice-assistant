@@ -795,12 +795,6 @@ export default function SettingsPage() {
                       <option value="Polly.Amy-Neural">Polly Amy — Neural (en-GB female)</option>
                       <option value="Polly.Brian-Neural">Polly Brian — Neural (en-GB male)</option>
                     </optgroup>
-                    <optgroup label="Azure Neural">
-                      <option value="Azure.en-US-EmmaNeural">Azure Emma — Neural (en-US female)</option>
-                      <option value="Azure.en-US-AndrewNeural">Azure Andrew — Neural (en-US male)</option>
-                      <option value="Azure.en-US-BrianMultilingualNeural">Azure Brian — Multilingual Neural</option>
-                      <option value="Azure.en-US-Ava:DragonHDLatestNeural">Azure Ava — Dragon HD (en-US)</option>
-                    </optgroup>
                   </select>
                   <p className={`mt-1.5 text-[11px] ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
                     This value is also controlled by the <code className="bg-neutral-800/60 text-amber-300 px-1 rounded text-[10px]">TELNYX_TTS_VOICE</code> environment variable. The env var overrides this setting.

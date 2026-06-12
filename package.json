@@ -13,7 +13,7 @@
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "speech:verify": "tsx scripts/verify-azure-speech.ts",
+    "speech:verify": "tsx scripts/verify-nemotron-speech.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

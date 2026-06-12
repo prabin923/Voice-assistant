@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { isAiConfigured } from "@/lib/ai";
 import { ensureDbReady } from "@/lib/db";
+import { isNemotronAsrConfigured } from "@/lib/nemotronTranscribe";
+import { isSelfHostedSttConfigured } from "@/lib/selfHostedStt";
+import { isGeminiConfigured } from "@/lib/gemini";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +19,7 @@ export async function GET() {
   return NextResponse.json({
     ai: isAiConfigured(),
     db: dbOk,
-    stt: Boolean(
-      process.env.AZURE_SPEECH_KEY?.trim() ||
-        process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() ||
-        process.env.OPENAI_API_KEY?.trim()
-    ),
+    stt: isNemotronAsrConfigured() || isSelfHostedSttConfigured() || isGeminiConfigured(),
     sms: Boolean(process.env.TINGTING_API_KEY?.trim()),
     email: Boolean(process.env.SMTP_HOST?.trim() && process.env.SMTP_USER?.trim()),
   });

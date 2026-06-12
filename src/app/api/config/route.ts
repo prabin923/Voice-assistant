@@ -10,7 +10,7 @@ import { requireAuth } from '@/lib/auth';
 import { validateCsrf } from "@/lib/csrf";
 import { isAiConfigured } from "@/lib/ai";
 import { isGeminiConfigured, isSttConfigured } from "@/lib/gemini";
-import { isMaiVoiceConfigured } from "@/lib/maiVoice";
+import { isNemotronVoiceConfigured } from "@/lib/nemotronVoice";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,7 @@ export async function GET() {
     aiReady: isAiConfigured(),
     geminiLiveReady: isGeminiConfigured(),
     sttReady: isSttConfigured(),
-    maiVoiceReady: isMaiVoiceConfigured(),
+    nemotronVoiceReady: isNemotronVoiceConfigured(),
   });
 }
 

@@ -35,7 +35,12 @@ import {
   VOICE_STT_RETRY_MS,
 } from "@/lib/voiceSilence";
 import { measureMicRms, isSpeechLevel } from "@/lib/voiceActivity";
-import { createMaiVoiceSpeaker, type MaiVoiceSpeaker, unlockBrowserAudio } from "@/lib/clientMaiVoice";
+import {
+  createNemotronVoiceSpeaker,
+  ensureAudioUnlocked,
+  type NemotronVoiceSpeaker,
+  unlockBrowserAudio,
+} from "@/lib/clientNemotronVoice";
 import { sanitizeForSpeech, VOICE_STATUS } from "@/lib/humanizeSpeech";
 import { VoicePresenceBar } from "@/components/VoicePresenceBar";
 import { ConciergeAvatar } from "@/components/ConciergeAvatar";
@@ -273,7 +278,7 @@ export default function VoiceAssistant() {
   const [voiceStyle, setVoiceStyle] = useState<VoiceStyle>("warm");
   const [aiReady, setAiReady] = useState<boolean | null>(null);
   const [sttReady, setSttReady] = useState<boolean | null>(null);
-  const [maiVoiceReady, setMaiVoiceReady] = useState(false);
+  const [nemotronVoiceReady, setNemotronVoiceReady] = useState(false);
   const [geminiLiveReady, setGeminiLiveReady] = useState<boolean | null>(null);
   const [guestProfile, setGuestProfile] = useState<GuestProfile | null>(null);
   const [showGuestAuth, setShowGuestAuth] = useState(false);
@@ -299,7 +304,7 @@ export default function VoiceAssistant() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const synthRef = useRef<SpeechSynthesis | null>(null);
-  const maiVoiceRef = useRef<MaiVoiceSpeaker | null>(null);
+  const nemotronVoiceRef = useRef<NemotronVoiceSpeaker | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
@@ -351,7 +356,7 @@ export default function VoiceAssistant() {
   useEffect(() => {
     setAiReady(typeof hotelConfig.aiReady === "boolean" ? hotelConfig.aiReady : null);
     setSttReady(typeof hotelConfig.sttReady === "boolean" ? hotelConfig.sttReady : null);
-    setMaiVoiceReady(hotelConfig.maiVoiceReady === true);
+    setNemotronVoiceReady(hotelConfig.nemotronVoiceReady === true);
     setGeminiLiveReady(typeof hotelConfig.geminiLiveReady === "boolean" ? hotelConfig.geminiLiveReady : null);
     if (hotelConfig.voiceStyle && ["warm", "professional", "energetic"].includes(hotelConfig.voiceStyle)) {
       setVoiceStyle(hotelConfig.voiceStyle as VoiceStyle);
@@ -385,8 +390,8 @@ export default function VoiceAssistant() {
   }, [showLanguageMenu]);
 
   useEffect(() => {
-    maiVoiceRef.current = createMaiVoiceSpeaker();
-    return () => maiVoiceRef.current?.cancel();
+    nemotronVoiceRef.current = createNemotronVoiceSpeaker();
+    return () => nemotronVoiceRef.current?.cancel();
   }, []);
 
   // Preload voices — some browsers lazy-load them
@@ -525,7 +530,7 @@ export default function VoiceAssistant() {
   const startListeningInternal = useCallback(() => {
     setErrorMessage(null);
     synthRef.current?.cancel();
-    maiVoiceRef.current?.cancel();
+    nemotronVoiceRef.current?.cancel();
     setIsSpeaking(false);
 
     if (aiReady === false && sttReady === false) {
@@ -623,61 +628,137 @@ export default function VoiceAssistant() {
   const startServerRecordingRef = useRef(() => {});
   const handleUserAudioCompleteRef = useRef<(incomingText: string) => void>(() => {});
 
-  const speakWithBrowser = useCallback((text: string) => {
-    if (!synthRef.current) return;
-    synthRef.current.cancel();
+  const speakWithBrowser = useCallback(
+    (
+      text: string,
+      resumeListenAfter = true,
+      chain = false,
+      onSpeechStart?: () => void
+    ): Promise<boolean> =>
+      new Promise((resolve) => {
+        const synth = synthRef.current;
+        if (!synth) {
+          resolve(false);
+          return;
+        }
 
-    const utterance = new SpeechSynthesisUtterance(toHumanSpeechText(text));
-    const lang = selectedLanguageRef.current.ttsLang;
-    utterance.lang = lang;
+        ensureAudioUnlocked();
+        if (synth.paused) synth.resume();
 
-    if (!cachedVoiceRef.current || cachedVoiceRef.current.lang.split("-")[0] !== lang.split("-")[0]) {
-      cachedVoiceRef.current = pickBestVoice(lang);
-    }
-    if (cachedVoiceRef.current) utterance.voice = cachedVoiceRef.current;
+        const cleaned = toHumanSpeechText(text);
+        if (!cleaned) {
+          resolve(false);
+          return;
+        }
 
-    if (voiceStyle === "professional") {
-      utterance.rate = 0.92;
-      utterance.pitch = 0.95;
-    } else if (voiceStyle === "energetic") {
-      utterance.rate = 1.0;
-      utterance.pitch = 1.04;
-    } else {
-      utterance.rate = 0.95;
-      utterance.pitch = 0.98;
-    }
-    utterance.volume = 1.0;
+        let settled = false;
+        let started = false;
+        let retried = false;
 
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      if (inConversationRef.current) {
-        setTimeout(() => {
-          if (inConversationRef.current) {
-            startListeningInternalRef.current();
+        const finish = (ok: boolean) => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(startTimeout);
+          resolve(ok);
+        };
+
+        const speakOnce = () => {
+          if (!chain) synth.cancel();
+          if (synth.paused) synth.resume();
+
+          const utterance = new SpeechSynthesisUtterance(cleaned);
+          const lang = selectedLanguageRef.current.ttsLang;
+          utterance.lang = lang;
+
+          if (!cachedVoiceRef.current || cachedVoiceRef.current.lang.split("-")[0] !== lang.split("-")[0]) {
+            cachedVoiceRef.current = pickBestVoice(lang);
           }
-        }, VOICE_RESUME_LISTEN_MS);
-      }
-    };
-    utterance.onerror = () => {
-      setIsSpeaking(false);
-    };
-    synthRef.current.speak(utterance);
-  }, [pickBestVoice, toHumanSpeechText, voiceStyle]);
+          if (cachedVoiceRef.current) utterance.voice = cachedVoiceRef.current;
 
-  const speakText = useCallback(async (text: string) => {
-    synthRef.current?.cancel();
-    maiVoiceRef.current?.cancel();
+          if (voiceStyle === "professional") {
+            utterance.rate = 0.92;
+            utterance.pitch = 0.95;
+          } else if (voiceStyle === "energetic") {
+            utterance.rate = 1.0;
+            utterance.pitch = 1.04;
+          } else {
+            utterance.rate = 0.95;
+            utterance.pitch = 0.98;
+          }
+          utterance.volume = 1.0;
 
-    if (maiVoiceReady && maiVoiceRef.current) {
-      const used = await maiVoiceRef.current.speak({
-        text,
+          utterance.onstart = () => {
+            started = true;
+            setIsSpeaking(true);
+            onSpeechStart?.();
+          };
+          utterance.onend = () => {
+            setIsSpeaking(false);
+            if (resumeListenAfter && inConversationRef.current) {
+              setTimeout(() => {
+                if (inConversationRef.current) {
+                  startListeningInternalRef.current();
+                }
+              }, VOICE_RESUME_LISTEN_MS);
+            }
+            finish(true);
+          };
+          utterance.onerror = () => {
+            setIsSpeaking(false);
+            if (!retried) {
+              retried = true;
+              window.setTimeout(speakOnce, 120);
+              return;
+            }
+            finish(false);
+          };
+
+          synth.speak(utterance);
+        };
+
+        const startTimeout = window.setTimeout(() => {
+          if (!started) {
+            if (!retried) {
+              retried = true;
+              speakOnce();
+              return;
+            }
+            finish(false);
+          }
+        }, 1500);
+
+        speakOnce();
+      }),
+    [pickBestVoice, toHumanSpeechText, voiceStyle]
+  );
+
+  const speakText = useCallback(async (
+    text: string,
+    options?: { chain?: boolean; onSpeechStart?: () => void }
+  ): Promise<boolean> => {
+    const cleaned = toHumanSpeechText(text);
+    if (!cleaned) return false;
+
+    ensureAudioUnlocked();
+    const resumeListenAfter = !options?.chain;
+
+    if (!options?.chain) {
+      synthRef.current?.cancel();
+      nemotronVoiceRef.current?.cancel();
+    }
+
+    if (nemotronVoiceRef.current) {
+      const used = await nemotronVoiceRef.current.speak({
+        text: cleaned,
         language: selectedLanguageRef.current.ttsLang,
         voiceStyle,
-        onStart: () => setIsSpeaking(true),
+        onStart: () => {
+          setIsSpeaking(true);
+          options?.onSpeechStart?.();
+        },
         onEnd: () => {
           setIsSpeaking(false);
-          if (inConversationRef.current) {
+          if (resumeListenAfter && inConversationRef.current) {
             setTimeout(() => {
               if (inConversationRef.current) {
                 startListeningInternalRef.current();
@@ -687,11 +768,11 @@ export default function VoiceAssistant() {
         },
         onError: () => setIsSpeaking(false),
       });
-      if (used) return;
+      if (used) return true;
     }
 
-    speakWithBrowser(text);
-  }, [maiVoiceReady, speakWithBrowser, voiceStyle]);
+    return speakWithBrowser(cleaned, resumeListenAfter, Boolean(options?.chain), options?.onSpeechStart);
+  }, [speakWithBrowser, toHumanSpeechText, voiceStyle]);
 
   const applyChatPayload = useCallback(
     (
@@ -768,6 +849,7 @@ export default function VoiceAssistant() {
 
     try {
       if (speakReply) {
+        ensureAudioUnlocked();
         const response = await fetch("/api/chat/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -784,12 +866,16 @@ export default function VoiceAssistant() {
           ]);
           if (escalated) {
             setMessages((prev) => [...prev, { role: "assistant", content: GUEST_STAFF_HANDOFF_MESSAGE }]);
+            autoListenAfterSpeakRef.current = false;
           } else {
             autoListenAfterSpeakRef.current = true;
-            void speakText(reply);
+            await speakText(reply);
           }
           return;
         }
+
+        synthRef.current?.cancel();
+        nemotronVoiceRef.current?.cancel();
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -797,17 +883,20 @@ export default function VoiceAssistant() {
         let fullReply = "";
         let donePayload: Record<string, unknown> | null = null;
         let spokenUpTo = 0;
-        const sentenceQueue: string[] = [];
-        let drainingQueue = false;
+        let speakChain: Promise<void> = Promise.resolve();
+        let heardAudio = false;
 
-        const drainSentenceQueue = async () => {
-          if (drainingQueue) return;
-          drainingQueue = true;
-          while (sentenceQueue.length > 0) {
-            const sentence = sentenceQueue.shift();
-            if (sentence) await speakText(sentence);
-          }
-          drainingQueue = false;
+        const markHeard = () => {
+          heardAudio = true;
+        };
+
+        const queueSpeak = (sentence: string) => {
+          speakChain = speakChain.then(async () => {
+            const ok = await speakText(sentence, { chain: heardAudio, onSpeechStart: markHeard });
+            if (!ok && !heardAudio) {
+              await speakText(sentence, { onSpeechStart: markHeard });
+            }
+          });
         };
 
         const enqueueNewSentences = (text: string) => {
@@ -818,11 +907,10 @@ export default function VoiceAssistant() {
             const trimmed = part.trim();
             if (!trimmed) continue;
             if (/[.!?]$/.test(trimmed)) {
-              sentenceQueue.push(trimmed);
+              queueSpeak(trimmed);
               spokenUpTo += part.length;
             }
           }
-          void drainSentenceQueue();
         };
 
         setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
@@ -840,13 +928,28 @@ export default function VoiceAssistant() {
                 type?: string;
                 text?: string;
                 reply?: string;
+                error?: string;
                 escalated?: boolean;
                 booking?: BookingSummary;
                 dining?: DiningSummary;
                 pendingBooking?: PendingBooking | null;
                 pendingDining?: PendingDining | null;
               };
-              if (event.type === "delta" && event.text) {
+              if (event.type === "error") {
+                const err =
+                  typeof event.error === "string" && event.error.trim()
+                    ? event.error.trim()
+                    : ui.errorGeneric;
+                fullReply = err;
+                setMessages((prev) => {
+                  const next = [...prev];
+                  const last = next[next.length - 1];
+                  if (last?.role === "assistant") {
+                    next[next.length - 1] = { ...last, content: err };
+                  }
+                  return next;
+                });
+              } else if (event.type === "delta" && event.text) {
                 fullReply += event.text;
                 setMessages((prev) => {
                   const next = [...prev];
@@ -895,16 +998,25 @@ export default function VoiceAssistant() {
         });
 
         const tail = finalReply.slice(spokenUpTo).trim();
-        if (tail) {
-          sentenceQueue.push(tail);
-          void drainSentenceQueue();
-        }
+        if (tail) queueSpeak(tail);
 
         if (escalated) {
           setMessages((prev) => [...prev, { role: "assistant", content: GUEST_STAFF_HANDOFF_MESSAGE }]);
           autoListenAfterSpeakRef.current = false;
-        } else {
+        } else if (finalReply) {
           autoListenAfterSpeakRef.current = true;
+          await speakChain.catch(() => {});
+          if (!heardAudio) {
+            await speakText(finalReply, { onSpeechStart: markHeard });
+          } else if (inConversationRef.current) {
+            setTimeout(() => {
+              if (inConversationRef.current) {
+                startListeningInternalRef.current();
+              }
+            }, VOICE_RESUME_LISTEN_MS);
+          }
+        } else {
+          autoListenAfterSpeakRef.current = false;
         }
         return;
       }
@@ -926,7 +1038,7 @@ export default function VoiceAssistant() {
         autoListenAfterSpeakRef.current = false;
       } else if (speakReply) {
         autoListenAfterSpeakRef.current = true;
-        void speakText(reply);
+        await speakText(reply);
       } else {
         autoListenAfterSpeakRef.current = false;
       }
@@ -935,7 +1047,7 @@ export default function VoiceAssistant() {
     } finally {
       setIsProcessing(false);
     }
-  }, [applyChatPayload, selectedLanguage, speakText, ui.errorConnection]);
+  }, [applyChatPayload, selectedLanguage, speakText, ui.errorConnection, ui.errorGeneric]);
 
   const handleUserAudioComplete = useCallback(
     (text: string) => handleUserMessage(text, inputModeRef.current === "voice"),
@@ -1179,7 +1291,7 @@ export default function VoiceAssistant() {
     }
     // Stop speech
     synthRef.current?.cancel();
-    maiVoiceRef.current?.cancel();
+    nemotronVoiceRef.current?.cancel();
     setIsListening(false);
     setIsSpeaking(false);
     setIsProcessing(false);
@@ -1980,7 +2092,7 @@ export default function VoiceAssistant() {
           languageCode={selectedLanguage.code}
           ttsLang={selectedLanguage.ttsLang}
           voiceStyle={voiceStyle}
-          maiVoiceReady={maiVoiceReady}
+          nemotronVoiceReady={nemotronVoiceReady}
           aiReady={aiReady !== false}
           geminiLiveReady={geminiLiveReady === true}
           onEnd={handleCallEnd}

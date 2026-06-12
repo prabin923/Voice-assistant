@@ -2,18 +2,18 @@ import { NextResponse } from "next/server";
 import { requireAiAccess } from "@/lib/aiAccessGuard";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
 import {
-  isMaiVoiceConfigured,
-  resolveMaiVoice,
-  synthesizeWithMaiVoice,
-  type MaiVoicePersona,
-} from "@/lib/maiVoice";
+  isNemotronVoiceConfigured,
+  resolveNemotronVoice,
+  synthesizeWithNemotronVoice,
+  type NemotronVoicePersona,
+} from "@/lib/nemotronVoice";
 import { sanitizeForSpeech as sanitizeSpeechText } from "@/lib/humanizeSpeech";
 
 export const dynamic = "force-dynamic";
 
 const MAX_TEXT_LENGTH = 4000;
 
-function parseVoiceStyle(value: unknown): MaiVoicePersona {
+function parseVoiceStyle(value: unknown): NemotronVoicePersona {
   if (value === "professional" || value === "energetic" || value === "warm") {
     return value;
   }
@@ -27,17 +27,16 @@ function sanitizeLanguage(language: unknown): string {
 }
 
 export async function GET() {
-  return NextResponse.json({ maiVoiceReady: isMaiVoiceConfigured() });
+  return NextResponse.json({ nemotronVoiceReady: isNemotronVoiceConfigured() });
 }
 
 export async function POST(req: Request) {
   try {
-    if (!isMaiVoiceConfigured()) {
+    if (!isNemotronVoiceConfigured()) {
       return NextResponse.json(
         {
-          error: "MAI Voice not configured.",
-          details:
-            "Set AZURE_SPEECH_KEY, AZURE_SPEECH_ENDPOINT, and AZURE_SPEECH_REGION (or MAI_VOICE_TTS_ENDPOINT).",
+          error: "Nemotron TTS not configured.",
+          details: "Set NEMOTRON_TTS_ENDPOINT (and NVIDIA_API_KEY when required by your NIM).",
         },
         { status: 501 }
       );
@@ -74,17 +73,17 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!resolveMaiVoice(language, voiceStyle)) {
+    if (!resolveNemotronVoice(language, voiceStyle)) {
       return NextResponse.json(
         {
-          error: "Language not supported by MAI Voice.",
+          error: "Language not supported by Nemotron TTS.",
           fallback: true,
         },
         { status: 422 }
       );
     }
 
-    const result = await synthesizeWithMaiVoice({ text, language, voiceStyle });
+    const result = await synthesizeWithNemotronVoice({ text, language, voiceStyle });
     if (result.unsupportedLanguage) {
       return NextResponse.json(
         { error: result.error, fallback: true },
@@ -98,9 +97,9 @@ export async function POST(req: Request) {
     return new NextResponse(new Uint8Array(result.audio), {
       status: 200,
       headers: {
-        "Content-Type": "audio/mpeg",
+        "Content-Type": result.contentType ?? "audio/wav",
         "Cache-Control": "no-store",
-        "X-TTS-Provider": "mai-voice",
+        "X-TTS-Provider": "nemotron-tts",
       },
     });
   } catch (error) {

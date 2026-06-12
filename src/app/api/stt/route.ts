@@ -9,7 +9,7 @@ import {
   transcribeWithLocalWhisper,
   transcribeWithWhisperServer,
 } from '@/lib/selfHostedStt';
-import { isMaiTranscribeConfigured, transcribeWithMai } from '@/lib/maiTranscribe';
+import { isNemotronAsrConfigured, transcribeWithNemotron } from '@/lib/nemotronTranscribe';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +21,7 @@ const ALLOWED_AUDIO_TYPES = new Set([
 ]);
 
 function isSttAvailable(): boolean {
-  return isMaiTranscribeConfigured() || isSelfHostedSttConfigured() || Boolean(getGeminiApiKey());
+  return isNemotronAsrConfigured() || isSelfHostedSttConfigured() || Boolean(getGeminiApiKey());
 }
 
 export async function POST(req: Request) {
@@ -73,7 +73,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error: "Speech-to-text not configured.",
-          details: "Set AZURE_SPEECH_KEY + AZURE_SPEECH_ENDPOINT (MAI), WHISPER_STT_ENDPOINT, or GOOGLE_GENERATIVE_AI_API_KEY.",
+          details: "Set NEMOTRON_ASR_ENDPOINT (+ NVIDIA_API_KEY), WHISPER_STT_ENDPOINT, or GOOGLE_GENERATIVE_AI_API_KEY.",
         },
         { status: 501 }
       );
@@ -82,19 +82,19 @@ export async function POST(req: Request) {
     const safeLang = (language || "en-US").replace(/[^a-zA-Z0-9\-]/g, "").slice(0, 10);
     const audioBuffer = Buffer.from(await audioBlob.arrayBuffer());
 
-    // 1) Microsoft MAI-Transcribe (Azure Speech — best accuracy, 43 languages)
-    let maiError: string | undefined;
-    if (isMaiTranscribeConfigured()) {
-      const maiResult = await transcribeWithMai(
+    // 1) NVIDIA Nemotron Speech ASR (Parakeet via Speech NIM)
+    let nemotronError: string | undefined;
+    if (isNemotronAsrConfigured()) {
+      const nemotronResult = await transcribeWithNemotron(
         new Blob([audioBuffer], { type: baseMime }),
         baseMime,
-        { language: safeLang, transcribeStyle: "verbatim" }
+        { language: safeLang }
       );
-      if (maiResult.text) {
-        return NextResponse.json({ text: maiResult.text, provider: "mai-transcribe" });
+      if (nemotronResult.text) {
+        return NextResponse.json({ text: nemotronResult.text, provider: "nemotron-asr" });
       }
-      maiError = maiResult.error;
-      console.warn("[STT] MAI transcribe did not return text:", maiError ?? "empty");
+      nemotronError = nemotronResult.error;
+      console.warn("[STT] Nemotron ASR did not return text:", nemotronError ?? "empty");
     }
 
     // 2) Self-hosted Whisper HTTP server
@@ -136,7 +136,7 @@ export async function POST(req: Request) {
     }
 
     if (!transcription || transcription.toUpperCase() === "EMPTY") {
-      const detail = maiError ? ` (${maiError})` : "";
+      const detail = nemotronError ? ` (${nemotronError})` : "";
       console.warn("[STT] All providers returned empty.", detail);
       return NextResponse.json(
         { error: "No speech detected. Please try again.", fallbackNative: true },

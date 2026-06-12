@@ -16,7 +16,7 @@ import {
   VOICE_STT_RETRY_MS,
 } from "@/lib/voiceSilence";
 import { measureMicRms, isSpeechLevel } from "@/lib/voiceActivity";
-import { createMaiVoiceSpeaker, type MaiVoiceSpeaker, unlockBrowserAudio } from "@/lib/clientMaiVoice";
+import { createNemotronVoiceSpeaker, type NemotronVoiceSpeaker, unlockBrowserAudio } from "@/lib/clientNemotronVoice";
 import { sanitizeForSpeech, VOICE_STATUS } from "@/lib/humanizeSpeech";
 
 type CallState = "ringing" | "connected" | "ended";
@@ -81,7 +81,7 @@ interface CallOverlayProps {
   voiceStyle: "warm" | "professional" | "energetic";
   aiReady?: boolean;
   geminiLiveReady?: boolean;
-  maiVoiceReady?: boolean;
+  nemotronVoiceReady?: boolean;
   onEnd: (record?: CallHistoryRecord) => void;
 }
 
@@ -93,7 +93,7 @@ export default function CallOverlay({
   voiceStyle,
   aiReady = true,
   geminiLiveReady = false,
-  maiVoiceReady = false,
+  nemotronVoiceReady = false,
   onEnd,
 }: CallOverlayProps) {
   const [callState, setCallState] = useState<CallState>("ringing");
@@ -116,7 +116,7 @@ export default function CallOverlay({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const synthRef = useRef<SpeechSynthesis | null>(null);
-  const maiVoiceRef = useRef<MaiVoiceSpeaker | null>(null);
+  const nemotronVoiceRef = useRef<NemotronVoiceSpeaker | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const autoListenRef = useRef(true);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -182,8 +182,8 @@ export default function CallOverlay({
   // Init TTS
   useEffect(() => { synthRef.current = window.speechSynthesis; }, []);
   useEffect(() => {
-    maiVoiceRef.current = createMaiVoiceSpeaker();
-    return () => maiVoiceRef.current?.cancel();
+    nemotronVoiceRef.current = createNemotronVoiceSpeaker();
+    return () => nemotronVoiceRef.current?.cancel();
   }, []);
 
   // Cleanup audio context on unmount
@@ -262,10 +262,10 @@ export default function CallOverlay({
     }
 
     synthRef.current?.cancel();
-    maiVoiceRef.current?.cancel();
+    nemotronVoiceRef.current?.cancel();
 
-    if (maiVoiceReady && maiVoiceRef.current) {
-      const used = await maiVoiceRef.current.speak({
+    if (nemotronVoiceReady && nemotronVoiceRef.current) {
+      const used = await nemotronVoiceRef.current.speak({
         text,
         language: ttsLang,
         voiceStyle,
@@ -280,7 +280,7 @@ export default function CallOverlay({
     }
 
     speakWithBrowser(text);
-  }, [isSpeakerOff, maiVoiceReady, speakWithBrowser, ttsLang, voiceStyle]);
+  }, [isSpeakerOff, nemotronVoiceReady, speakWithBrowser, ttsLang, voiceStyle]);
 
   // Send to chat API
   const sendMessage = useCallback(async (text: string) => {
@@ -351,7 +351,7 @@ export default function CallOverlay({
     liveSessionRef.current?.disconnect();
     liveSessionRef.current = null;
     synthRef.current?.cancel();
-    maiVoiceRef.current?.cancel();
+    nemotronVoiceRef.current?.cancel();
     if (audioContextRef.current && audioContextRef.current.state !== "closed") {
       audioContextRef.current.close().catch(() => {});
     }
