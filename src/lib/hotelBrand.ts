@@ -104,6 +104,7 @@ export type PublicHotelConfig = Pick<
   aiReady?: boolean;
   sttReady?: boolean;
   geminiLiveReady?: boolean;
+  serverTtsReady?: boolean;
   nemotronVoiceReady?: boolean;
 };
 
@@ -258,6 +259,7 @@ export function mergePublicHotelConfig(data: Partial<PublicHotelConfig> | null |
     aiReady: data?.aiReady,
     sttReady: data?.sttReady,
     geminiLiveReady: data?.geminiLiveReady,
-    nemotronVoiceReady: data?.nemotronVoiceReady,
+    serverTtsReady: data?.serverTtsReady ?? data?.nemotronVoiceReady,
+    nemotronVoiceReady: data?.nemotronVoiceReady ?? data?.serverTtsReady,
   };
 }

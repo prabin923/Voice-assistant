@@ -7,6 +7,9 @@ import {
   synthesizeWithNemotronVoice,
   type NemotronVoicePersona,
 } from "@/lib/nemotronVoice";
+import { synthesizeWithEdgeTts } from "@/lib/edgeTts";
+import { isOpenAiTtsConfigured, synthesizeWithOpenAiTts } from "@/lib/openaiTts";
+import { isServerTtsConfigured } from "@/lib/serverTts";
 import { sanitizeForSpeech as sanitizeSpeechText } from "@/lib/humanizeSpeech";
 
 export const dynamic = "force-dynamic";
@@ -27,16 +30,21 @@ function sanitizeLanguage(language: unknown): string {
 }
 
 export async function GET() {
-  return NextResponse.json({ nemotronVoiceReady: isNemotronVoiceConfigured() });
+  return NextResponse.json({
+    serverTtsReady: isServerTtsConfigured(),
+    nemotronVoiceReady: isNemotronVoiceConfigured(),
+    openAiTtsReady: isOpenAiTtsConfigured(),
+  });
 }
 
 export async function POST(req: Request) {
   try {
-    if (!isNemotronVoiceConfigured()) {
+    if (!isServerTtsConfigured()) {
       return NextResponse.json(
         {
-          error: "Nemotron TTS not configured.",
-          details: "Set NEMOTRON_TTS_ENDPOINT (and NVIDIA_API_KEY when required by your NIM).",
+          error: "Server TTS not configured.",
+          details:
+            "Set NEMOTRON_TTS_ENDPOINT (+ NVIDIA_API_KEY) or OPENAI_API_KEY for speech playback.",
         },
         { status: 501 }
       );
@@ -73,33 +81,60 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!resolveNemotronVoice(language, voiceStyle)) {
-      return NextResponse.json(
-        {
-          error: "Language not supported by Nemotron TTS.",
-          fallback: true,
-        },
-        { status: 422 }
-      );
+    if (isNemotronVoiceConfigured()) {
+      if (!resolveNemotronVoice(language, voiceStyle)) {
+        return NextResponse.json(
+          { error: "Language not supported by Nemotron TTS.", fallback: true },
+          { status: 422 }
+        );
+      }
+
+      const nemotron = await synthesizeWithNemotronVoice({ text, language, voiceStyle });
+      if (nemotron.audio) {
+        return new NextResponse(new Uint8Array(nemotron.audio), {
+          status: 200,
+          headers: {
+            "Content-Type": nemotron.contentType ?? "audio/wav",
+            "Cache-Control": "no-store",
+            "X-TTS-Provider": "nemotron-tts",
+          },
+        });
+      }
+      if (!isOpenAiTtsConfigured()) {
+        if (nemotron.unsupportedLanguage) {
+          return NextResponse.json({ error: nemotron.error, fallback: true }, { status: 422 });
+        }
+        return NextResponse.json({ error: nemotron.error ?? "Synthesis failed." }, { status: 502 });
+      }
+      console.warn("[TTS] Nemotron failed, falling back to OpenAI:", nemotron.error);
     }
 
-    const result = await synthesizeWithNemotronVoice({ text, language, voiceStyle });
-    if (result.unsupportedLanguage) {
-      return NextResponse.json(
-        { error: result.error, fallback: true },
-        { status: 422 }
-      );
-    }
-    if (!result.audio) {
-      return NextResponse.json({ error: result.error ?? "Synthesis failed." }, { status: 502 });
+    if (isOpenAiTtsConfigured()) {
+      const openAi = await synthesizeWithOpenAiTts({ text, voiceStyle });
+      if (openAi.audio) {
+        return new NextResponse(new Uint8Array(openAi.audio), {
+          status: 200,
+          headers: {
+            "Content-Type": openAi.contentType ?? "audio/mpeg",
+            "Cache-Control": "no-store",
+            "X-TTS-Provider": "openai-tts",
+          },
+        });
+      }
+      console.warn("[TTS] OpenAI failed, falling back to Edge TTS:", openAi.error);
     }
 
-    return new NextResponse(new Uint8Array(result.audio), {
+    const edge = await synthesizeWithEdgeTts({ text, language, voiceStyle });
+    if (!edge.audio) {
+      return NextResponse.json({ error: edge.error ?? "Synthesis failed." }, { status: 502 });
+    }
+
+    return new NextResponse(new Uint8Array(edge.audio), {
       status: 200,
       headers: {
-        "Content-Type": result.contentType ?? "audio/wav",
+        "Content-Type": edge.contentType ?? "audio/mpeg",
         "Cache-Control": "no-store",
-        "X-TTS-Provider": "nemotron-tts",
+        "X-TTS-Provider": "edge-tts",
       },
     });
   } catch (error) {

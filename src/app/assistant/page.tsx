@@ -356,7 +356,9 @@ export default function VoiceAssistant() {
   useEffect(() => {
     setAiReady(typeof hotelConfig.aiReady === "boolean" ? hotelConfig.aiReady : null);
     setSttReady(typeof hotelConfig.sttReady === "boolean" ? hotelConfig.sttReady : null);
-    setNemotronVoiceReady(hotelConfig.nemotronVoiceReady === true);
+    setNemotronVoiceReady(
+      hotelConfig.serverTtsReady === true || hotelConfig.nemotronVoiceReady === true
+    );
     setGeminiLiveReady(typeof hotelConfig.geminiLiveReady === "boolean" ? hotelConfig.geminiLiveReady : null);
     if (hotelConfig.voiceStyle && ["warm", "professional", "energetic"].includes(hotelConfig.voiceStyle)) {
       setVoiceStyle(hotelConfig.voiceStyle as VoiceStyle);
@@ -747,7 +749,7 @@ export default function VoiceAssistant() {
       nemotronVoiceRef.current?.cancel();
     }
 
-    if (nemotronVoiceRef.current) {
+    if (nemotronVoiceReady && nemotronVoiceRef.current) {
       const used = await nemotronVoiceRef.current.speak({
         text: cleaned,
         language: selectedLanguageRef.current.ttsLang,
@@ -772,7 +774,7 @@ export default function VoiceAssistant() {
     }
 
     return speakWithBrowser(cleaned, resumeListenAfter, Boolean(options?.chain), options?.onSpeechStart);
-  }, [speakWithBrowser, toHumanSpeechText, voiceStyle]);
+  }, [nemotronVoiceReady, speakWithBrowser, toHumanSpeechText, voiceStyle]);
 
   const applyChatPayload = useCallback(
     (

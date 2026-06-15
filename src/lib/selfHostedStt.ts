@@ -4,6 +4,7 @@
  */
 
 import { execFile } from "node:child_process";
+import { getOpenAiApiKey } from "@/lib/openai";
 import { randomUUID } from "node:crypto";
 import { unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -24,7 +25,7 @@ export function getSelfHostedSttConfig(): SelfHostedSttConfig | undefined {
   return {
     endpoint,
     model: process.env.WHISPER_STT_MODEL?.trim() || "whisper-large-v3-turbo",
-    apiKey: process.env.WHISPER_STT_API_KEY?.trim(),
+    apiKey: process.env.WHISPER_STT_API_KEY?.trim() || getOpenAiApiKey(),
   };
 }
 
