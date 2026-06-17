@@ -7,6 +7,7 @@ import {
   synthesizeWithNemotronVoice,
   type NemotronVoicePersona,
 } from "@/lib/nemotronVoice";
+import { isMinimaxTtsConfigured, synthesizeWithMinimaxTts } from "@/lib/minimaxTts";
 import { synthesizeWithEdgeTts } from "@/lib/edgeTts";
 import { isOpenAiTtsConfigured, synthesizeWithOpenAiTts } from "@/lib/openaiTts";
 import { isServerTtsConfigured } from "@/lib/serverTts";
@@ -32,6 +33,7 @@ function sanitizeLanguage(language: unknown): string {
 export async function GET() {
   return NextResponse.json({
     serverTtsReady: isServerTtsConfigured(),
+    minimaxTtsReady: isMinimaxTtsConfigured(),
     nemotronVoiceReady: isNemotronVoiceConfigured(),
     openAiTtsReady: isOpenAiTtsConfigured(),
   });
@@ -79,6 +81,21 @@ export async function POST(req: Request) {
         { error: `Text too long. Maximum ${MAX_TEXT_LENGTH} characters.` },
         { status: 413 }
       );
+    }
+
+    if (isMinimaxTtsConfigured()) {
+      const minimax = await synthesizeWithMinimaxTts({ text, language, voiceStyle });
+      if (minimax.audio) {
+        return new NextResponse(new Uint8Array(minimax.audio), {
+          status: 200,
+          headers: {
+            "Content-Type": minimax.contentType ?? "audio/mpeg",
+            "Cache-Control": "no-store",
+            "X-TTS-Provider": "minimax-tts",
+          },
+        });
+      }
+      console.warn("[TTS] MiniMax failed, falling back:", minimax.error);
     }
 
     if (isNemotronVoiceConfigured()) {
