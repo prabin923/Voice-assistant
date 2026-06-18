@@ -5,8 +5,8 @@ export const VOICE_RMS_THRESHOLD = 4;
 /** @deprecated Use VOICE_RMS_THRESHOLD via measureMicRms */
 export const VOICE_SILENCE_THRESHOLD = 15;
 
-/** End turn after this much silence following speech (~1.2s). */
-export const VOICE_SILENCE_SUBMIT_MS = 1200;
+/** End turn after this much silence following speech (~0.7s). */
+export const VOICE_SILENCE_SUBMIT_MS = 700;
 
 /** Minimum speech duration before auto-submit on silence. */
 export const VOICE_SPEECH_MIN_MS = 300;
@@ -14,7 +14,7 @@ export const VOICE_SPEECH_MIN_MS = 300;
 export const VOICE_MAX_RECORD_MS = 12000;
 
 /** Delay before mic opens after assistant finishes speaking. */
-export const VOICE_RESUME_LISTEN_MS = 150;
+export const VOICE_RESUME_LISTEN_MS = 400;
 
 /** Delay before retrying mic after empty STT / no speech. */
 export const VOICE_STT_RETRY_MS = 200;

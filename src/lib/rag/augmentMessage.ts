@@ -1,8 +1,9 @@
 import type { HotelConfig } from "@/lib/hotelConfig";
 import {
   buildRetrievalQuery,
-  getKnowledgeChunkCount,
+  ragTimeoutMs,
   retrieveRelevantChunks,
+  type RetrievedChunk,
 } from "@/lib/rag/knowledgeIndex";
 
 export type ChatTurn = { role: string; content: string };
@@ -53,6 +54,22 @@ function fullContextMessage(config: HotelConfig, message: string, channel: "voic
   };
 }
 
+function fastVoiceFallbackMessage(config: HotelConfig, message: string) {
+  const concise = [
+    `- ${config.branding.hotelName} | ${config.contact.phone} | ${config.contact.city}`,
+    `- Check-in ${config.policies.checkInTime}, check-out ${config.policies.checkOutTime}`,
+    `- Rooms: ${config.rooms.slice(0, 3).map((r) => `${r.name} ${r.currency}${r.pricePerNight}`).join("; ")}`,
+    `- Dining: ${config.dining.slice(0, 3).map((d) => d.name).join(", ") || "not listed"}`,
+  ].join("\n");
+  return {
+    usedRag: false,
+    message:
+      `HOTEL FACTS:\n${concise}` +
+      "\nVOICE MODE: Answer in 1-2 short conversational sentences." +
+      `\n\nGUEST MESSAGE:\n${message}`,
+  };
+}
+
 export async function augmentUserMessageWithHotelContext(
   message: string,
   history: ChatTurn[],
@@ -60,32 +77,50 @@ export async function augmentUserMessageWithHotelContext(
   channel: "voice" | "text"
 ): Promise<{ message: string; usedRag: boolean }> {
   try {
-    const chunkCount = await getKnowledgeChunkCount();
-    const topK = channel === "voice" ? 6 : 12;
+    const topK = channel === "voice" ? 3 : 10;
+    const query = buildRetrievalQuery(message, history);
 
-    if (chunkCount > 0) {
-      const query = buildRetrievalQuery(message, history);
-      const chunks = await retrieveRelevantChunks(query, {
+    const chunks = await Promise.race([
+      retrieveRelevantChunks(query, {
         topK,
-        minScore: channel === "voice" ? 0.3 : 0.32,
-      });
+        minScore: channel === "voice" ? 0.28 : 0.32,
+        preferFastLexical: channel === "voice",
+        lexicalOnly: channel === "voice",
+      }),
+      new Promise<RetrievedChunk[]>((resolve) =>
+        setTimeout(() => resolve([]), ragTimeoutMs(channel))
+      ),
+    ]);
 
-      if (chunks.length > 0) {
+    if (chunks.length > 0) {
+        const dialogue = chunks.filter((c) => c.category === "dialogue");
+        const factual = chunks.filter((c) => c.category !== "dialogue");
+        const selected =
+          channel === "voice" && dialogue.length > 0
+            ? [...dialogue.slice(0, 2), ...factual.slice(0, Math.max(topK - 2, 2))]
+            : chunks;
+
         const core = `- ${config.branding.hotelName} | ${config.contact.phone} | ${config.contact.city}`;
-        const facts = [core, ...chunks.map((c) => `- ${c.title}: ${c.content}`)].join("\n");
+        const facts = [core, ...selected.map((c) => `- ${c.title}: ${c.content}`)].join("\n");
         const voiceHint =
           channel === "voice"
-            ? "\nVOICE MODE: Use these facts to answer in 1–2 spoken sentences. Sound warm and human — not like reading a brochure."
-            : "";
+            ? dialogue.length > 0
+              ? "\nVOICE MODE: Match the natural tone of the DIALOGUE EXAMPLES above. Answer in 1–2 spoken sentences — warm and human, not a brochure."
+              : "\nVOICE MODE: Answer in 1–2 spoken sentences. Sound warm and human — not like reading a brochure."
+            : dialogue.length > 0
+              ? "\nMatch the conversational tone of the DIALOGUE EXAMPLES when helpful."
+              : "";
         return {
           usedRag: true,
           message: `RELEVANT HOTEL FACTS:\n${facts}${voiceHint}\n\nGUEST MESSAGE:\n${message}`,
         };
-      }
     }
   } catch (err) {
     console.warn("[RAG] Augment failed, using full hotel data:", err);
   }
 
+  if (channel === "voice") {
+    return fastVoiceFallbackMessage(config, message);
+  }
   return fullContextMessage(config, message, channel);
 }

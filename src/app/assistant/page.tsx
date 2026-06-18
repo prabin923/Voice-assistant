@@ -22,6 +22,8 @@ import type { GuestProfile } from "@/lib/clientGuestAuth";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 import { vapiPanelShell } from "@/lib/vapiUi";
 import { useHotelPublicConfig } from "@/hooks/useHotelPublicConfig";
+import { tenantApiUrl, useTenantSlug } from "@/hooks/useTenantSlug";
+import { usePathname } from "next/navigation";
 import { GUEST_STAFF_HANDOFF_MESSAGE } from "@/lib/escalationMessages";
 import {
   VOICE_MAX_RECORD_MS,
@@ -42,11 +44,13 @@ import {
   unlockBrowserAudio,
 } from "@/lib/clientNemotronVoice";
 import { sanitizeForSpeech, trimForVoiceReply, VOICE_STATUS } from "@/lib/humanizeSpeech";
+import { isJunkTranscription, sanitizeTranscription } from "@/lib/sttValidation";
 import { VoicePresenceBar } from "@/components/VoicePresenceBar";
 import { ConciergeAvatar } from "@/components/ConciergeAvatar";
 
 type VoiceStyle = "warm" | "professional" | "energetic";
 type InputMode = "voice" | "text";
+type VoiceProvider = "browser" | "server";
 
 interface LanguageOption {
   code: string;
@@ -182,6 +186,7 @@ interface SpeechRecognitionLike {
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
 const CALL_HISTORY_STORAGE_KEY = "staynep-call-history";
+const STT_MODE_STORAGE_KEY = "assistant-stt-mode";
 const PREMIUM_VOICE_HINTS = [
   "neural",
   "wavenet",
@@ -258,7 +263,11 @@ function pickRecorderMimeType(): string | undefined {
 }
 
 export default function VoiceAssistant() {
-  const { branding, suggestedQuestions, config: hotelConfig, welcomeHeadline, welcomeSubtext } = useHotelPublicConfig();
+  const pathname = usePathname();
+  const tenantSlug = useTenantSlug();
+  const embedMode = Boolean(tenantSlug) || pathname?.startsWith("/embed/");
+  const { branding, suggestedQuestions, config: hotelConfig, welcomeHeadline, welcomeSubtext } =
+    useHotelPublicConfig(tenantSlug);
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -312,9 +321,16 @@ export default function VoiceAssistant() {
   const [useServerSTT, setUseServerSTT] = useState(false);
   const useServerSTTRef = useRef(false);
   useServerSTTRef.current = useServerSTT;
+  const voiceStackRef = useRef<"free" | "cloud">("free");
   const lastServerSttAtRef = useRef(0);
   const serverSttFailCountRef = useRef(0);
   const autoListenAfterSpeakRef = useRef(false);
+  const isProcessingRef = useRef(false);
+  const isSpeakingRef = useRef(false);
+  const lastSubmittedTranscriptRef = useRef("");
+  const lastSubmittedAtRef = useRef(0);
+  isProcessingRef.current = isProcessing;
+  isSpeakingRef.current = isSpeaking;
   const cachedVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
   const selectedLanguageRef = useRef(selectedLanguage);
   selectedLanguageRef.current = selectedLanguage;
@@ -346,6 +362,15 @@ export default function VoiceAssistant() {
       setInputMode(savedInputMode);
     }
 
+    const savedSttMode = window.localStorage.getItem(STT_MODE_STORAGE_KEY);
+    if (savedSttMode === "whisper") {
+      setUseServerSTT(true);
+      useServerSTTRef.current = true;
+    } else if (savedSttMode === "native") {
+      setUseServerSTT(false);
+      useServerSTTRef.current = false;
+    }
+
     const savedLang = window.localStorage.getItem("assistant-language");
     if (savedLang) {
       const lang = ALL_LANGUAGES.find((l) => l.code === savedLang);
@@ -363,9 +388,24 @@ export default function VoiceAssistant() {
     if (hotelConfig.voiceStyle && ["warm", "professional", "energetic"].includes(hotelConfig.voiceStyle)) {
       setVoiceStyle(hotelConfig.voiceStyle as VoiceStyle);
     }
-    if (hotelConfig.sttReady === true) {
+    voiceStackRef.current = hotelConfig.voiceStack === "cloud" ? "cloud" : "free";
+    const savedSttMode = window.localStorage.getItem(STT_MODE_STORAGE_KEY);
+    if (savedSttMode === "whisper") {
       setUseServerSTT(true);
       useServerSTTRef.current = true;
+    } else if (savedSttMode === "native") {
+      setUseServerSTT(false);
+      useServerSTTRef.current = false;
+    } else if (hotelConfig.sttReady === true && typeof window !== "undefined") {
+      const win = window as Window & {
+        SpeechRecognition?: SpeechRecognitionCtor;
+        webkitSpeechRecognition?: SpeechRecognitionCtor;
+      };
+      const hasNativeStt = Boolean(win.SpeechRecognition || win.webkitSpeechRecognition);
+      if (!hasNativeStt) {
+        setUseServerSTT(true);
+        useServerSTTRef.current = true;
+      }
     }
     if (hotelConfig.language) {
       const lang = ALL_LANGUAGES.find(
@@ -537,6 +577,9 @@ export default function VoiceAssistant() {
 
   // Start listening (extracted so it can be called from auto-listen)
   const startListeningInternal = useCallback(() => {
+    if (isProcessingRef.current || isSpeakingRef.current) return;
+    if (!inConversationRef.current && !autoListenAfterSpeakRef.current) return;
+
     setErrorMessage(null);
     synthRef.current?.cancel();
     nemotronVoiceRef.current?.cancel();
@@ -685,14 +728,14 @@ export default function VoiceAssistant() {
           if (cachedVoiceRef.current) utterance.voice = cachedVoiceRef.current;
 
           if (voiceStyle === "professional") {
-            utterance.rate = 0.92;
-            utterance.pitch = 0.95;
+            utterance.rate = 0.94;
+            utterance.pitch = 0.96;
           } else if (voiceStyle === "energetic") {
-            utterance.rate = 1.0;
-            utterance.pitch = 1.04;
+            utterance.rate = 1.02;
+            utterance.pitch = 1.05;
           } else {
-            utterance.rate = 0.95;
-            utterance.pitch = 0.98;
+            utterance.rate = 0.92;
+            utterance.pitch = 1.0;
           }
           utterance.volume = 1.0;
 
@@ -743,44 +786,60 @@ export default function VoiceAssistant() {
 
   const speakText = useCallback(async (
     text: string,
-    options?: { chain?: boolean; onSpeechStart?: () => void }
+    options?: { chain?: boolean; onSpeechStart?: () => void; forceProvider?: VoiceProvider }
   ): Promise<boolean> => {
     const cleaned = toHumanSpeechText(text);
     if (!cleaned) return false;
 
     ensureAudioUnlocked();
     const resumeListenAfter = !options?.chain;
+    const forceProvider = options?.forceProvider;
 
     if (!options?.chain) {
       synthRef.current?.cancel();
       nemotronVoiceRef.current?.cancel();
     }
 
-    if (nemotronVoiceRef.current) {
-      const used = await nemotronVoiceRef.current.speak({
-        text: cleaned,
-        language: selectedLanguageRef.current.ttsLang,
-        voiceStyle,
-        onStart: () => {
-          setIsSpeaking(true);
-          options?.onSpeechStart?.();
-        },
-        onEnd: () => {
-          setIsSpeaking(false);
-          if (resumeListenAfter && inConversationRef.current) {
-            setTimeout(() => {
-              if (inConversationRef.current) {
-                startListeningInternalRef.current();
-              }
-            }, VOICE_RESUME_LISTEN_MS);
-          }
-        },
-        onError: () => setIsSpeaking(false),
-      });
-      if (used) return true;
+    // Neural server TTS (Edge) sounds far more natural than browser speech.
+    if (forceProvider === "server" || !forceProvider) {
+      if (nemotronVoiceRef.current) {
+        const used = await nemotronVoiceRef.current.speak({
+          text: cleaned,
+          language: selectedLanguageRef.current.ttsLang,
+          voiceStyle,
+          onStart: () => {
+            setIsSpeaking(true);
+            options?.onSpeechStart?.();
+          },
+          onEnd: () => {
+            setIsSpeaking(false);
+            if (resumeListenAfter && inConversationRef.current) {
+              setTimeout(() => {
+                if (inConversationRef.current) {
+                  startListeningInternalRef.current();
+                }
+              }, VOICE_RESUME_LISTEN_MS);
+            }
+          },
+          onError: () => setIsSpeaking(false),
+        });
+        if (used) return true;
+      }
+      if (forceProvider === "server") return false;
     }
 
-    return speakWithBrowser(cleaned, resumeListenAfter, Boolean(options?.chain), options?.onSpeechStart);
+    if (forceProvider === "browser" || !forceProvider) {
+      const browserOk = await speakWithBrowser(
+        cleaned,
+        resumeListenAfter,
+        Boolean(options?.chain),
+        options?.onSpeechStart
+      );
+      if (browserOk) return true;
+      if (forceProvider === "browser") return false;
+    }
+
+    return false;
   }, [speakWithBrowser, toHumanSpeechText, voiceStyle]);
 
   const applyChatPayload = useCallback(
@@ -850,16 +909,17 @@ export default function VoiceAssistant() {
     const payload = {
       message: text,
       language: selectedLanguage.code,
-      history: messagesRef.current.slice(-8),
+      history: messagesRef.current.slice(-4),
       channel: inputModeRef.current === "voice" ? "voice" : "text",
       pendingBooking: pendingBookingRef.current,
       pendingDining: pendingDiningRef.current,
+      ...(tenantSlug ? { hotel: tenantSlug } : {}),
     };
 
     try {
       if (speakReply) {
         ensureAudioUnlocked();
-        const response = await fetch("/api/chat/stream", {
+        const response = await fetch(tenantApiUrl("/api/chat/stream", tenantSlug), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -891,35 +951,20 @@ export default function VoiceAssistant() {
         let buffer = "";
         let fullReply = "";
         let donePayload: Record<string, unknown> | null = null;
-        let spokenUpTo = 0;
-        let speakChain: Promise<void> = Promise.resolve();
         let heardAudio = false;
 
         const markHeard = () => {
           heardAudio = true;
         };
 
-        const queueSpeak = (sentence: string) => {
-          speakChain = speakChain.then(async () => {
-            const ok = await speakText(sentence, { chain: heardAudio, onSpeechStart: markHeard });
-            if (!ok && !heardAudio) {
-              await speakText(sentence, { onSpeechStart: markHeard });
-            }
+        const prefetchReplyAudio = (text: string) => {
+          const spoken = toHumanSpeechText(text);
+          if (spoken.length < 12 || !nemotronVoiceRef.current) return;
+          nemotronVoiceRef.current.prefetch({
+            text: spoken,
+            language: selectedLanguageRef.current.ttsLang,
+            voiceStyle,
           });
-        };
-
-        const enqueueNewSentences = (text: string) => {
-          const slice = text.slice(spokenUpTo);
-          const parts = slice.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g);
-          if (!parts) return;
-          for (const part of parts) {
-            const trimmed = part.trim();
-            if (!trimmed) continue;
-            if (/[.!?]$/.test(trimmed)) {
-              queueSpeak(trimmed);
-              spokenUpTo += part.length;
-            }
-          }
         };
 
         setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
@@ -968,7 +1013,7 @@ export default function VoiceAssistant() {
                   }
                   return next;
                 });
-                enqueueNewSentences(fullReply);
+                prefetchReplyAudio(fullReply);
               } else if (event.type === "done") {
                 donePayload = event;
               }
@@ -1006,17 +1051,15 @@ export default function VoiceAssistant() {
           return next;
         });
 
-        const tail = finalReply.slice(spokenUpTo).trim();
-        if (tail) queueSpeak(tail);
-
+        const tail = finalReply.trim();
         if (escalated) {
           setMessages((prev) => [...prev, { role: "assistant", content: GUEST_STAFF_HANDOFF_MESSAGE }]);
           autoListenAfterSpeakRef.current = false;
-        } else if (finalReply) {
+        } else if (tail) {
           autoListenAfterSpeakRef.current = true;
-          await speakChain.catch(() => {});
+          prefetchReplyAudio(tail);
           if (!heardAudio) {
-            await speakText(finalReply, { onSpeechStart: markHeard });
+            await speakText(tail, { onSpeechStart: markHeard, forceProvider: "server" });
           } else if (inConversationRef.current) {
             setTimeout(() => {
               if (inConversationRef.current) {
@@ -1030,7 +1073,7 @@ export default function VoiceAssistant() {
         return;
       }
 
-      const response = await fetch("/api/chat", {
+      const response = await fetch(tenantApiUrl("/api/chat", tenantSlug), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -1056,10 +1099,31 @@ export default function VoiceAssistant() {
     } finally {
       setIsProcessing(false);
     }
-  }, [applyChatPayload, selectedLanguage, speakText, ui.errorConnection, ui.errorGeneric]);
+  }, [applyChatPayload, selectedLanguage, speakText, tenantSlug, toHumanSpeechText, voiceStyle, ui.errorConnection, ui.errorGeneric]);
 
   const handleUserAudioComplete = useCallback(
-    (text: string) => handleUserMessage(text, inputModeRef.current === "voice"),
+    (rawText: string) => {
+      const text = sanitizeTranscription(rawText);
+      if (!text || isJunkTranscription(text)) {
+        if (inConversationRef.current) {
+          setTimeout(() => startListeningInternalRef.current(), VOICE_STT_RETRY_MS);
+        }
+        return;
+      }
+      if (isProcessingRef.current || isSpeakingRef.current) return;
+
+      const now = Date.now();
+      if (
+        text === lastSubmittedTranscriptRef.current &&
+        now - lastSubmittedAtRef.current < 2500
+      ) {
+        return;
+      }
+      lastSubmittedTranscriptRef.current = text;
+      lastSubmittedAtRef.current = now;
+
+      void handleUserMessage(text, inputModeRef.current === "voice");
+    },
     [handleUserMessage],
   );
 
@@ -1161,10 +1225,10 @@ export default function VoiceAssistant() {
         formData.append('audio', audioBlob);
         formData.append('language', selectedLanguageRef.current.code);
         try {
-          const res = await fetch('/api/stt', { method: 'POST', body: formData });
+          const res = await fetch(tenantApiUrl("/api/stt", tenantSlug), { method: "POST", body: formData });
           const data = await res.json();
-          const transcribed = typeof data.text === "string" ? data.text.trim() : "";
-          if (transcribed) {
+          const transcribed = typeof data.text === "string" ? sanitizeTranscription(data.text) : "";
+          if (transcribed && !isJunkTranscription(transcribed)) {
             stream.getTracks().forEach((t) => t.stop());
             serverSttFailCountRef.current = 0;
             handleUserAudioComplete(transcribed);
@@ -1632,10 +1696,35 @@ export default function VoiceAssistant() {
       style={{ ["--selection" as string]: `rgba(var(--hotel-accent-rgb), 0.35)` }}
       dir={isRTL ? "rtl" : "ltr"}
     >
-      <SiteShellBackdrop />
+      {!embedMode && <SiteShellBackdrop />}
 
       <header className={`sticky top-0 z-30 shrink-0 border-b ${siteHeaderChrome()}`}>
         <div className="mx-auto flex min-h-14 max-w-[1200px] items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          {embedMode ? (
+            <div className="flex min-w-0 items-center gap-3">
+              <div
+                className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[5.6px] border border-iron-border"
+                style={{
+                  background: branding.logoUrl ? undefined : branding.accentColor,
+                }}
+              >
+                {branding.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={branding.logoUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-sm font-semibold text-cream-text">{branding.hotelName?.charAt(0) || "H"}</span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <h1 className="truncate text-sm font-medium text-cream-text">
+                  {branding.hotelName}
+                </h1>
+                <p className="hidden font-mono text-[10px] uppercase tracking-[0.08em] text-zinc-mute sm:block">
+                  AI Concierge
+                </p>
+              </div>
+            </div>
+          ) : (
           <Link href="/" className="flex min-w-0 items-center gap-3" aria-label="Back to StayNEP home">
             <span className="hidden text-sm font-semibold text-cream-text sm:inline">STAYNEP</span>
             <div className={`hidden h-9 w-px shrink-0 bg-iron-border sm:block`} aria-hidden />
@@ -1661,6 +1750,7 @@ export default function VoiceAssistant() {
               </p>
             </div>
           </Link>
+          )}
 
           <div className="flex items-center gap-2 sm:gap-3">
             <GuestAuthPanel
@@ -1901,14 +1991,21 @@ export default function VoiceAssistant() {
               </span>
               <button
                 type="button"
-                onClick={() => setUseServerSTT((v) => !v)}
+                onClick={() => {
+                  setUseServerSTT((v) => {
+                    const next = !v;
+                    useServerSTTRef.current = next;
+                    window.localStorage.setItem(STT_MODE_STORAGE_KEY, next ? "whisper" : "native");
+                    return next;
+                  });
+                }}
                 className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-wider transition-colors ${
                   isDark ? "bg-white/[0.06] hover:bg-white/10 text-neutral-400" : "bg-neutral-100 hover:bg-neutral-200 text-neutral-600"
                 }`}
-                title={useServerSTT ? "Using Whisper STT (open-source)" : "Using browser speech"}
+                title={useServerSTT ? "Whisper STT (open-source, slower)" : "Native speech (faster)"}
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${useServerSTT ? "bg-cyan-400" : "bg-emerald-500"}`} />
-                {useServerSTT ? "Whisper STT" : "Native"}
+                {useServerSTT ? "Whisper" : "Native"}
               </button>
             </div>
 

@@ -15,11 +15,13 @@ export function sanitizeForSpeech(text: string): string {
     .replace(/\s+/g, " ")
     .replace(/\s*([,.;!?])\s*/g, "$1 ")
     .replace(/([a-z])\s*-\s*([a-z])/gi, "$1 $2")
+    .replace(/\bcheck-in\b/gi, "check in")
+    .replace(/\bcheck-out\b/gi, "check out")
     .trim();
 }
 
 /** Trim overly long replies for voice — keeps demos punchy and TTS-friendly. */
-export function trimForVoiceReply(text: string, maxChars = 280): string {
+export function trimForVoiceReply(text: string, maxChars = 240): string {
   const cleaned = sanitizeForSpeech(text);
   if (cleaned.length <= maxChars) return cleaned;
   const slice = cleaned.slice(0, maxChars);

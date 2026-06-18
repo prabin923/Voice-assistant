@@ -106,6 +106,8 @@ export type PublicHotelConfig = Pick<
   geminiLiveReady?: boolean;
   serverTtsReady?: boolean;
   nemotronVoiceReady?: boolean;
+  voiceStack?: "free" | "cloud";
+  hotelSlug?: string;
 };
 
 export const DEFAULT_PUBLIC_HOTEL_CONFIG: PublicHotelConfig = {
@@ -261,5 +263,7 @@ export function mergePublicHotelConfig(data: Partial<PublicHotelConfig> | null |
     geminiLiveReady: data?.geminiLiveReady,
     serverTtsReady: data?.serverTtsReady ?? data?.nemotronVoiceReady,
     nemotronVoiceReady: data?.nemotronVoiceReady ?? data?.serverTtsReady,
+    voiceStack: data?.voiceStack === "cloud" ? "cloud" : "free",
+    hotelSlug: typeof data?.hotelSlug === "string" ? data.hotelSlug : undefined,
   };
 }

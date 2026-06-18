@@ -6,7 +6,7 @@ import {
   Settings, Hotel, Phone, Clock, Utensils, Dumbbell,
   Save, RotateCcw, Plus, Trash2, ChevronLeft, CheckCircle2,
   AlertCircle, MessageSquare, LogOut, User, BarChart3, Inbox, X,
-  Crown, Sparkles, Bell, CalendarDays, CalendarCheck,
+  Crown, Sparkles, Bell, CalendarDays, CalendarCheck, Globe2, Copy,
 } from "lucide-react";
 import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
 import { applyHotelBrandTheme, notifyHotelConfigUpdated, syncBrandingOnHotelRename } from "@/lib/hotelBrand";
@@ -63,6 +63,9 @@ export default function SettingsPage() {
   const [knowledgeGaps, setKnowledgeGaps] = useState<
     { id: string; question: string; guest_message: string; language: string; status: string; created_at: string }[]
   >([]);
+  const [embedInfo, setEmbedInfo] = useState<{ slug: string; snippet: string; embedUrl: string } | null>(null);
+  const [slugDraft, setSlugDraft] = useState("");
+  const [slugSaving, setSlugSaving] = useState(false);
 
   const showToast = useCallback((message: string, type: "success" | "delete" | "info" = "success") => {
     setToast({ message, type });
@@ -91,6 +94,13 @@ export default function SettingsPage() {
 
     fetchJsonWithAuth<{ gaps: typeof knowledgeGaps }>("/api/knowledge-gaps")
       .then((data) => setKnowledgeGaps(data.gaps ?? []))
+      .catch(() => {});
+
+    fetchJsonWithAuth<{ slug: string; snippet: string; embedUrl: string }>("/api/hotel/embed")
+      .then((data) => {
+        setEmbedInfo(data);
+        setSlugDraft(data.slug);
+      })
       .catch(() => {});
   }, []);
 
@@ -130,6 +140,35 @@ export default function SettingsPage() {
       notifyHotelConfigUpdated();
     } catch {
       // Redirect is handled by shared auth helper on 401.
+    }
+  };
+
+  const saveSlug = async () => {
+    if (!slugDraft.trim()) return;
+    setSlugSaving(true);
+    try {
+      const data = await fetchJsonWithAuth<{ slug: string; snippet: string; embedUrl: string }>("/api/hotel/embed", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: slugDraft }),
+      });
+      setEmbedInfo(data);
+      setSlugDraft(data.slug);
+      showToast("Embed URL updated.");
+    } catch {
+      showToast("Could not update slug.", "delete");
+    } finally {
+      setSlugSaving(false);
+    }
+  };
+
+  const copyEmbedSnippet = async () => {
+    if (!embedInfo?.snippet) return;
+    try {
+      await navigator.clipboard.writeText(embedInfo.snippet);
+      showToast("Embed code copied.");
+    } catch {
+      showToast("Copy failed — select the code manually.", "info");
     }
   };
 
@@ -340,6 +379,63 @@ export default function SettingsPage() {
                   <div><label className={labelCls}>Hotel Name</label><input className={inputCls} value={config.branding.hotelName} onChange={e => updateBranding("hotelName", e.target.value)} /></div>
                   <div><label className={labelCls}>Tagline</label><input className={inputCls} value={config.branding.tagline} onChange={e => updateBranding("tagline", e.target.value)} /></div>
                   <div className="col-span-2"><label className={labelCls}>Logo URL (optional)</label><input className={inputCls} value={config.branding.logoUrl || ""} onChange={e => updateBranding("logoUrl", e.target.value)} placeholder="https://your-hotel.com/logo.png" /></div>
+                </div>
+              </div>
+
+              <div className={cardCls}>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    <Globe2 className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> Website embed
+                  </h2>
+                </div>
+                <p className="text-neutral-500 text-sm">
+                  Add the voice concierge to your hotel website. Each hotel gets a unique URL slug.
+                </p>
+                <div className="grid gap-4">
+                  <div>
+                    <label className={labelCls}>Public URL slug</label>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input
+                        className={inputCls}
+                        value={slugDraft}
+                        onChange={(e) => setSlugDraft(e.target.value.toLowerCase())}
+                        placeholder="willow-hotel"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void saveSlug()}
+                        disabled={slugSaving || !slugDraft.trim()}
+                        className="vapi-btn-ember vapi-btn-compact shrink-0"
+                      >
+                        {slugSaving ? "Saving…" : "Save slug"}
+                      </button>
+                    </div>
+                    {embedInfo?.embedUrl && (
+                      <p className="mt-2 text-xs text-neutral-500">
+                        Direct link:{" "}
+                        <a href={embedInfo.embedUrl} target="_blank" rel="noreferrer" className="text-ember-orange underline">
+                          {embedInfo.embedUrl}
+                        </a>
+                      </p>
+                    )}
+                  </div>
+                  {embedInfo?.snippet && (
+                    <div>
+                      <label className={labelCls}>Embed code</label>
+                      <div className="relative">
+                        <pre className="overflow-x-auto rounded-[5.6px] border border-neutral-800 bg-neutral-950/80 p-4 text-xs text-neutral-300">
+                          {embedInfo.snippet}
+                        </pre>
+                        <button
+                          type="button"
+                          onClick={() => void copyEmbedSnippet()}
+                          className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[11px] text-neutral-200"
+                        >
+                          <Copy className="h-3 w-3" /> Copy
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

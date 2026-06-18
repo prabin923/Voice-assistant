@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 import { ensureHotelConfigLoaded } from '@/lib/hotelConfig';
 import { getAssistantResponse } from '@/lib/responseEngine';
 import { guests, ensureDbReady } from '@/lib/db';
@@ -17,6 +17,12 @@ import { aiNotConfiguredResponse, isAiConfigured } from '@/lib/ai';
 import { getGuestSession } from '@/lib/guestAuth';
 import { checkGuestChatRateLimit } from '@/lib/guestRateLimit';
 import { sanitizeChatHistory, sanitizeChatMessage } from '@/lib/chatValidation';
+import { normalizeHotelSlug } from '@/lib/slug';
+import {
+  runWithTenant,
+  tenantSlugFromRequest,
+  TenantNotFoundError,
+} from '@/lib/tenantContext';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,17 +30,22 @@ export type { BookingSummary, DiningSummary };
 
 export async function POST(req: Request) {
   try {
-    const ip = getClientIP(req);
     const bodyPromise = req.json() as Promise<{
       message?: unknown;
       language?: string;
       history?: unknown;
       channel?: string;
+      hotel?: string;
       pendingBooking?: PendingBooking | null;
       pendingDining?: PendingDining | null;
     }>;
 
     const [guestSession, body] = await Promise.all([getGuestSession(), bodyPromise]);
+    const tenantSlug =
+      normalizeHotelSlug(body.hotel) ?? tenantSlugFromRequest(req);
+
+    return await runWithTenant({ slug: tenantSlug }, async () => {
+    const ip = getClientIP(req);
 
     const chatLimitPromise = checkGuestChatRateLimit({
       ip,
@@ -181,8 +192,11 @@ export async function POST(req: Request) {
       responseTimeMs,
       timestamp: new Date().toISOString(),
     });
-
-  } catch (error: any) {
+    });
+  } catch (error: unknown) {
+    if (error instanceof TenantNotFoundError) {
+      return NextResponse.json({ error: "Hotel not found." }, { status: 404 });
+    }
     console.error('Gemini Chat API Error:', error);
     return NextResponse.json(
       { error: 'An error occurred while processing your request.' },

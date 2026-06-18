@@ -73,7 +73,9 @@ export async function transcribeWithWhisperServer(
       method: "POST",
       headers,
       body: form,
-      signal: AbortSignal.timeout(90_000),
+      signal: AbortSignal.timeout(
+        Number(process.env.WHISPER_STT_TIMEOUT_MS) || 20_000
+      ),
     });
 
     if (!resp.ok) {

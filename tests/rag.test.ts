@@ -13,6 +13,15 @@ describe("chunkHotelConfig", () => {
     expect(chunks.some((c) => c.chunkKey === "contact:main")).toBe(true);
   });
 
+  it("includes conversational dialogue example chunks", () => {
+    const chunks = chunkHotelConfig(DEFAULT_HOTEL_CONFIG);
+    const dialogues = chunks.filter((c) => c.category === "dialogue");
+    expect(dialogues.length).toBeGreaterThan(5);
+    expect(dialogues.some((c) => c.chunkKey === "dialogue:check-in")).toBe(true);
+    expect(dialogues[0]?.content).toContain("Guest:");
+    expect(dialogues[0]?.content).toContain("Assistant:");
+  });
+
   it("uses stable chunk keys", () => {
     const a = chunkHotelConfig(DEFAULT_HOTEL_CONFIG);
     const b = chunkHotelConfig(DEFAULT_HOTEL_CONFIG);

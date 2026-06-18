@@ -1,4 +1,5 @@
 import type { HotelConfig } from "@/lib/hotelConfig";
+import { buildConversationExampleChunks } from "@/lib/rag/conversationExamples";
 
 export type HotelKnowledgeChunk = {
   chunkKey: string;
@@ -93,6 +94,8 @@ export function chunkHotelConfig(config: HotelConfig): HotelKnowledgeChunk[] {
       content: config.receptionistPersona.trim(),
     });
   }
+
+  chunks.push(...buildConversationExampleChunks(config));
 
   return chunks;
 }

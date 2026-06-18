@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 
 const mockFindByEmail = vi.fn();
 const mockFindById = vi.fn();
+const mockFindBySlug = vi.fn();
 const mockCreate = vi.fn();
 const mockBumpSessionVersion = vi.fn();
 const mockUpdatePassword = vi.fn();
@@ -24,6 +25,7 @@ vi.mock("@/lib/db", () => ({
   hotels: {
     findByEmail: mockFindByEmail,
     findById: mockFindById,
+    findBySlug: mockFindBySlug,
     create: mockCreate,
     bumpSessionVersion: mockBumpSessionVersion,
     updatePassword: mockUpdatePassword,
@@ -71,6 +73,7 @@ describe("Auth integration flows", () => {
     mockBumpSessionVersion.mockReturnValue(1);
     mockEnsureDbReady.mockResolvedValue(undefined);
     mockCheckRateLimitAsync.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
+    mockFindBySlug.mockResolvedValue(undefined);
   });
 
   it("redirects expired/invalid session cookie on protected page to /admin/login", async () => {
@@ -162,6 +165,7 @@ describe("Auth integration flows", () => {
       name: "New Hotel",
       email: "new@hotel.com",
       session_version: 0,
+      slug: "new-hotel",
     });
     mockCreateToken.mockResolvedValue("new-jwt-token");
 
@@ -180,6 +184,10 @@ describe("Auth integration flows", () => {
 
     expect(res.status).toBe(201);
     expect(body.email).toBe("new@hotel.com");
+    expect(body.slug).toBe("new-hotel");
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: "new-hotel" })
+    );
     expect(mockCreateToken).toHaveBeenCalledWith({
       hotelId: "hotel-2",
       email: "new@hotel.com",

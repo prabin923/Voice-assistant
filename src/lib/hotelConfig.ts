@@ -174,6 +174,12 @@ export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
 
 import { hotels, ensureDbReady } from "./db";
 import { syncInventoryFromConfig } from "./inventorySync";
+import {
+  getTenantConfig,
+  invalidateTenantConfigCache,
+  resolveTenantConfig,
+  runWithTenant,
+} from "@/lib/tenantContext";
 
 // ============================================================
 // CONFIG STORE — In-memory cache; persisted via ensureHotelConfigLoaded().
@@ -181,22 +187,20 @@ import { syncInventoryFromConfig } from "./inventorySync";
 let currentConfig: HotelConfig | null = null;
 let loadPromise: Promise<HotelConfig> | null = null;
 
-export async function ensureHotelConfigLoaded(): Promise<HotelConfig> {
+export async function ensureHotelConfigLoaded(options?: {
+  slug?: string | null;
+  hotelId?: string | null;
+}): Promise<HotelConfig> {
+  if (options?.slug || options?.hotelId) {
+    const store = await resolveTenantConfig(options);
+    return store.config;
+  }
+
   if (currentConfig) return currentConfig;
   if (!loadPromise) {
     loadPromise = (async () => {
-      await ensureDbReady();
-      try {
-        const hotel = await hotels.getFirst();
-        if (hotel?.config && hotel.config !== "{}") {
-          currentConfig = JSON.parse(hotel.config) as HotelConfig;
-        } else {
-          currentConfig = { ...DEFAULT_HOTEL_CONFIG };
-        }
-      } catch (e) {
-        console.error("Failed to load config from DB:", e);
-        currentConfig = { ...DEFAULT_HOTEL_CONFIG };
-      }
+      const store = await resolveTenantConfig({});
+      currentConfig = store.config;
       await syncInventoryFromConfig(currentConfig);
       const { scheduleKnowledgeSync } = await import("@/lib/rag/knowledgeIndex");
       scheduleKnowledgeSync(currentConfig);
@@ -206,12 +210,23 @@ export async function ensureHotelConfigLoaded(): Promise<HotelConfig> {
   return loadPromise;
 }
 
+export { runWithTenant };
+
 export function getHotelConfig(): HotelConfig {
+  const tenant = getTenantConfig();
+  if (tenant !== DEFAULT_HOTEL_CONFIG || currentConfig) {
+    return tenant;
+  }
   return currentConfig ?? DEFAULT_HOTEL_CONFIG;
 }
 
-export async function updateHotelConfig(updates: Partial<HotelConfig>): Promise<HotelConfig> {
-  const config = await ensureHotelConfigLoaded();
+export async function updateHotelConfig(
+  updates: Partial<HotelConfig>,
+  hotelId?: string
+): Promise<HotelConfig> {
+  const config = hotelId
+    ? await ensureHotelConfigLoaded({ hotelId })
+    : await ensureHotelConfigLoaded();
 
   const prevHotelName = config.branding.hotelName;
   const nextHotelName = updates.branding?.hotelName ?? prevHotelName;
@@ -238,11 +253,14 @@ export async function updateHotelConfig(updates: Partial<HotelConfig>): Promise<
     /* response engine optional at bootstrap */
   }
 
-  // Persist to DB (for the first hotel found)
+  // Persist to DB for the authenticated hotel (or first hotel in single-tenant mode)
   try {
-    const hotel = await hotels.getFirst();
+    const hotel = hotelId
+      ? await hotels.findById(hotelId)
+      : await hotels.getFirst();
     if (hotel) {
       await hotels.updateConfig(hotel.id, JSON.stringify(updated));
+      invalidateTenantConfigCache(hotel.slug ?? undefined, hotel.id);
     }
   } catch (e) {
     console.error("Failed to persist config to DB:", e);
@@ -254,13 +272,16 @@ export async function updateHotelConfig(updates: Partial<HotelConfig>): Promise<
   return updated;
 }
 
-export async function resetHotelConfig(): Promise<HotelConfig> {
+export async function resetHotelConfig(hotelId?: string): Promise<HotelConfig> {
   currentConfig = { ...DEFAULT_HOTEL_CONFIG };
 
   try {
-    const hotel = await hotels.getFirst();
+    const hotel = hotelId
+      ? await hotels.findById(hotelId)
+      : await hotels.getFirst();
     if (hotel) {
       await hotels.updateConfig(hotel.id, JSON.stringify(currentConfig));
+      invalidateTenantConfigCache(hotel.slug ?? undefined, hotel.id);
     }
   } catch (e) {
     console.error("Failed to reset config in DB:", e);

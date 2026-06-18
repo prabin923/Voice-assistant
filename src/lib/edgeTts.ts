@@ -57,6 +57,19 @@ function normalizeLanguage(language?: string): string {
   return `${parts[0].toLowerCase()}-${parts[1].toUpperCase()}`;
 }
 
+export function resolveEdgeProsody(
+  voiceStyle: NemotronVoicePersona = "warm"
+): { rate: string; pitch: string; volume: string } {
+  switch (voiceStyle) {
+    case "professional":
+      return { rate: "+2%", pitch: "-4Hz", volume: "+0%" };
+    case "energetic":
+      return { rate: "+10%", pitch: "+6Hz", volume: "+4%" };
+    default:
+      return { rate: "+4%", pitch: "+2Hz", volume: "+0%" };
+  }
+}
+
 export function resolveEdgeVoice(
   language?: string,
   voiceStyle: NemotronVoicePersona = "warm"
@@ -96,9 +109,10 @@ export async function synthesizeWithEdgeTts(options: {
   if (!text) return { error: "No text to synthesize" };
 
   const voice = resolveEdgeVoice(options.language, options.voiceStyle ?? "warm");
+  const prosody = resolveEdgeProsody(options.voiceStyle ?? "warm");
 
   try {
-    const tts = new EdgeTTS(text, voice);
+    const tts = new EdgeTTS(text, voice, prosody);
     const result = await tts.synthesize();
     const audio = Buffer.from(await result.audio.arrayBuffer());
     return audio.length > 0

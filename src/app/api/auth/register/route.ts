@@ -3,6 +3,7 @@ import { authAuditLogs, hotels, ensureDbReady } from "@/lib/db";
 import { hashPassword, createToken, setSessionCookie } from "@/lib/auth";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
 import { validateCsrf } from "@/lib/csrf";
+import { generateUniqueHotelSlug } from "@/lib/hotelSlug";
 
 const MIN_RESPONSE_MS = 450;
 
@@ -66,7 +67,13 @@ export async function POST(request: Request) {
     }
 
     const hashedPassword = await hashPassword(password);
-    const hotel = await hotels.create({ name: trimmedName, email: normalizedEmail, password: hashedPassword });
+    const slug = await generateUniqueHotelSlug(trimmedName);
+    const hotel = await hotels.create({
+      name: trimmedName,
+      email: normalizedEmail,
+      password: hashedPassword,
+      slug,
+    });
 
     const token = await createToken({
       hotelId: hotel.id,
@@ -83,7 +90,7 @@ export async function POST(request: Request) {
     });
     await waitForMinimumDuration(requestStart);
 
-    return NextResponse.json({ id: hotel.id, name: hotel.name, email: hotel.email }, { status: 201 });
+    return NextResponse.json({ id: hotel.id, name: hotel.name, email: hotel.email, slug }, { status: 201 });
   } catch {
     await waitForMinimumDuration(requestStart);
     return NextResponse.json({ error: "Registration failed" }, { status: 500 });

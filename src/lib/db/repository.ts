@@ -577,12 +577,32 @@ export const hotels = {
     return row ? mapHotel(row) : undefined;
   },
 
-  async create(data: { name: string; email: string; password: string }): Promise<Hotel> {
+  async findBySlug(slug: string): Promise<Hotel | undefined> {
+    const row = await prisma.hotel.findUnique({ where: { slug } });
+    return row ? mapHotel(row) : undefined;
+  },
+
+  async create(data: {
+    name: string;
+    email: string;
+    password: string;
+    slug?: string | null;
+  }): Promise<Hotel> {
     const hotelId = id();
     await prisma.hotel.create({
-      data: { id: hotelId, name: data.name, email: data.email, password: data.password },
+      data: {
+        id: hotelId,
+        name: data.name,
+        email: data.email,
+        password: data.password,
+        slug: data.slug ?? null,
+      },
     });
     return (await this.findById(hotelId))!;
+  },
+
+  async updateSlug(hotelId: string, slug: string) {
+    await prisma.hotel.update({ where: { id: hotelId }, data: { slug } });
   },
 
   async bumpSessionVersion(hotelId: string): Promise<number> {

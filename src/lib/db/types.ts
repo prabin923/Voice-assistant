@@ -2,6 +2,7 @@ export interface Hotel {
   id: string;
   name: string;
   email: string;
+  slug: string | null;
   password: string;
   session_version: number;
   config: string;

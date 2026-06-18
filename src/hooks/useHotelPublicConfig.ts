@@ -12,7 +12,7 @@ import {
   type PublicHotelConfig,
 } from "@/lib/hotelBrand";
 
-export function useHotelPublicConfig() {
+export function useHotelPublicConfig(hotelSlug?: string) {
   const [config, setConfig] = useState<PublicHotelConfig>(DEFAULT_PUBLIC_HOTEL_CONFIG);
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>(() =>
     buildSuggestedQuestions(DEFAULT_PUBLIC_HOTEL_CONFIG)
@@ -21,7 +21,10 @@ export function useHotelPublicConfig() {
 
   const loadConfig = useCallback(async () => {
     try {
-      const res = await fetch("/api/config", { cache: "no-store" });
+      const url = hotelSlug
+        ? `/api/config?hotel=${encodeURIComponent(hotelSlug)}`
+        : "/api/config";
+      const res = await fetch(url, { cache: "no-store" });
       const data = await res.json();
       const merged = mergePublicHotelConfig(data);
       setConfig(merged);
@@ -34,7 +37,7 @@ export function useHotelPublicConfig() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [hotelSlug]);
 
   useEffect(() => {
     void loadConfig();

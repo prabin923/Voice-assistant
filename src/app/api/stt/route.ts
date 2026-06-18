@@ -11,6 +11,7 @@ import {
 } from '@/lib/selfHostedStt';
 import { isNemotronAsrConfigured, transcribeWithNemotron } from '@/lib/nemotronTranscribe';
 import { isFreeVoiceStack, shouldUseWhisperHttpServer } from '@/lib/voiceStack';
+import { isJunkTranscription, sanitizeTranscription } from '@/lib/sttValidation';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,12 @@ const ALLOWED_AUDIO_TYPES = new Set([
   "audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg",
   "audio/wav", "audio/x-wav", "audio/flac"
 ]);
+
+function acceptTranscription(text?: string): string | undefined {
+  const cleaned = text ? sanitizeTranscription(text) : "";
+  if (!cleaned || isJunkTranscription(cleaned)) return undefined;
+  return cleaned;
+}
 
 function isSttAvailable(): boolean {
   return isNemotronAsrConfigured() || isSelfHostedSttConfigured() || Boolean(getGeminiApiKey());
@@ -85,20 +92,24 @@ export async function POST(req: Request) {
     const safeLang = (language || "en-US").replace(/[^a-zA-Z0-9\-]/g, "").slice(0, 10);
     const audioBuffer = Buffer.from(await audioBlob.arrayBuffer());
 
-    // Free / college stack: open-source Whisper first (local or Docker)
+    // Free / college stack: Whisper HTTP first (skip local CLI when not configured)
     if (isFreeVoiceStack()) {
-      const localResult = await transcribeWithLocalWhisper(audioBuffer);
-      if (localResult.text) {
-        return NextResponse.json({ text: localResult.text, provider: "whisper-local" });
-      }
-
       if (shouldUseWhisperHttpServer()) {
         const serverResult = await transcribeWithWhisperServer(
           new Blob([audioBuffer], { type: baseMime }),
           safeLang
         );
-        if (serverResult.text) {
-          return NextResponse.json({ text: serverResult.text, provider: "whisper-server" });
+        const text = acceptTranscription(serverResult.text);
+        if (text) {
+          return NextResponse.json({ text, provider: "whisper-server" });
+        }
+      }
+
+      if (process.env.WHISPER_MODEL_PATH?.trim()) {
+        const localResult = await transcribeWithLocalWhisper(audioBuffer);
+        const text = acceptTranscription(localResult.text);
+        if (text) {
+          return NextResponse.json({ text, provider: "whisper-local" });
         }
       }
     } else {
@@ -110,8 +121,9 @@ export async function POST(req: Request) {
           baseMime,
           { language: safeLang }
         );
-        if (nemotronResult.text) {
-          return NextResponse.json({ text: nemotronResult.text, provider: "nemotron-asr" });
+        const nemotronText = acceptTranscription(nemotronResult.text);
+        if (nemotronText) {
+          return NextResponse.json({ text: nemotronText, provider: "nemotron-asr" });
         }
         nemotronError = nemotronResult.error;
         console.warn("[STT] Nemotron ASR did not return text:", nemotronError ?? "empty");
@@ -122,14 +134,16 @@ export async function POST(req: Request) {
           new Blob([audioBuffer], { type: baseMime }),
           safeLang
         );
-        if (serverResult.text) {
-          return NextResponse.json({ text: serverResult.text, provider: "whisper-server" });
+        const text = acceptTranscription(serverResult.text);
+        if (text) {
+          return NextResponse.json({ text, provider: "whisper-server" });
         }
       }
 
       const localResult = await transcribeWithLocalWhisper(audioBuffer);
-      if (localResult.text) {
-        return NextResponse.json({ text: localResult.text, provider: "whisper-local" });
+      const cloudLocalText = acceptTranscription(localResult.text);
+      if (cloudLocalText) {
+        return NextResponse.json({ text: cloudLocalText, provider: "whisper-local" });
       }
     }
 
@@ -146,7 +160,7 @@ export async function POST(req: Request) {
 
     const model = new GoogleGenerativeAI(apiKey).getGenerativeModel({ model: GEMINI_MODEL });
     const base64Audio = audioBuffer.toString("base64");
-    const prompt = `Transcribe this audio strictly. Language is ${safeLang}. Only return the transcribed text, nothing else. If there is no speech, return EMPTY.`;
+    const prompt = `You are a speech-to-text engine. Output ONLY the exact words spoken in the audio. Language: ${safeLang}. If silent or unintelligible, output exactly: EMPTY`;
 
     const result = await model.generateContent([
       prompt,
@@ -155,13 +169,13 @@ export async function POST(req: Request) {
 
     let transcription = "";
     try {
-      transcription = result.response.text().trim();
+      transcription = sanitizeTranscription(result.response.text());
     } catch {
       return NextResponse.json({ error: 'No speech detected. Please try again.' }, { status: 422 });
     }
 
-    if (!transcription || transcription.toUpperCase() === "EMPTY") {
-      console.warn("[STT] All providers returned empty.");
+    if (!transcription || transcription.toUpperCase() === "EMPTY" || isJunkTranscription(transcription)) {
+      console.warn("[STT] Gemini returned junk or empty:", transcription.slice(0, 80));
       return NextResponse.json(
         { error: "No speech detected. Please try again.", fallbackNative: true },
         { status: 422 }

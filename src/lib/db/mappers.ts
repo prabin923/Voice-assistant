@@ -29,6 +29,7 @@ export function mapHotel(row: PrismaHotel): Hotel {
     id: row.id,
     name: row.name,
     email: row.email,
+    slug: row.slug,
     password: row.password,
     session_version: row.sessionVersion,
     config: row.config,

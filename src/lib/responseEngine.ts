@@ -34,7 +34,7 @@ function getOpenAI() {
 }
 
 function historyLimit(channel: "voice" | "text"): number {
-  return channel === "voice" ? 6 : 8;
+  return channel === "voice" ? 4 : 8;
 }
 
 function getGeminiModel(channel: "voice" | "text"): GenerativeModel {
@@ -46,7 +46,7 @@ function getGeminiModel(channel: "voice" | "text"): GenerativeModel {
     model: GEMINI_MODEL,
     systemInstruction: getCachedSystemInstruction(channel),
     generationConfig: {
-      maxOutputTokens: channel === "voice" ? 140 : 320,
+      maxOutputTokens: channel === "voice" ? 72 : 320,
       temperature: channel === "voice" ? 0.6 : 0.45,
     },
   });
@@ -86,7 +86,7 @@ Answer confidently from HOTEL FACTS. Never say you cannot book rooms or tables.`
 
   const hotelFactsRule = fullHotelData
     ? ""
-    : `Each guest message includes HOTEL FACTS retrieved for that question. Use only those facts for hotel-specific answers.`;
+    : `Each guest message includes HOTEL FACTS (and DIALOGUE EXAMPLES when retrieved) for that question. Use only those facts. Mirror the dialogue tone — concise, warm, conversational.`;
 
   const hotelDataBlock = fullHotelData
     ? `\nHOTEL DATA:\n${buildHotelDataBlock(config, compact)}\n`
@@ -169,7 +169,7 @@ async function getAssistantResponseWithOpenAI(
   const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4o-mini",
     messages,
-    max_tokens: channel === "voice" ? 140 : 320,
+    max_tokens: channel === "voice" ? 72 : 320,
     temperature: channel === "voice" ? 0.6 : 0.45,
   });
 
@@ -210,7 +210,8 @@ export async function getAssistantResponse(
   const langCode = language || config.language || "en-US";
   const provider = getActiveAiProvider();
 
-  const MAX_RETRIES = 1;
+  // Voice turns should fail fast instead of waiting on retry backoff.
+  const MAX_RETRIES = channel === "voice" ? 0 : 1;
   const RETRY_DELAY_MS = 350;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {

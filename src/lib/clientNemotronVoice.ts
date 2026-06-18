@@ -17,10 +17,53 @@ export interface NemotronVoiceSpeaker {
   speak: (options: NemotronVoiceSpeakOptions) => Promise<boolean>;
   cancel: () => void;
   isSpeaking: () => boolean;
+  prefetch: (options: Pick<NemotronVoiceSpeakOptions, "text" | "language" | "voiceStyle">) => void;
 }
 
 let audioUnlocked = false;
 let sharedAudioContext: AudioContext | null = null;
+
+const ttsPrefetch = new Map<string, Promise<Blob | null>>();
+
+function prefetchKey(text: string, language: string, voiceStyle: NemotronVoicePersona): string {
+  return `${language}|${voiceStyle}|${text}`;
+}
+
+async function fetchTtsBlob(
+  text: string,
+  language: string,
+  voiceStyle: NemotronVoicePersona
+): Promise<Blob | null> {
+  try {
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ text, language, voiceStyle }),
+    });
+    if (res.status === 501 || res.status === 422 || !res.ok) return null;
+    const blob = await res.blob();
+    return blob.size > 0 ? blob : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Start fetching TTS audio before speak() — hides network latency during streaming. */
+export function prefetchServerTts(
+  text: string,
+  language: string,
+  voiceStyle: NemotronVoicePersona = "warm"
+): void {
+  const key = prefetchKey(text, language, voiceStyle);
+  if (!ttsPrefetch.has(key)) {
+    ttsPrefetch.set(key, fetchTtsBlob(text, language, voiceStyle));
+    if (ttsPrefetch.size > 12) {
+      const oldest = ttsPrefetch.keys().next().value;
+      if (oldest) ttsPrefetch.delete(oldest);
+    }
+  }
+}
 
 const SILENT_WAV =
   "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
@@ -79,31 +122,25 @@ export function createNemotronVoiceSpeaker(): NemotronVoiceSpeaker {
   return {
     cancel: cleanup,
     isSpeaking: () => speaking,
+    prefetch(options) {
+      prefetchServerTts(
+        options.text,
+        options.language,
+        options.voiceStyle ?? "warm"
+      );
+    },
     async speak(options) {
       cleanup();
       ensureAudioUnlocked();
 
+      const style = options.voiceStyle ?? "warm";
+      const key = prefetchKey(options.text, options.language, style);
+      const prefetched = ttsPrefetch.get(key);
+      if (prefetched) ttsPrefetch.delete(key);
+
       try {
-        const res = await fetch("/api/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            text: options.text,
-            language: options.language,
-            voiceStyle: options.voiceStyle ?? "warm",
-          }),
-        });
-
-        if (res.status === 501 || res.status === 422) return false;
-        if (!res.ok) {
-          const errBody = await res.text().catch(() => "");
-          console.warn("[TTS] /api/tts failed:", res.status, errBody.slice(0, 200));
-          return false;
-        }
-
-        const blob = await res.blob();
-        if (!blob.size) return false;
+        const blob = prefetched ? await prefetched : await fetchTtsBlob(options.text, options.language, style);
+        if (!blob) return false;
 
         objectUrl = URL.createObjectURL(blob);
         audio = new Audio(objectUrl);

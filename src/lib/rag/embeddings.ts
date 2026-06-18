@@ -11,6 +11,9 @@ const OPENAI_EMBED_MODEL = "text-embedding-3-small";
 let genAiSingleton: GoogleGenerativeAI | null = null;
 let openAiSingleton: OpenAI | null = null;
 
+const queryEmbedCache = new Map<string, number[]>();
+const QUERY_EMBED_CACHE_MAX = 64;
+
 export function contentHash(text: string): string {
   return createHash("sha256").update(text).digest("hex").slice(0, 16);
 }
@@ -59,16 +62,31 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
 
 export async function embedQuery(text: string): Promise<number[]> {
   if (!text.trim()) return [];
+
+  const cacheKey = contentHash(text.trim().toLowerCase());
+  const cached = queryEmbedCache.get(cacheKey);
+  if (cached) return cached;
+
   const provider = getActiveAiProvider();
+  let vector: number[] = [];
   if (provider === "openai") {
-    const [vector] = await embedTexts([text]);
-    return vector ?? [];
+    const [embedded] = await embedTexts([text]);
+    vector = embedded ?? [];
+  } else {
+    const model = getGenAI().getGenerativeModel({ model: GEMINI_EMBED_MODEL });
+    const result = await model.embedContent({
+      content: { role: "user", parts: [{ text }] },
+      taskType: TaskType.RETRIEVAL_QUERY,
+    });
+    vector = result.embedding.values;
   }
 
-  const model = getGenAI().getGenerativeModel({ model: GEMINI_EMBED_MODEL });
-  const result = await model.embedContent({
-    content: { role: "user", parts: [{ text }] },
-    taskType: TaskType.RETRIEVAL_QUERY,
-  });
-  return result.embedding.values;
+  if (vector.length) {
+    queryEmbedCache.set(cacheKey, vector);
+    if (queryEmbedCache.size > QUERY_EMBED_CACHE_MAX) {
+      const oldest = queryEmbedCache.keys().next().value;
+      if (oldest) queryEmbedCache.delete(oldest);
+    }
+  }
+  return vector;
 }
