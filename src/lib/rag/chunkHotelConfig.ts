@@ -81,7 +81,7 @@ export function chunkHotelConfig(config: HotelConfig): HotelKnowledgeChunk[] {
       chunkKey: `faq:${i}`,
       category: "faq",
       title: faq.question.trim() || `FAQ ${i + 1}`,
-      content: `Question: ${faq.question.trim()}. Answer: ${faq.answer.trim()}`,
+      content: `When guests ask "${faq.question.trim()}", respond naturally: ${faq.answer.trim()}`,
     });
   }
 

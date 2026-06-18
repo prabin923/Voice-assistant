@@ -175,9 +175,10 @@ export async function retrieveRelevantChunks(
 }
 
 export function buildRetrievalQuery(message: string, history: { role: string; content: string }[]): string {
-  const recentUser = history
-    .filter((m) => m.role === "user")
-    .slice(-2)
-    .map((m) => m.content);
-  return [...recentUser, message].join(" ").trim();
+  // Include recent turns so follow-ups ("what about parking?") retrieve the right facts.
+  const recent = history
+    .slice(-4)
+    .map((m) => m.content.trim())
+    .filter(Boolean);
+  return [...recent, message.trim()].join(" ").trim();
 }

@@ -65,7 +65,12 @@ function buildSystemInstructionRaw(channel: "voice" | "text" = "text", fullHotel
   const compact = channel === "voice";
 
   const voiceRules = compact
-    ? `VOICE STYLE: Warm concierge on a phone call. 1–2 short sentences. No lists, markdown, or IMAGE lines.`
+    ? `VOICE STYLE (live phone call):
+- 1–2 short sentences only. Warm, calm concierge — never robotic.
+- Brief acknowledgment when natural ("Sure," "Of course," "Happy to help").
+- One idea per turn. No lists, markdown, bullet points, or IMAGE lines.
+- Use contractions (we're, you'll, it's). Avoid "According to our policy" or brochure language.
+- Optional gentle follow-up only when useful ("Would you like me to book that?").`
     : "";
 
   const escalationRules = compact

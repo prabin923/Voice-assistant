@@ -54,7 +54,11 @@ export function getMinimaxApiBase(): string {
 }
 
 export function isMinimaxTtsConfigured(): boolean {
-  return Boolean(getMinimaxApiKey() && getMinimaxGroupId());
+  const apiKey = getMinimaxApiKey();
+  const groupId = getMinimaxGroupId();
+  if (!apiKey || !groupId) return false;
+  if (looksLikeWrongProviderKey(apiKey)) return false;
+  return true;
 }
 
 function pickVoiceId(persona: MinimaxVoicePersona): string {

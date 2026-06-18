@@ -11,6 +11,7 @@ import { validateCsrf } from "@/lib/csrf";
 import { isAiConfigured } from "@/lib/ai";
 import { isGeminiConfigured, isSttConfigured } from "@/lib/gemini";
 import { isServerTtsConfigured } from "@/lib/serverTts";
+import { isFreeVoiceStack } from "@/lib/voiceStack";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ export async function GET() {
     sttReady: isSttConfigured(),
     serverTtsReady: isServerTtsConfigured(),
     nemotronVoiceReady: isServerTtsConfigured(),
+    voiceStack: isFreeVoiceStack() ? "free" : "cloud",
   });
 }
 

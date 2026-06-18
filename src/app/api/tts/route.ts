@@ -8,10 +8,11 @@ import {
   type NemotronVoicePersona,
 } from "@/lib/nemotronVoice";
 import { isMinimaxTtsConfigured, synthesizeWithMinimaxTts } from "@/lib/minimaxTts";
-import { synthesizeWithEdgeTts } from "@/lib/edgeTts";
+import { isEdgeTtsAvailable, synthesizeWithEdgeTts } from "@/lib/edgeTts";
 import { isOpenAiTtsConfigured, synthesizeWithOpenAiTts } from "@/lib/openaiTts";
 import { isServerTtsConfigured } from "@/lib/serverTts";
 import { sanitizeForSpeech as sanitizeSpeechText } from "@/lib/humanizeSpeech";
+import { isFreeVoiceStack } from "@/lib/voiceStack";
 
 export const dynamic = "force-dynamic";
 
@@ -33,9 +34,11 @@ function sanitizeLanguage(language: unknown): string {
 export async function GET() {
   return NextResponse.json({
     serverTtsReady: isServerTtsConfigured(),
+    voiceStack: isFreeVoiceStack() ? "free" : "cloud",
     minimaxTtsReady: isMinimaxTtsConfigured(),
     nemotronVoiceReady: isNemotronVoiceConfigured(),
     openAiTtsReady: isOpenAiTtsConfigured(),
+    edgeTtsReady: isEdgeTtsAvailable(),
   });
 }
 
@@ -45,8 +48,9 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error: "Server TTS not configured.",
-          details:
-            "Set NEMOTRON_TTS_ENDPOINT (+ NVIDIA_API_KEY) or OPENAI_API_KEY for speech playback.",
+          details: isFreeVoiceStack()
+            ? "Edge TTS should work automatically. Restart the dev server."
+            : "Set MINIMAX_API_KEY + MINIMAX_GROUP_ID, OPENAI_API_KEY, or NEMOTRON_TTS_ENDPOINT for speech playback.",
         },
         { status: 501 }
       );
@@ -81,6 +85,21 @@ export async function POST(req: Request) {
         { error: `Text too long. Maximum ${MAX_TEXT_LENGTH} characters.` },
         { status: 413 }
       );
+    }
+
+    if (isFreeVoiceStack()) {
+      const edge = await synthesizeWithEdgeTts({ text, language, voiceStyle });
+      if (edge.audio) {
+        return new NextResponse(new Uint8Array(edge.audio), {
+          status: 200,
+          headers: {
+            "Content-Type": edge.contentType ?? "audio/mpeg",
+            "Cache-Control": "no-store",
+            "X-TTS-Provider": "edge-tts",
+          },
+        });
+      }
+      console.warn("[TTS] Edge TTS failed in free stack:", edge.error);
     }
 
     if (isMinimaxTtsConfigured()) {

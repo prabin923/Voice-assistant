@@ -96,7 +96,11 @@ export function createNemotronVoiceSpeaker(): NemotronVoiceSpeaker {
         });
 
         if (res.status === 501 || res.status === 422) return false;
-        if (!res.ok) return false;
+        if (!res.ok) {
+          const errBody = await res.text().catch(() => "");
+          console.warn("[TTS] /api/tts failed:", res.status, errBody.slice(0, 200));
+          return false;
+        }
 
         const blob = await res.blob();
         if (!blob.size) return false;

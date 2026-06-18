@@ -14,6 +14,10 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "speech:verify": "tsx scripts/verify-nemotron-speech.ts",
+    "demo:verify": "tsx scripts/verify-college-voice.ts",
+    "demo:setup": "bash scripts/setup-college-demo.sh",
+    "whisper:up": "docker compose -f docker-compose.whisper.yml up -d",
+    "whisper:down": "docker compose -f docker-compose.whisper.yml down",
     "postinstall": "prisma generate"
   },
   "dependencies": {

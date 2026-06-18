@@ -41,7 +41,7 @@ import {
   type NemotronVoiceSpeaker,
   unlockBrowserAudio,
 } from "@/lib/clientNemotronVoice";
-import { sanitizeForSpeech, VOICE_STATUS } from "@/lib/humanizeSpeech";
+import { sanitizeForSpeech, trimForVoiceReply, VOICE_STATUS } from "@/lib/humanizeSpeech";
 import { VoicePresenceBar } from "@/components/VoicePresenceBar";
 import { ConciergeAvatar } from "@/components/ConciergeAvatar";
 
@@ -363,6 +363,10 @@ export default function VoiceAssistant() {
     if (hotelConfig.voiceStyle && ["warm", "professional", "energetic"].includes(hotelConfig.voiceStyle)) {
       setVoiceStyle(hotelConfig.voiceStyle as VoiceStyle);
     }
+    if (hotelConfig.sttReady === true) {
+      setUseServerSTT(true);
+      useServerSTTRef.current = true;
+    }
     if (hotelConfig.language) {
       const lang = ALL_LANGUAGES.find(
         (l) => l.code === hotelConfig.language || l.code.startsWith(hotelConfig.language)
@@ -442,7 +446,10 @@ export default function VoiceAssistant() {
     return scored[0].voice;
   }, []);
 
-  const toHumanSpeechText = useCallback((text: string) => sanitizeForSpeech(text), []);
+  const toHumanSpeechText = useCallback(
+    (text: string) => trimForVoiceReply(sanitizeForSpeech(text)),
+    []
+  );
 
   const renderAssistantMessageContent = (content: string) => {
     const lines = content.split("\n");
@@ -749,7 +756,7 @@ export default function VoiceAssistant() {
       nemotronVoiceRef.current?.cancel();
     }
 
-    if (nemotronVoiceReady && nemotronVoiceRef.current) {
+    if (nemotronVoiceRef.current) {
       const used = await nemotronVoiceRef.current.speak({
         text: cleaned,
         language: selectedLanguageRef.current.ttsLang,
@@ -774,7 +781,7 @@ export default function VoiceAssistant() {
     }
 
     return speakWithBrowser(cleaned, resumeListenAfter, Boolean(options?.chain), options?.onSpeechStart);
-  }, [nemotronVoiceReady, speakWithBrowser, toHumanSpeechText, voiceStyle]);
+  }, [speakWithBrowser, toHumanSpeechText, voiceStyle]);
 
   const applyChatPayload = useCallback(
     (
@@ -1898,10 +1905,10 @@ export default function VoiceAssistant() {
                 className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-wider transition-colors ${
                   isDark ? "bg-white/[0.06] hover:bg-white/10 text-neutral-400" : "bg-neutral-100 hover:bg-neutral-200 text-neutral-600"
                 }`}
-                title={useServerSTT ? "Using Gemini STT" : "Using browser speech"}
+                title={useServerSTT ? "Using Whisper STT (open-source)" : "Using browser speech"}
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${useServerSTT ? "bg-cyan-400" : "bg-emerald-500"}`} />
-                {useServerSTT ? "AI STT" : "Native"}
+                {useServerSTT ? "Whisper STT" : "Native"}
               </button>
             </div>
 

@@ -10,10 +10,22 @@ export function sanitizeForSpeech(text: string): string {
     .replace(/\*(.*?)\*/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\[ESCALATE\]/gi, "")
+    // Strip markdown list markers that sound unnatural when read aloud
+    .replace(/^\s*[-*•]\s+/gm, "")
     .replace(/\s+/g, " ")
     .replace(/\s*([,.;!?])\s*/g, "$1 ")
     .replace(/([a-z])\s*-\s*([a-z])/gi, "$1 $2")
     .trim();
+}
+
+/** Trim overly long replies for voice — keeps demos punchy and TTS-friendly. */
+export function trimForVoiceReply(text: string, maxChars = 280): string {
+  const cleaned = sanitizeForSpeech(text);
+  if (cleaned.length <= maxChars) return cleaned;
+  const slice = cleaned.slice(0, maxChars);
+  const lastStop = Math.max(slice.lastIndexOf("."), slice.lastIndexOf("!"), slice.lastIndexOf("?"));
+  if (lastStop > 80) return slice.slice(0, lastStop + 1).trim();
+  return `${slice.trim()}…`;
 }
 
 /** Insert SSML micro-pauses for more natural MAI / neural TTS pacing. */

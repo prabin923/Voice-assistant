@@ -264,7 +264,7 @@ export default function CallOverlay({
     synthRef.current?.cancel();
     nemotronVoiceRef.current?.cancel();
 
-    if (nemotronVoiceReady && nemotronVoiceRef.current) {
+    if (nemotronVoiceRef.current) {
       const used = await nemotronVoiceRef.current.speak({
         text,
         language: ttsLang,

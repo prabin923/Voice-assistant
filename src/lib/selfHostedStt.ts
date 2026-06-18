@@ -22,9 +22,13 @@ export interface SelfHostedSttConfig {
 export function getSelfHostedSttConfig(): SelfHostedSttConfig | undefined {
   const endpoint = process.env.WHISPER_STT_ENDPOINT?.trim();
   if (!endpoint) return undefined;
+  const modelFromEnv = process.env.WHISPER_STT_MODEL?.trim();
+  const model =
+    modelFromEnv ||
+    (endpoint.includes("127.0.0.1") || endpoint.includes("localhost") ? "base" : "whisper-1");
   return {
     endpoint,
-    model: process.env.WHISPER_STT_MODEL?.trim() || "whisper-large-v3-turbo",
+    model,
     apiKey: process.env.WHISPER_STT_API_KEY?.trim() || getOpenAiApiKey(),
   };
 }

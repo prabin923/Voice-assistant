@@ -73,9 +73,13 @@ export async function augmentUserMessageWithHotelContext(
       if (chunks.length > 0) {
         const core = `- ${config.branding.hotelName} | ${config.contact.phone} | ${config.contact.city}`;
         const facts = [core, ...chunks.map((c) => `- ${c.title}: ${c.content}`)].join("\n");
+        const voiceHint =
+          channel === "voice"
+            ? "\nVOICE MODE: Use these facts to answer in 1–2 spoken sentences. Sound warm and human — not like reading a brochure."
+            : "";
         return {
           usedRag: true,
-          message: `RELEVANT HOTEL FACTS:\n${facts}\n\nGUEST MESSAGE:\n${message}`,
+          message: `RELEVANT HOTEL FACTS:\n${facts}${voiceHint}\n\nGUEST MESSAGE:\n${message}`,
         };
       }
     }

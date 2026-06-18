@@ -10,6 +10,7 @@ import {
   transcribeWithWhisperServer,
 } from '@/lib/selfHostedStt';
 import { isNemotronAsrConfigured, transcribeWithNemotron } from '@/lib/nemotronTranscribe';
+import { isFreeVoiceStack, shouldUseWhisperHttpServer } from '@/lib/voiceStack';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,7 +74,9 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error: "Speech-to-text not configured.",
-          details: "Set NEMOTRON_ASR_ENDPOINT (+ NVIDIA_API_KEY), WHISPER_STT_ENDPOINT, or GOOGLE_GENERATIVE_AI_API_KEY.",
+          details: isFreeVoiceStack()
+            ? "Start Whisper: npm run whisper:up (or ./scripts/setup-local-whisper.sh). Set WHISPER_STT_ENDPOINT=http://127.0.0.1:8000/v1"
+            : "Set NEMOTRON_ASR_ENDPOINT, WHISPER_STT_ENDPOINT, or GOOGLE_GENERATIVE_AI_API_KEY.",
         },
         { status: 501 }
       );
@@ -82,40 +85,62 @@ export async function POST(req: Request) {
     const safeLang = (language || "en-US").replace(/[^a-zA-Z0-9\-]/g, "").slice(0, 10);
     const audioBuffer = Buffer.from(await audioBlob.arrayBuffer());
 
-    // 1) NVIDIA Nemotron Speech ASR (Parakeet via Speech NIM)
-    let nemotronError: string | undefined;
-    if (isNemotronAsrConfigured()) {
-      const nemotronResult = await transcribeWithNemotron(
-        new Blob([audioBuffer], { type: baseMime }),
-        baseMime,
-        { language: safeLang }
-      );
-      if (nemotronResult.text) {
-        return NextResponse.json({ text: nemotronResult.text, provider: "nemotron-asr" });
+    // Free / college stack: open-source Whisper first (local or Docker)
+    if (isFreeVoiceStack()) {
+      const localResult = await transcribeWithLocalWhisper(audioBuffer);
+      if (localResult.text) {
+        return NextResponse.json({ text: localResult.text, provider: "whisper-local" });
       }
-      nemotronError = nemotronResult.error;
-      console.warn("[STT] Nemotron ASR did not return text:", nemotronError ?? "empty");
+
+      if (shouldUseWhisperHttpServer()) {
+        const serverResult = await transcribeWithWhisperServer(
+          new Blob([audioBuffer], { type: baseMime }),
+          safeLang
+        );
+        if (serverResult.text) {
+          return NextResponse.json({ text: serverResult.text, provider: "whisper-server" });
+        }
+      }
+    } else {
+      // Cloud stack: Nemotron ASR first when configured
+      let nemotronError: string | undefined;
+      if (isNemotronAsrConfigured()) {
+        const nemotronResult = await transcribeWithNemotron(
+          new Blob([audioBuffer], { type: baseMime }),
+          baseMime,
+          { language: safeLang }
+        );
+        if (nemotronResult.text) {
+          return NextResponse.json({ text: nemotronResult.text, provider: "nemotron-asr" });
+        }
+        nemotronError = nemotronResult.error;
+        console.warn("[STT] Nemotron ASR did not return text:", nemotronError ?? "empty");
+      }
+
+      if (shouldUseWhisperHttpServer()) {
+        const serverResult = await transcribeWithWhisperServer(
+          new Blob([audioBuffer], { type: baseMime }),
+          safeLang
+        );
+        if (serverResult.text) {
+          return NextResponse.json({ text: serverResult.text, provider: "whisper-server" });
+        }
+      }
+
+      const localResult = await transcribeWithLocalWhisper(audioBuffer);
+      if (localResult.text) {
+        return NextResponse.json({ text: localResult.text, provider: "whisper-local" });
+      }
     }
 
-    // 2) Self-hosted Whisper HTTP server
-    const serverResult = await transcribeWithWhisperServer(
-      new Blob([audioBuffer], { type: baseMime }),
-      safeLang
-    );
-    if (serverResult.text) {
-      return NextResponse.json({ text: serverResult.text, provider: "whisper-server" });
-    }
-
-    // 3) Local whisper-cpp on dev machine
-    const localResult = await transcribeWithLocalWhisper(audioBuffer);
-    if (localResult.text) {
-      return NextResponse.json({ text: localResult.text, provider: "whisper-local" });
-    }
-
-    // 4) Gemini multimodal fallback (uses API quota)
+    // Gemini multimodal fallback (uses API quota)
     const apiKey = getGeminiApiKey();
     if (!apiKey) {
-      const err = serverResult.error || localResult.error || "STT unavailable";
+      const localTry = await transcribeWithLocalWhisper(audioBuffer);
+      const serverTry = shouldUseWhisperHttpServer()
+        ? await transcribeWithWhisperServer(new Blob([audioBuffer], { type: baseMime }), safeLang)
+        : { error: "Whisper server not configured" };
+      const err = serverTry.error || localTry.error || "STT unavailable";
       return NextResponse.json({ error: err }, { status: 502 });
     }
 
@@ -136,8 +161,7 @@ export async function POST(req: Request) {
     }
 
     if (!transcription || transcription.toUpperCase() === "EMPTY") {
-      const detail = nemotronError ? ` (${nemotronError})` : "";
-      console.warn("[STT] All providers returned empty.", detail);
+      console.warn("[STT] All providers returned empty.");
       return NextResponse.json(
         { error: "No speech detected. Please try again.", fallbackNative: true },
         { status: 422 }
