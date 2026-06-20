@@ -399,7 +399,7 @@ export default function SettingsPage() {
                         className={inputCls}
                         value={slugDraft}
                         onChange={(e) => setSlugDraft(e.target.value.toLowerCase())}
-                        placeholder="willow-hotel"
+                        placeholder="aurelian-grand"
                       />
                       <button
                         type="button"

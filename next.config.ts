@@ -20,26 +20,7 @@ const nextConfig: NextConfig = {
 
     return [
       {
-        source: "/embed/:path*",
-        headers: [
-          ...secureHeaders,
-          {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: https: http:",
-              "font-src 'self' data:",
-              "connect-src 'self' https: wss:",
-              "media-src 'self' blob:",
-              `frame-ancestors ${embedOrigins}`,
-            ].join("; "),
-          },
-        ],
-      },
-      {
-        source: "/:path*",
+        source: "/((?!embed).*)",
         headers: [
           ...secureHeaders,
           { key: "X-Frame-Options", value: "DENY" },
@@ -54,6 +35,25 @@ const nextConfig: NextConfig = {
               "connect-src 'self' https: wss:",
               "media-src 'self' blob:",
               "frame-ancestors 'none'",
+            ].join("; "),
+          },
+        ],
+      },
+      {
+        source: "/embed/:path*",
+        headers: [
+          ...secureHeaders,
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: https: http:",
+              "font-src 'self' data:",
+              "connect-src 'self' https: wss:",
+              "media-src 'self' blob:",
+              `frame-ancestors ${embedOrigins}`,
             ].join("; "),
           },
         ],

@@ -3,11 +3,11 @@ import type { BrandingConfig, HotelConfig } from "@/lib/hotelConfig";
 export const HOTEL_CONFIG_UPDATED_EVENT = "hotel-config-updated";
 
 const DEFAULT_BRANDING: BrandingConfig = {
-  hotelName: "Willow Hotel",
-  tagline: "Your 24/7 Virtual AI Receptionist",
-  accentColor: "#c9a227",
-  welcomeMessage: "Welcome to Willow Hotel! How can I assist you with your stay today?",
-  farewellMessage: "Thank you for choosing Willow Hotel. Have a wonderful day!",
+  hotelName: "Aurelian Grand",
+  tagline: "Where Elegance Meets Serenity",
+  accentColor: "#c9a96e",
+  welcomeMessage: "Welcome to Aurelian Grand! How can I assist you with your stay today?",
+  farewellMessage: "Thank you for choosing Aurelian Grand. Have a wonderful day!",
 };
 
 export function defaultWelcomeMessage(hotelName: string): string {
@@ -133,7 +133,7 @@ export const DEFAULT_PUBLIC_HOTEL_CONFIG: PublicHotelConfig = {
     {
       name: "Standard Room",
       category: "Classic",
-      imageUrl: "https://picsum.photos/seed/willow-standard-room/600/400",
+      imageUrl: "https://picsum.photos/seed/aurelian-deluxe-room/600/400",
       pricePerNight: 120,
       currency: "USD",
       description: "Comfortable room with essential amenities.",

@@ -8,16 +8,16 @@ import {
 import type { BrandingConfig } from "@/lib/hotelConfig";
 
 const baseBranding = (): BrandingConfig => ({
-  hotelName: "Willow Hotel",
+  hotelName: "Aurelian Grand",
   tagline: "Tagline",
-  accentColor: "#c9a227",
-  welcomeMessage: defaultWelcomeMessage("Willow Hotel"),
-  farewellMessage: "Thank you for choosing Willow Hotel. Have a wonderful day!",
+  accentColor: "#c9a96e",
+  welcomeMessage: defaultWelcomeMessage("Aurelian Grand"),
+  farewellMessage: "Thank you for choosing Aurelian Grand. Have a wonderful day!",
 });
 
 describe("syncBrandingOnHotelRename", () => {
   it("updates welcome and farewell when hotel name changes", () => {
-    const synced = syncBrandingOnHotelRename("Willow Hotel", "Alpine Lodge", baseBranding());
+    const synced = syncBrandingOnHotelRename("Aurelian Grand", "Alpine Lodge", baseBranding());
     expect(synced.hotelName).toBe("Alpine Lodge");
     expect(synced.welcomeMessage).toBe(defaultWelcomeMessage("Alpine Lodge"));
     expect(synced.farewellMessage).toContain("Alpine Lodge");
@@ -28,7 +28,7 @@ describe("syncBrandingOnHotelRename", () => {
       ...baseBranding(),
       welcomeMessage: "Hello guest — ask me anything about your stay.",
     };
-    const synced = syncBrandingOnHotelRename("Willow Hotel", "Alpine Lodge", custom);
+    const synced = syncBrandingOnHotelRename("Aurelian Grand", "Alpine Lodge", custom);
     expect(synced.welcomeMessage).toBe("Hello guest — ask me anything about your stay.");
   });
 });
@@ -42,7 +42,7 @@ describe("guest welcome display", () => {
     const branding = {
       ...baseBranding(),
       hotelName: "Summit Inn",
-      welcomeMessage: defaultWelcomeMessage("Willow Hotel"),
+      welcomeMessage: defaultWelcomeMessage("Aurelian Grand"),
     };
     expect(getGuestWelcomeSubtext(branding)).toBe("How can I assist you with your stay today?");
   });

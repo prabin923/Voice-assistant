@@ -2,7 +2,7 @@
  * StayNEP embed loader — paste on any hotel website.
  *
  * <div id="staynep-assistant"></div>
- * <script src="https://YOUR_APP/embed.js" data-hotel="willow-hotel" data-base="https://YOUR_APP" async></script>
+ * <script src="https://YOUR_APP/embed.js" data-hotel="aurelian-grand" data-base="https://YOUR_APP" async></script>
  */
 (function () {
   var script = document.currentScript;

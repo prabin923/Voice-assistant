@@ -17,10 +17,14 @@ async function main() {
 
   await prisma.hotel.upsert({
     where: { email: "admin@hotel.com" },
-    update: {},
+    update: {
+      name: "Aurelian Grand",
+      slug: "aurelian-grand",
+    },
     create: {
       id: hotelId,
-      name: "Grand Plaza Hotel",
+      name: "Aurelian Grand",
+      slug: "aurelian-grand",
       email: "admin@hotel.com",
       password: bcrypt.hashSync("password123", 10),
       config: "{}",
