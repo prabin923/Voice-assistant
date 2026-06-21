@@ -21,7 +21,9 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [redirectTo, setRedirectTo] = useState("/settings");
+  const [redirectTo, setRedirectTo] = useState("/onboarding");
+  const [inviteToken, setInviteToken] = useState("");
+  const [hasInvite, setHasInvite] = useState(false);
 
   useEffect(() => {
     void fetch("/api/auth/csrf", { credentials: "include" });
@@ -29,6 +31,8 @@ export default function RegisterPage() {
     const emailParam = params.get("email");
     if (emailParam) setEmail(emailParam.trim().toLowerCase());
     setRedirectTo(getSafeRedirect(params.get("redirect")));
+    const invite = params.get("invite");
+    if (invite) { setInviteToken(invite); setHasInvite(true); }
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {

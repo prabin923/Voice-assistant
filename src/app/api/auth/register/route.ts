@@ -4,6 +4,7 @@ import { hashPassword, createToken, setSessionCookie } from "@/lib/auth";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
 import { validateCsrf } from "@/lib/csrf";
 import { generateUniqueHotelSlug } from "@/lib/hotelSlug";
+import { verifyInviteToken } from "@/lib/superAdminAuth";
 
 const MIN_RESPONSE_MS = 450;
 
@@ -23,11 +24,6 @@ export async function POST(request: Request) {
     const csrfError = await validateCsrf(request);
     if (csrfError) return csrfError;
 
-    if (process.env.NODE_ENV === "production" && process.env.ALLOW_ADMIN_REGISTRATION !== "true") {
-      await waitForMinimumDuration(requestStart);
-      return NextResponse.json({ error: "Registration failed" }, { status: 403 });
-    }
-
     // SECURITY: Rate limit registration — 3 per hour per IP
     const limit = checkRateLimit(`register:${ip}`, { maxRequests: 3, windowMs: 3600000 });
     if (!limit.allowed) {
@@ -43,6 +39,15 @@ export async function POST(request: Request) {
     const name = typeof body?.name === "string" ? body.name : "";
     const email = typeof body?.email === "string" ? body.email : "";
     const password = typeof body?.password === "string" ? body.password : "";
+    const inviteToken = typeof body?.inviteToken === "string" ? body.inviteToken : "";
+
+    if (process.env.NODE_ENV === "production" && process.env.ALLOW_ADMIN_REGISTRATION !== "true") {
+      const validInvite = inviteToken ? await verifyInviteToken(inviteToken) : false;
+      if (!validInvite) {
+        await waitForMinimumDuration(requestStart);
+        return NextResponse.json({ error: "Registration failed" }, { status: 403 });
+      }
+    }
 
     const trimmedName = name.trim();
 

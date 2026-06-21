@@ -7,6 +7,7 @@ import {
   Save, RotateCcw, Plus, Trash2, ChevronLeft, CheckCircle2,
   AlertCircle, MessageSquare, LogOut, User, BarChart3, Inbox, X,
   Crown, Sparkles, Bell, CalendarDays, CalendarCheck, Globe2, Copy,
+  Code2, ExternalLink,
 } from "lucide-react";
 import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
 import { applyHotelBrandTheme, notifyHotelConfigUpdated, syncBrandingOnHotelRename } from "@/lib/hotelBrand";
@@ -49,7 +50,7 @@ interface HotelConfig {
   };
 }
 
-type Tab = "notifications" | "calendar" | "bookings" | "branding" | "contact" | "policies" | "rooms" | "dining" | "amenities" | "faq" | "persona" | "telephony";
+type Tab = "notifications" | "calendar" | "bookings" | "branding" | "embed" | "contact" | "policies" | "rooms" | "dining" | "amenities" | "faq" | "persona" | "telephony";
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<HotelConfig | null>(null);
@@ -194,6 +195,7 @@ export default function SettingsPage() {
     { id: "calendar", label: "Calendar", icon: <CalendarDays className="w-4 h-4" /> },
     { id: "bookings", label: "Bookings", icon: <CalendarCheck className="w-4 h-4" /> },
     { id: "branding", label: "Branding", icon: <Hotel className="w-4 h-4" /> },
+    { id: "embed", label: "Embed & Share", icon: <Code2 className="w-4 h-4" /> },
     { id: "contact", label: "Contact", icon: <Phone className="w-4 h-4" /> },
     { id: "policies", label: "Policies", icon: <Clock className="w-4 h-4" /> },
     { id: "rooms", label: "Rooms", icon: <Hotel className="w-4 h-4" /> },
@@ -382,63 +384,6 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className={cardCls}>
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold flex items-center gap-2">
-                    <Globe2 className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> Website embed
-                  </h2>
-                </div>
-                <p className="text-neutral-500 text-sm">
-                  Add the voice concierge to your hotel website. Each hotel gets a unique URL slug.
-                </p>
-                <div className="grid gap-4">
-                  <div>
-                    <label className={labelCls}>Public URL slug</label>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                      <input
-                        className={inputCls}
-                        value={slugDraft}
-                        onChange={(e) => setSlugDraft(e.target.value.toLowerCase())}
-                        placeholder="aurelian-grand"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => void saveSlug()}
-                        disabled={slugSaving || !slugDraft.trim()}
-                        className="vapi-btn-ember vapi-btn-compact shrink-0"
-                      >
-                        {slugSaving ? "Saving…" : "Save slug"}
-                      </button>
-                    </div>
-                    {embedInfo?.embedUrl && (
-                      <p className="mt-2 text-xs text-neutral-500">
-                        Direct link:{" "}
-                        <a href={embedInfo.embedUrl} target="_blank" rel="noreferrer" className="text-ember-orange underline">
-                          {embedInfo.embedUrl}
-                        </a>
-                      </p>
-                    )}
-                  </div>
-                  {embedInfo?.snippet && (
-                    <div>
-                      <label className={labelCls}>Embed code</label>
-                      <div className="relative">
-                        <pre className="overflow-x-auto rounded-[5.6px] border border-neutral-800 bg-neutral-950/80 p-4 text-xs text-neutral-300">
-                          {embedInfo.snippet}
-                        </pre>
-                        <button
-                          type="button"
-                          onClick={() => void copyEmbedSnippet()}
-                          className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[11px] text-neutral-200"
-                        >
-                          <Copy className="h-3 w-3" /> Copy
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
               {/* Accent Color — Premium Selector */}
               <div className={cardCls}>
                 <div className="flex items-center justify-between">
@@ -591,6 +536,128 @@ export default function SettingsPage() {
                 <p className="text-neutral-500 text-sm">Customize the messages guests see when interacting with your AI receptionist.</p>
                 <div><label className={labelCls}>Welcome Message</label><textarea className={inputCls + " h-20 resize-none"} value={config.branding.welcomeMessage} onChange={e => updateBranding("welcomeMessage", e.target.value)} /></div>
                 <div><label className={labelCls}>Farewell Message</label><textarea className={inputCls + " h-20 resize-none"} value={config.branding.farewellMessage} onChange={e => updateBranding("farewellMessage", e.target.value)} /></div>
+              </div>
+            </div>
+          )}
+
+          {/* EMBED & SHARE */}
+          {activeTab === "embed" && (
+            <div className="space-y-6">
+              {/* Step 1 — Slug */}
+              <div className={cardCls}>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ember-orange/15 text-sm font-bold text-ember-orange">1</div>
+                  <div>
+                    <h2 className="text-base font-semibold text-cream-text">Set your public URL slug</h2>
+                    <p className="text-sm text-zinc-mute">Used in the embed URL and the direct share link.</p>
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>URL slug</label>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      className={inputCls}
+                      value={slugDraft}
+                      onChange={(e) => setSlugDraft(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                      placeholder="your-hotel-name"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void saveSlug()}
+                      disabled={slugSaving || !slugDraft.trim()}
+                      className="vapi-btn-ember vapi-btn-compact shrink-0"
+                    >
+                      {slugSaving ? "Saving…" : "Save slug"}
+                    </button>
+                  </div>
+                  {embedInfo?.embedUrl && (
+                    <p className="mt-2 flex items-center gap-1.5 text-xs text-zinc-mute">
+                      Direct link:&nbsp;
+                      <a
+                        href={embedInfo.embedUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="truncate text-ember-orange underline underline-offset-2"
+                      >
+                        {embedInfo.embedUrl}
+                      </a>
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Step 2 — Embed code */}
+              <div className={cardCls}>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ember-orange/15 text-sm font-bold text-ember-orange">2</div>
+                  <div>
+                    <h2 className="text-base font-semibold text-cream-text">Copy the embed code</h2>
+                    <p className="text-sm text-zinc-mute">Paste this snippet in your hotel website's HTML before <code className="rounded bg-neutral-800 px-1 text-amber-300">&lt;/body&gt;</code>.</p>
+                  </div>
+                </div>
+                {embedInfo?.snippet ? (
+                  <div className="relative">
+                    <pre className="overflow-x-auto rounded-[5.6px] border border-neutral-800 bg-neutral-950/80 p-4 pr-16 text-xs leading-relaxed text-neutral-300">
+                      {embedInfo.snippet}
+                    </pre>
+                    <button
+                      type="button"
+                      onClick={() => void copyEmbedSnippet()}
+                      className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1.5 text-[11px] font-medium text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white"
+                    >
+                      <Copy className="h-3 w-3" /> Copy
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-zinc-mute">Save a slug in step 1 first.</p>
+                )}
+                <div className="rounded-[5.6px] border border-iron-border bg-slab-elevated p-4 space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-mute">How to install on any website</p>
+                  <ol className="list-inside list-decimal space-y-1.5 text-xs text-neutral-400">
+                    <li>Add <code className="rounded bg-neutral-800 px-1 py-0.5 text-amber-300">&lt;div id="staynep-assistant"&gt;&lt;/div&gt;</code> where you want the assistant to appear.</li>
+                    <li>Paste the <code className="rounded bg-neutral-800 px-1 py-0.5 text-amber-300">&lt;script&gt;</code> tag anywhere before <code className="rounded bg-neutral-800 px-1 py-0.5 text-amber-300">&lt;/body&gt;</code>.</li>
+                    <li>The concierge loads inside an iframe — guests can speak directly, no extra setup needed.</li>
+                  </ol>
+                </div>
+              </div>
+
+              {/* Step 3 — Live preview */}
+              <div className={cardCls}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ember-orange/15 text-sm font-bold text-ember-orange">3</div>
+                    <div>
+                      <h2 className="text-base font-semibold text-cream-text">Live preview</h2>
+                      <p className="text-sm text-zinc-mute">Exactly what guests will experience on your website.</p>
+                    </div>
+                  </div>
+                  {embedInfo?.embedUrl && (
+                    <a
+                      href={embedInfo.embedUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={vapiGhostBtn + " shrink-0 text-xs"}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Full screen</span>
+                    </a>
+                  )}
+                </div>
+                {embedInfo?.embedUrl ? (
+                  <div className="overflow-hidden rounded-[5.6px] border border-iron-border">
+                    <iframe
+                      key={embedInfo.embedUrl}
+                      src={embedInfo.embedUrl}
+                      title="Voice concierge preview"
+                      allow="microphone"
+                      className="h-[600px] w-full border-0 bg-void-canvas"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex h-48 items-center justify-center rounded-[5.6px] border border-iron-border bg-slab-elevated text-sm text-zinc-mute">
+                    Save a slug to see the live preview.
+                  </div>
+                )}
               </div>
             </div>
           )}
