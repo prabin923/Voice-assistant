@@ -66,8 +66,8 @@ export async function POST(req: Request) {
     const data = await response.json();
     return NextResponse.json(data);
 
-  } catch (error: any) {
-    console.error('TingTing Proxy Error:', error.message);
+  } catch (error: unknown) {
+    console.error('TingTing Proxy Error:', error instanceof Error ? error.message : error);
     return NextResponse.json({ error: 'TingTing integration failed' }, { status: 500 });
   }
 }

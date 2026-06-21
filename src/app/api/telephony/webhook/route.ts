@@ -103,8 +103,8 @@ export async function POST(req: Request) {
       call_id: callId
     });
 
-  } catch (error: any) {
-    console.error('[Telephony Webhook] Error:', error.message);
+  } catch (error: unknown) {
+    console.error('[Telephony Webhook] Error:', error instanceof Error ? error.message : error);
     return NextResponse.json({
       action: 'speak',
       text: "I am sorry, I am experiencing a temporary issue. Please hold while I transfer you."

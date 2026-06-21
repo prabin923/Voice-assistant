@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
-  ChevronLeft, Settings, LogOut, User, Loader2,
+  ChevronLeft, LogOut, User, Loader2,
   Inbox, CheckCircle2, Clock, Send, MessageSquare, AlertCircle,
-  RefreshCw, BarChart3, Bell, ExternalLink, X, Sun, Moon
+  RefreshCw, BarChart3, X, Sun, Moon
 } from "lucide-react";
 import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
 import { StaynepLogo } from "@/components/StaynepLogo";
@@ -163,7 +163,7 @@ export default function SupportInbox() {
     const loadingDark = theme === "dark";
     return (
       <div className={`relative min-h-screen overflow-hidden ${loadingDark ? "text-neutral-100" : "text-neutral-900"}`}>
-        <SiteShellBackdrop isDark={loadingDark} />
+        <SiteShellBackdrop />
         <div className="relative z-10 min-h-screen flex items-center justify-center">
           {loadError ? (
             <div className="text-center space-y-4 px-4">
@@ -197,7 +197,7 @@ export default function SupportInbox() {
 
   return (
     <div className={`relative min-h-screen overflow-hidden ${isDark ? "text-neutral-100" : "text-neutral-900"}`}>
-      <SiteShellBackdrop isDark={isDark} />
+      <SiteShellBackdrop />
       <div className="relative z-10">
       {loadError && (
         <div className="max-w-7xl mx-auto px-6 pt-4">
@@ -220,7 +220,7 @@ export default function SupportInbox() {
       )}
 
       {/* Header */}
-      <header className={`sticky top-0 z-20 border-b backdrop-blur-xl ${siteHeaderChrome(isDark)}`}>
+      <header className={`sticky top-0 z-20 border-b backdrop-blur-xl ${siteHeaderChrome()}`}>
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/settings" className={`flex items-center gap-2 transition-colors ${isDark ? "text-neutral-400 hover:text-white" : "text-neutral-600 hover:text-neutral-900"}`}>

@@ -84,11 +84,9 @@ interface UIStrings {
 }
 
 function RoomImageCarousel({ images, isDark }: { images: string[]; isDark: boolean }) {
+  // Parent always passes a stable key={images.join("|")} so this component
+  // remounts when the image set changes — no effect needed to reset index.
   const [index, setIndex] = useState(0);
-
-  useEffect(() => {
-    setIndex(0);
-  }, [images.join("|")]);
 
   if (!images.length) return null;
 
@@ -97,6 +95,7 @@ function RoomImageCarousel({ images, isDark }: { images: string[]; isDark: boole
 
   return (
     <div className={`mt-3 mb-1 ${isDark ? "bg-black/10" : "bg-white"}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={current}
         alt="Room image"
@@ -124,7 +123,6 @@ function RoomImageCarousel({ images, isDark }: { images: string[]; isDark: boole
           <div className="flex items-center gap-1">
             {images.map((_, i) => (
               <button
-                // eslint-disable-next-line react/no-array-index-key
                 key={i}
                 type="button"
                 onClick={() => setIndex(i)}
@@ -287,7 +285,6 @@ export default function VoiceAssistant() {
   const [voiceStyle, setVoiceStyle] = useState<VoiceStyle>("warm");
   const [aiReady, setAiReady] = useState<boolean | null>(null);
   const [sttReady, setSttReady] = useState<boolean | null>(null);
-  const [nemotronVoiceReady, setNemotronVoiceReady] = useState(false);
   const [geminiLiveReady, setGeminiLiveReady] = useState<boolean | null>(null);
   const [guestProfile, setGuestProfile] = useState<GuestProfile | null>(null);
   const [showGuestAuth, setShowGuestAuth] = useState(false);
@@ -381,9 +378,6 @@ export default function VoiceAssistant() {
   useEffect(() => {
     setAiReady(typeof hotelConfig.aiReady === "boolean" ? hotelConfig.aiReady : null);
     setSttReady(typeof hotelConfig.sttReady === "boolean" ? hotelConfig.sttReady : null);
-    setNemotronVoiceReady(
-      hotelConfig.serverTtsReady === true || hotelConfig.nemotronVoiceReady === true
-    );
     setGeminiLiveReady(typeof hotelConfig.geminiLiveReady === "boolean" ? hotelConfig.geminiLiveReady : null);
     if (hotelConfig.voiceStyle && ["warm", "professional", "energetic"].includes(hotelConfig.voiceStyle)) {
       setVoiceStyle(hotelConfig.voiceStyle as VoiceStyle);
@@ -672,7 +666,7 @@ export default function VoiceAssistant() {
     };
     recognition.start();
     recognitionRef.current = recognition;
-  }, [useServerSTT, aiReady, sttReady]);
+  }, [useServerSTT, aiReady, sttReady, ui.errorMicDenied]);
 
   // Refs for callbacks used in auto-listen
   const startListeningInternalRef = useRef(startListeningInternal);
@@ -1429,8 +1423,6 @@ export default function VoiceAssistant() {
     new Date(ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
   const formatCallDuration = (secs: number) => `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, "0")}s`;
-
-  const conciergeLabel = conciergeName;
 
   const voiceStatusLabel =
     isListening
@@ -2198,10 +2190,10 @@ export default function VoiceAssistant() {
           languageCode={selectedLanguage.code}
           ttsLang={selectedLanguage.ttsLang}
           voiceStyle={voiceStyle}
-          nemotronVoiceReady={nemotronVoiceReady}
           aiReady={aiReady !== false}
           geminiLiveReady={geminiLiveReady === true}
           onEnd={handleCallEnd}
+
         />
       )}
     </div>

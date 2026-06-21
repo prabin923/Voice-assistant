@@ -63,6 +63,7 @@ export default function RegisterPage() {
           name: name.trim(),
           email: email.trim().toLowerCase(),
           password,
+          ...(inviteToken ? { inviteToken } : {}),
         }),
       });
 
@@ -86,6 +87,11 @@ export default function RegisterPage() {
       <VapiAuthHeading title="Create account" subtitle="Register your hotel to get started" />
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {hasInvite && !error && (
+          <div className="rounded-[5.6px] border border-mint-pulse/30 bg-mint-pulse/10 px-4 py-3 text-sm text-mint-pulse">
+            You&apos;ve been invited — create your hotel account below.
+          </div>
+        )}
         {error ? <VapiAuthAlert>{error}</VapiAuthAlert> : null}
 
         <VapiAuthField label="Hotel name">

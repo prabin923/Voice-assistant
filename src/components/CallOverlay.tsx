@@ -81,7 +81,6 @@ interface CallOverlayProps {
   voiceStyle: "warm" | "professional" | "energetic";
   aiReady?: boolean;
   geminiLiveReady?: boolean;
-  nemotronVoiceReady?: boolean;
   onEnd: (record?: CallHistoryRecord) => void;
 }
 
@@ -93,7 +92,6 @@ export default function CallOverlay({
   voiceStyle,
   aiReady = true,
   geminiLiveReady = false,
-  nemotronVoiceReady = false,
   onEnd,
 }: CallOverlayProps) {
   const [callState, setCallState] = useState<CallState>("ringing");
@@ -280,7 +278,7 @@ export default function CallOverlay({
     }
 
     speakWithBrowser(text);
-  }, [isSpeakerOff, nemotronVoiceReady, speakWithBrowser, ttsLang, voiceStyle]);
+  }, [isSpeakerOff, speakWithBrowser, ttsLang, voiceStyle]);
 
   // Send to chat API
   const sendMessage = useCallback(async (text: string) => {
@@ -468,7 +466,7 @@ export default function CallOverlay({
     } catch {
       fallbackToStandardCall();
     }
-  }, [fallbackToStandardCall, geminiLiveReady, hotelName, languageCode]);
+  }, [fallbackToStandardCall, geminiLiveReady, hotelName, languageCode, liveMode]);
 
   const pickCallRecorderMimeType = (): string | undefined => {
     if (typeof MediaRecorder === "undefined") return undefined;

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSAAuth } from "@/lib/superAdminAuth";
 import { ensureDbReady } from "@/lib/db";
-import { prisma } from "@/lib/prisma";
+import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,7 @@ export async function GET() {
     },
   });
 
-  const hotels = rows.map((row) => {
+  const hotels = rows.map((row: typeof rows[number]) => {
     let cfg: HotelConfig = {};
     try { cfg = JSON.parse(row.config) as HotelConfig; } catch { /* empty */ }
 

@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowRight, ArrowLeft, Check, Hotel, Phone,
+  ArrowRight, ArrowLeft, Check, Hotel,
   Plus, Trash2, CheckCircle2, Loader2, Copy,
   ExternalLink, Clock, Utensils,
 } from "lucide-react";
@@ -79,7 +78,6 @@ const DEFAULT_CONFIG: HotelConfig = {
 };
 
 export default function OnboardingPage() {
-  const router = useRouter();
   const [step, setStep] = useState(0);
   const [config, setConfig] = useState<HotelConfig>(DEFAULT_CONFIG);
   const [saving, setSaving] = useState(false);

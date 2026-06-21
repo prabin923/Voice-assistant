@@ -19,6 +19,10 @@ function embedSnippet(baseUrl: string, slug: string): string {
 <script src="${baseUrl}/embed.js" data-hotel="${slug}" data-base="${baseUrl}" async></script>`;
 }
 
+function widgetSnippet(baseUrl: string, slug: string): string {
+  return `<script src="${baseUrl}/widget.js" data-hotel="${slug}" data-base="${baseUrl}" async></script>`;
+}
+
 export async function GET(req: Request) {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
@@ -37,6 +41,7 @@ export async function GET(req: Request) {
     embedUrl: `${baseUrl}/embed/${slug}`,
     iframeUrl: `${baseUrl}/embed/${slug}`,
     snippet: embedSnippet(baseUrl, slug),
+    widgetSnippet: widgetSnippet(baseUrl, slug),
   });
 }
 
@@ -60,5 +65,6 @@ export async function PATCH(req: Request) {
     slug: result.slug,
     embedUrl: `${baseUrl}/embed/${result.slug}`,
     snippet: embedSnippet(baseUrl, result.slug),
+    widgetSnippet: widgetSnippet(baseUrl, result.slug),
   });
 }

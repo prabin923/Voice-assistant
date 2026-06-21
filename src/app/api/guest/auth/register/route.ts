@@ -2,12 +2,9 @@ import { NextResponse } from "next/server";
 import { validateCsrf } from "@/lib/csrf";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
 import {
-  loginGuest,
   publicGuestProfile,
   registerGuest,
   setGuestSessionCookie,
-  clearGuestSession,
-  getGuestSession,
 } from "@/lib/guestAuth";
 
 export const dynamic = "force-dynamic";

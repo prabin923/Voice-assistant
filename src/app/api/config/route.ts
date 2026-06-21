@@ -12,7 +12,8 @@ import { hotels } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 function publicConfigPayload(config: Awaited<ReturnType<typeof ensureHotelConfigLoaded>>, slug?: string) {
-  const { telephony, ...publicConfig } = config;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { telephony: _telephony, ...publicConfig } = config;
   return {
     ...publicConfig,
     hotelSlug: slug,

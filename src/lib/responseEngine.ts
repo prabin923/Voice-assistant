@@ -221,12 +221,13 @@ export async function getAssistantResponse(
       }
 
       return await getAssistantResponseWithGemini(message, langCode, conversationHistory, channel);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as { status?: number; message?: string };
       const isRetryable =
-        !error?.status || error.status >= 500 || error.message?.includes("fetch");
+        !err?.status || err.status >= 500 || err.message?.includes("fetch");
 
       if (attempt < MAX_RETRIES && isRetryable) {
-        console.warn(`[Response Engine] Attempt ${attempt + 1} failed, retrying...`, error.message);
+        console.warn(`[Response Engine] Attempt ${attempt + 1} failed, retrying...`, err.message);
         await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
         continue;
       }

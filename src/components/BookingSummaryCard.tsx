@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarCheck, Copy, Check, User } from "lucide-react";
+import { CalendarCheck, Copy, Check, User, CreditCard, ExternalLink } from "lucide-react";
 
 export interface BookingSummary {
   id: string;
@@ -14,6 +14,9 @@ export interface BookingSummary {
   guestEmail?: string | null;
   status: string;
   specialRequests?: string | null;
+  checkoutUrl?: string;
+  depositAmount?: number;
+  depositCurrency?: string;
 }
 
 export type PendingBooking = {
@@ -31,6 +34,9 @@ interface Props {
   booking: BookingSummary;
   hotelName?: string;
   isDark: boolean;
+  checkoutUrl?: string;
+  depositAmount?: number;
+  depositCurrency?: string;
 }
 
 function formatStayDate(value: string): string {
@@ -47,7 +53,11 @@ function buildCalendarUrl(booking: BookingSummary, hotelName?: string): string {
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}`;
 }
 
-export function BookingSummaryCard({ booking, hotelName, isDark }: Props) {
+export function BookingSummaryCard({ booking, hotelName, isDark, checkoutUrl: checkoutUrlProp, depositAmount: depositAmountProp, depositCurrency: depositCurrencyProp }: Props) {
+  const checkoutUrl = checkoutUrlProp ?? booking.checkoutUrl;
+  const depositAmount = depositAmountProp ?? booking.depositAmount;
+  const depositCurrency = depositCurrencyProp ?? booking.depositCurrency ?? "USD";
+  const isPendingPayment = booking.status === "pending_payment" || Boolean(checkoutUrl);
   const [copied, setCopied] = useState(false);
   const shortId = booking.id.slice(0, 8).toUpperCase();
   const nights = Math.max(
@@ -79,10 +89,12 @@ export function BookingSummaryCard({ booking, hotelName, isDark }: Props) {
           <div className="min-w-0">
             <p
               className={`text-[10px] font-black uppercase tracking-[0.18em] ${
-                isDark ? "text-emerald-300/80" : "text-emerald-700"
+                isPendingPayment
+                  ? isDark ? "text-amber-300/80" : "text-amber-700"
+                  : isDark ? "text-emerald-300/80" : "text-emerald-700"
               }`}
             >
-              {booking.status === "confirmed" ? "Booking confirmed" : booking.status}
+              {isPendingPayment ? "Deposit required" : booking.status === "confirmed" ? "Booking confirmed" : booking.status}
             </p>
             <p className="truncate text-sm font-bold tracking-wide">#{shortId}</p>
           </div>
@@ -123,6 +135,28 @@ export function BookingSummaryCard({ booking, hotelName, isDark }: Props) {
         ) : null}
       </div>
 
+      {/* Pay deposit CTA */}
+      {isPendingPayment && checkoutUrl && (
+        <div className={`mt-3 rounded-xl border p-3 ${isDark ? "border-amber-500/25 bg-amber-500/[0.07]" : "border-amber-200 bg-amber-50/80"}`}>
+          <p className={`mb-2 text-[11px] font-medium ${isDark ? "text-amber-200/80" : "text-amber-800"}`}>
+            A deposit is required to confirm your reservation.
+          </p>
+          <a
+            href={checkoutUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-400 active:scale-[0.98] transition-all"
+          >
+            <CreditCard className="h-4 w-4" />
+            Pay {depositCurrency} {depositAmount != null ? depositAmount.toFixed(2) : ""} deposit
+            <ExternalLink className="h-3 w-3 opacity-70" />
+          </a>
+          <p className={`mt-1.5 text-center text-[10px] ${isDark ? "text-neutral-500" : "text-neutral-500"}`}>
+            Secured by Stripe · Your booking is held for 30 minutes
+          </p>
+        </div>
+      )}
+
       <div className={`mt-3 flex flex-wrap gap-2 border-t pt-3 ${isDark ? "border-white/10" : "border-emerald-200/80"}`}>
         <button
           type="button"
@@ -142,16 +176,18 @@ export function BookingSummaryCard({ booking, hotelName, isDark }: Props) {
           {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
           {copied ? "Copied" : "Copy ID"}
         </button>
-        <a
-          href={buildCalendarUrl(booking, hotelName)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold ${
-            isDark ? "bg-white/10 text-neutral-300 hover:bg-white/15" : "bg-white border border-neutral-200 text-neutral-700"
-          }`}
-        >
-          Add to calendar
-        </a>
+        {!isPendingPayment && (
+          <a
+            href={buildCalendarUrl(booking, hotelName)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold ${
+              isDark ? "bg-white/10 text-neutral-300 hover:bg-white/15" : "bg-white border border-neutral-200 text-neutral-700"
+            }`}
+          >
+            Add to calendar
+          </a>
+        )}
       </div>
     </div>
   );

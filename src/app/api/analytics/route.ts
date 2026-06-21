@@ -58,7 +58,7 @@ export async function GET() {
       feedbackStats,
       bookingStats,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Analytics API Error:", error);
     return NextResponse.json(
       { error: "Failed to load analytics" },

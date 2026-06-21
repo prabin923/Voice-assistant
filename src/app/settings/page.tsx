@@ -7,7 +7,7 @@ import {
   Save, RotateCcw, Plus, Trash2, ChevronLeft, CheckCircle2,
   AlertCircle, MessageSquare, LogOut, User, BarChart3, Inbox, X,
   Crown, Sparkles, Bell, CalendarDays, CalendarCheck, Globe2, Copy,
-  Code2, ExternalLink,
+  Code2, ExternalLink, Loader2,
 } from "lucide-react";
 import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
 import { applyHotelBrandTheme, notifyHotelConfigUpdated, syncBrandingOnHotelRename } from "@/lib/hotelBrand";
@@ -41,6 +41,7 @@ interface HotelConfig {
   receptionistPersona: string;
   voiceStyle?: "warm" | "professional" | "energetic";
   language: string;
+  payment?: { enabled: boolean; depositType: "fixed" | "percentage"; depositAmount: number; currency: string; };
   telephony?: {
     webhookUrl: string;
     enabled: boolean;
@@ -50,7 +51,7 @@ interface HotelConfig {
   };
 }
 
-type Tab = "notifications" | "calendar" | "bookings" | "branding" | "embed" | "contact" | "policies" | "rooms" | "dining" | "amenities" | "faq" | "persona" | "telephony";
+type Tab = "notifications" | "calendar" | "bookings" | "branding" | "embed" | "contact" | "policies" | "rooms" | "dining" | "amenities" | "faq" | "persona" | "telephony" | "payment" | "whatsapp";
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<HotelConfig | null>(null);
@@ -64,8 +65,11 @@ export default function SettingsPage() {
   const [knowledgeGaps, setKnowledgeGaps] = useState<
     { id: string; question: string; guest_message: string; language: string; status: string; created_at: string }[]
   >([]);
-  const [embedInfo, setEmbedInfo] = useState<{ slug: string; snippet: string; embedUrl: string } | null>(null);
+  const [embedInfo, setEmbedInfo] = useState<{ slug: string; snippet: string; widgetSnippet?: string; embedUrl: string } | null>(null);
+  const [embedMode, setEmbedMode] = useState<"widget" | "iframe">("widget");
   const [slugDraft, setSlugDraft] = useState("");
+  const [webSync, setWebSync] = useState<{ chunkCount: number; lastSyncedAt: string | null } | null>(null);
+  const [webSyncing, setWebSyncing] = useState(false);
   const [slugSaving, setSlugSaving] = useState(false);
 
   const showToast = useCallback((message: string, type: "success" | "delete" | "info" = "success") => {
@@ -97,7 +101,11 @@ export default function SettingsPage() {
       .then((data) => setKnowledgeGaps(data.gaps ?? []))
       .catch(() => {});
 
-    fetchJsonWithAuth<{ slug: string; snippet: string; embedUrl: string }>("/api/hotel/embed")
+    fetchJsonWithAuth<{ chunkCount: number; lastSyncedAt: string | null }>("/api/rag/sync")
+      .then(setWebSync)
+      .catch(() => {});
+
+    fetchJsonWithAuth<{ slug: string; snippet: string; widgetSnippet?: string; embedUrl: string }>("/api/hotel/embed")
       .then((data) => {
         setEmbedInfo(data);
         setSlugDraft(data.slug);
@@ -148,7 +156,7 @@ export default function SettingsPage() {
     if (!slugDraft.trim()) return;
     setSlugSaving(true);
     try {
-      const data = await fetchJsonWithAuth<{ slug: string; snippet: string; embedUrl: string }>("/api/hotel/embed", {
+      const data = await fetchJsonWithAuth<{ slug: string; snippet: string; widgetSnippet?: string; embedUrl: string }>("/api/hotel/embed", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slug: slugDraft }),
@@ -170,6 +178,27 @@ export default function SettingsPage() {
       showToast("Embed code copied.");
     } catch {
       showToast("Copy failed — select the code manually.", "info");
+    }
+  };
+
+  const syncWebsite = async () => {
+    if (!config?.contact?.website?.trim()) {
+      showToast("Add your website URL first, then save.", "info");
+      return;
+    }
+    setWebSyncing(true);
+    try {
+      const data = await fetchJsonWithAuth<{
+        pagesVisited: number;
+        chunksUpserted: number;
+        chunksRemoved: number;
+      }>("/api/rag/sync", { method: "POST" });
+      setWebSync({ chunkCount: (webSync?.chunkCount ?? 0) - (data.chunksRemoved ?? 0) + (data.chunksUpserted ?? 0), lastSyncedAt: new Date().toISOString() });
+      showToast(`Synced ${data.pagesVisited} pages · ${data.chunksUpserted} chunks indexed.`);
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Sync failed.", "delete");
+    } finally {
+      setWebSyncing(false);
     }
   };
 
@@ -204,6 +233,8 @@ export default function SettingsPage() {
     { id: "faq", label: "Custom FAQ", icon: <MessageSquare className="w-4 h-4" /> },
     { id: "persona", label: "AI Persona", icon: <Settings className="w-4 h-4" /> },
     { id: "telephony", label: "Telnyx Voice", icon: <Phone className="w-4 h-4" /> },
+    { id: "payment", label: "Payments", icon: <Crown className="w-4 h-4" /> },
+    { id: "whatsapp", label: "WhatsApp", icon: <MessageSquare className="w-4 h-4" /> },
   ];
   const isDark = true;
 
@@ -591,34 +622,100 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ember-orange/15 text-sm font-bold text-ember-orange">2</div>
                   <div>
-                    <h2 className="text-base font-semibold text-cream-text">Copy the embed code</h2>
-                    <p className="text-sm text-zinc-mute">Paste this snippet in your hotel website's HTML before <code className="rounded bg-neutral-800 px-1 text-amber-300">&lt;/body&gt;</code>.</p>
+                    <h2 className="text-base font-semibold text-cream-text">Add to your website</h2>
+                    <p className="text-sm text-zinc-mute">Choose how the assistant appears on the hotel&apos;s site.</p>
                   </div>
                 </div>
-                {embedInfo?.snippet ? (
-                  <div className="relative">
-                    <pre className="overflow-x-auto rounded-[5.6px] border border-neutral-800 bg-neutral-950/80 p-4 pr-16 text-xs leading-relaxed text-neutral-300">
-                      {embedInfo.snippet}
-                    </pre>
-                    <button
-                      type="button"
-                      onClick={() => void copyEmbedSnippet()}
-                      className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1.5 text-[11px] font-medium text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white"
-                    >
-                      <Copy className="h-3 w-3" /> Copy
-                    </button>
+
+                {/* Mode switcher */}
+                <div className="flex gap-1 rounded-[5.6px] border border-iron-border bg-slab-elevated p-1">
+                  <button
+                    type="button"
+                    onClick={() => setEmbedMode("widget")}
+                    className={`flex-1 rounded-[4px] px-3 py-2 text-xs font-semibold transition-colors ${embedMode === "widget" ? "bg-ember-orange/15 text-ember-orange border border-ember-orange/30" : "text-zinc-mute hover:text-cream-text"}`}
+                  >
+                    🎙 Floating bubble <span className="ml-1 rounded-full bg-mint-pulse/15 px-1.5 py-0.5 text-[10px] text-mint-pulse font-bold">Recommended</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEmbedMode("iframe")}
+                    className={`flex-1 rounded-[4px] px-3 py-2 text-xs font-semibold transition-colors ${embedMode === "iframe" ? "bg-ember-orange/15 text-ember-orange border border-ember-orange/30" : "text-zinc-mute hover:text-cream-text"}`}
+                  >
+                    🖼 Inline iframe
+                  </button>
+                </div>
+
+                {embedMode === "widget" ? (
+                  <div className="space-y-3">
+                    <div className="rounded-[5.6px] border border-mint-pulse/20 bg-mint-pulse/5 p-3 text-xs text-mint-pulse">
+                      <strong>One script tag. Zero div. Zero positioning.</strong> A floating mic button appears in the corner — guests click to speak. Works on Wix, Squarespace, WordPress, Webflow, Shopify, or any custom site.
+                    </div>
+                    {embedInfo?.widgetSnippet ? (
+                      <div className="relative">
+                        <pre className="overflow-x-auto rounded-[5.6px] border border-neutral-800 bg-neutral-950/80 p-4 pr-16 text-xs leading-relaxed text-neutral-300">
+                          {embedInfo.widgetSnippet}
+                        </pre>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!embedInfo?.widgetSnippet) return;
+                            try { await navigator.clipboard.writeText(embedInfo.widgetSnippet); showToast("Widget code copied."); }
+                            catch { showToast("Copy failed — select manually.", "info"); }
+                          }}
+                          className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1.5 text-[11px] font-medium text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white"
+                        >
+                          <Copy className="h-3 w-3" /> Copy
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-zinc-mute">Save a slug in step 1 first.</p>
+                    )}
+                    <div className="rounded-[5.6px] border border-iron-border bg-slab-elevated p-4 space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-mute">How to install (no code needed)</p>
+                      <ol className="list-inside list-decimal space-y-1.5 text-xs text-neutral-400">
+                        <li><strong className="text-neutral-300">Wix / Squarespace:</strong> Settings → Custom Code → paste before &lt;/body&gt;.</li>
+                        <li><strong className="text-neutral-300">WordPress:</strong> Appearance → Theme Editor → footer.php, or use a &quot;Header &amp; Footer&quot; plugin.</li>
+                        <li><strong className="text-neutral-300">Webflow:</strong> Project Settings → Custom Code → Footer Code.</li>
+                        <li><strong className="text-neutral-300">Shopify:</strong> Online Store → Themes → Edit Code → theme.liquid before &lt;/body&gt;.</li>
+                      </ol>
+                    </div>
+                    <div className="rounded-[5.6px] border border-iron-border bg-slab-elevated p-4 space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-mute">Optional attributes</p>
+                      <div className="space-y-1 text-xs text-neutral-400 font-mono">
+                        <p><code className="text-amber-300">{`data-color="#c9a227"`}</code> — accent color of the bubble button</p>
+                        <p><code className="text-amber-300">{`data-position="bottom-left"`}</code> — move bubble to left side</p>
+                        <p><code className="text-amber-300">{`data-label="Ask our concierge"`}</code> — hover tooltip text</p>
+                      </div>
+                    </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-zinc-mute">Save a slug in step 1 first.</p>
+                  <div className="space-y-3">
+                    <p className="text-xs text-zinc-mute">Embeds the assistant inside a fixed area on the page. Needs a <code className="rounded bg-neutral-800 px-1 text-amber-300">&lt;div&gt;</code> to mount into.</p>
+                    {embedInfo?.snippet ? (
+                      <div className="relative">
+                        <pre className="overflow-x-auto rounded-[5.6px] border border-neutral-800 bg-neutral-950/80 p-4 pr-16 text-xs leading-relaxed text-neutral-300">
+                          {embedInfo.snippet}
+                        </pre>
+                        <button
+                          type="button"
+                          onClick={() => void copyEmbedSnippet()}
+                          className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1.5 text-[11px] font-medium text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white"
+                        >
+                          <Copy className="h-3 w-3" /> Copy
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-zinc-mute">Save a slug in step 1 first.</p>
+                    )}
+                    <div className="rounded-[5.6px] border border-iron-border bg-slab-elevated p-4 space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-mute">How to install</p>
+                      <ol className="list-inside list-decimal space-y-1.5 text-xs text-neutral-400">
+                        <li>Add <code className="rounded bg-neutral-800 px-1 py-0.5 text-amber-300">{`<div id="staynep-assistant"></div>`}</code> where the assistant should appear.</li>
+                        <li>Paste the <code className="rounded bg-neutral-800 px-1 py-0.5 text-amber-300">&lt;script&gt;</code> tag before <code className="rounded bg-neutral-800 px-1 py-0.5 text-amber-300">&lt;/body&gt;</code>.</li>
+                      </ol>
+                    </div>
+                  </div>
                 )}
-                <div className="rounded-[5.6px] border border-iron-border bg-slab-elevated p-4 space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-mute">How to install on any website</p>
-                  <ol className="list-inside list-decimal space-y-1.5 text-xs text-neutral-400">
-                    <li>Add <code className="rounded bg-neutral-800 px-1 py-0.5 text-amber-300">&lt;div id="staynep-assistant"&gt;&lt;/div&gt;</code> where you want the assistant to appear.</li>
-                    <li>Paste the <code className="rounded bg-neutral-800 px-1 py-0.5 text-amber-300">&lt;script&gt;</code> tag anywhere before <code className="rounded bg-neutral-800 px-1 py-0.5 text-amber-300">&lt;/body&gt;</code>.</li>
-                    <li>The concierge loads inside an iframe — guests can speak directly, no extra setup needed.</li>
-                  </ol>
-                </div>
               </div>
 
               {/* Step 3 — Live preview */}
@@ -664,16 +761,72 @@ export default function SettingsPage() {
 
           {/* CONTACT */}
           {activeTab === "contact" && (
-            <div className={cardCls}>
-              <h2 className="text-lg font-semibold flex items-center gap-2"><Phone className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> Contact Information</h2>
-              <p className="text-neutral-500 text-sm">This information is shared with guests when they ask for contact details.</p>
-              <div className="grid grid-cols-2 gap-5">
-                <div><label className={labelCls}>Phone</label><input className={inputCls} value={config.contact.phone} onChange={e => updateContact("phone", e.target.value)} /></div>
-                <div><label className={labelCls}>Email</label><input className={inputCls} value={config.contact.email} onChange={e => updateContact("email", e.target.value)} /></div>
-                <div><label className={labelCls}>Website</label><input className={inputCls} value={config.contact.website || ""} onChange={e => updateContact("website", e.target.value)} /></div>
-                <div><label className={labelCls}>Address</label><input className={inputCls} value={config.contact.address} onChange={e => updateContact("address", e.target.value)} /></div>
-                <div><label className={labelCls}>City</label><input className={inputCls} value={config.contact.city} onChange={e => updateContact("city", e.target.value)} /></div>
-                <div><label className={labelCls}>Country</label><input className={inputCls} value={config.contact.country} onChange={e => updateContact("country", e.target.value)} /></div>
+            <div className="space-y-5">
+              <div className={cardCls}>
+                <h2 className="text-lg font-semibold flex items-center gap-2"><Phone className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> Contact Information</h2>
+                <p className="text-neutral-500 text-sm">This information is shared with guests when they ask for contact details.</p>
+                <div className="grid grid-cols-2 gap-5">
+                  <div><label className={labelCls}>Phone</label><input className={inputCls} value={config.contact.phone} onChange={e => updateContact("phone", e.target.value)} /></div>
+                  <div><label className={labelCls}>Email</label><input className={inputCls} value={config.contact.email} onChange={e => updateContact("email", e.target.value)} /></div>
+                  <div className="col-span-2"><label className={labelCls}>Website</label><input className={inputCls} value={config.contact.website || ""} onChange={e => updateContact("website", e.target.value)} placeholder="https://yourhotel.com" /></div>
+                  <div><label className={labelCls}>Address</label><input className={inputCls} value={config.contact.address} onChange={e => updateContact("address", e.target.value)} /></div>
+                  <div><label className={labelCls}>City</label><input className={inputCls} value={config.contact.city} onChange={e => updateContact("city", e.target.value)} /></div>
+                  <div><label className={labelCls}>Country</label><input className={inputCls} value={config.contact.country} onChange={e => updateContact("country", e.target.value)} /></div>
+                </div>
+              </div>
+
+              {/* Website RAG sync */}
+              <div className={cardCls}>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-base font-semibold text-cream-text flex items-center gap-2">
+                      <Globe2 className="w-4 h-4 text-ember-orange" /> Train AI from your website
+                    </h2>
+                    <p className="text-sm text-zinc-mute mt-1">
+                      The assistant crawls your website, reads every page, and stores the content as searchable knowledge. Guests can then ask anything about your hotel — even details not in your manual config — and get accurate answers.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void syncWebsite()}
+                    disabled={webSyncing || !config.contact.website?.trim()}
+                    className="vapi-btn-ember vapi-btn-compact shrink-0 disabled:opacity-40"
+                  >
+                    {webSyncing ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Crawling…</>
+                    ) : (
+                      <><RotateCcw className="w-4 h-4" /> Sync now</>
+                    )}
+                  </button>
+                </div>
+
+                {/* Status */}
+                {webSync && webSync.chunkCount > 0 ? (
+                  <div className="flex items-center gap-2 rounded-[5.6px] border border-mint-pulse/25 bg-mint-pulse/8 px-4 py-2.5 text-sm">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-mint-pulse" />
+                    <span className="text-mint-pulse font-medium">{webSync.chunkCount} chunks indexed</span>
+                    {webSync.lastSyncedAt && (
+                      <span className="text-zinc-mute text-xs">
+                        · Last synced {new Date(webSync.lastSyncedAt).toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-[5.6px] border border-iron-border bg-slab-elevated px-4 py-2.5 text-sm text-zinc-mute">
+                    Not synced yet. Add your website URL above, save, then click <strong className="text-bone-text">Sync now</strong>.
+                  </div>
+                )}
+
+                <div className="rounded-[5.6px] border border-iron-border bg-slab-elevated p-4 space-y-1.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-mute">How it works</p>
+                  <ol className="list-inside list-decimal space-y-1 text-xs text-neutral-400">
+                    <li>Crawls up to 15 pages on your website (stays on same domain).</li>
+                    <li>Strips navigation, ads, and boilerplate — keeps meaningful content.</li>
+                    <li>Splits text into ~350-word chunks and embeds each one with Gemini.</li>
+                    <li>When a guest asks a question, the top matching chunks are injected into the AI prompt.</li>
+                    <li>Re-sync any time your website content changes.</li>
+                  </ol>
+                </div>
               </div>
             </div>
           )}
@@ -994,6 +1147,131 @@ export default function SettingsPage() {
                   <li>Assign your phone number to this TeXML Application.</li>
                   <li>Add <code className={`px-1 rounded text-[11px] ${isDark ? "bg-neutral-800 text-amber-300" : "bg-neutral-100 text-neutral-800"}`}>TELNYX_TTS_VOICE</code> and optionally <code className={`px-1 rounded text-[11px] ${isDark ? "bg-neutral-800 text-amber-300" : "bg-neutral-100 text-neutral-800"}`}>TELNYX_PUBLIC_KEY</code> to your environment variables.</li>
                   <li>Call your number — the AI receptionist will answer with a NaturalHD voice!</li>
+                </ol>
+              </div>
+            </div>
+          )}
+
+          {/* PAYMENTS */}
+          {activeTab === "payment" && (
+            <div className="space-y-6">
+              <div className={cardCls}>
+                <h2 className="text-lg font-semibold flex items-center gap-2"><Crown className="w-5 h-5 text-amber-400" /> Deposit & Payments</h2>
+                <p className="text-sm text-zinc-mute">Collect a deposit at the time of booking via Stripe. Guests pay before the booking is confirmed.</p>
+
+                <div className="flex items-center justify-between rounded-[5.6px] border border-iron-border bg-slab-elevated px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium text-cream-text">Enable deposit collection</p>
+                    <p className="text-xs text-zinc-mute mt-0.5">Requires <code className="rounded bg-neutral-800 px-1 text-amber-300">STRIPE_SECRET_KEY</code> in your environment.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setConfig({ ...config, payment: { ...(config.payment ?? { depositType: "percentage", depositAmount: 25, currency: "USD" }), enabled: !(config.payment?.enabled) } })}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 transition-colors ${config.payment?.enabled ? "border-ember-orange bg-ember-orange" : "border-iron-border bg-carbon-surface"}`}
+                    role="switch"
+                    aria-checked={config.payment?.enabled ?? false}
+                  >
+                    <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${config.payment?.enabled ? "translate-x-5" : "translate-x-0"}`} />
+                  </button>
+                </div>
+
+                {config.payment?.enabled && (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className={labelCls}>Deposit type</label>
+                      <select
+                        className={inputCls}
+                        value={config.payment?.depositType ?? "percentage"}
+                        onChange={(e) => setConfig({ ...config, payment: { ...(config.payment!), depositType: e.target.value as "fixed" | "percentage" } })}
+                      >
+                        <option value="percentage">Percentage of total</option>
+                        <option value="fixed">Fixed amount</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>{config.payment?.depositType === "fixed" ? "Deposit amount" : "Deposit percentage (%)"}</label>
+                      <input
+                        type="number"
+                        className={inputCls}
+                        value={config.payment?.depositAmount ?? 25}
+                        onChange={(e) => setConfig({ ...config, payment: { ...(config.payment!), depositAmount: Number(e.target.value) } })}
+                        min={1}
+                        max={config.payment?.depositType === "percentage" ? 100 : undefined}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Currency</label>
+                      <input
+                        className={inputCls}
+                        value={config.payment?.currency ?? "USD"}
+                        onChange={(e) => setConfig({ ...config, payment: { ...(config.payment!), currency: e.target.value.toUpperCase() } })}
+                        placeholder="USD"
+                        maxLength={5}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className={cardCls}>
+                <h3 className="text-[11px] font-semibold uppercase tracking-widest text-zinc-mute">Stripe setup</h3>
+                <ol className="space-y-2 text-sm text-neutral-400 list-decimal list-inside">
+                  <li>Create a free account at <a href="https://stripe.com" target="_blank" rel="noreferrer" className="text-amber-400 underline">stripe.com</a>.</li>
+                  <li>Go to <strong className="text-neutral-300">Developers → API keys</strong> → copy the Secret key.</li>
+                  <li>Add <code className="rounded bg-neutral-800 px-1 text-amber-300">STRIPE_SECRET_KEY=sk_live_...</code> to your environment variables (Vercel → Settings → Env Vars).</li>
+                  <li>Enable the toggle above, set your deposit amount, and save.</li>
+                  <li>Guests will see a <strong className="text-neutral-300">Pay deposit</strong> button after confirming booking details.</li>
+                </ol>
+              </div>
+            </div>
+          )}
+
+          {/* WHATSAPP */}
+          {activeTab === "whatsapp" && (
+            <div className="space-y-6">
+              <div className={cardCls}>
+                <h2 className="text-lg font-semibold flex items-center gap-2"><MessageSquare className="w-5 h-5 text-[#25d366]" /> WhatsApp Chatbot</h2>
+                <p className="text-sm text-zinc-mute">Let guests book and ask questions by texting your hotel&apos;s WhatsApp number. Same AI, same booking flow — no app needed.</p>
+
+                <div className="rounded-[5.6px] border border-iron-border bg-slab-elevated p-4 space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-mute">Webhook URL</p>
+                  <div className="flex items-center gap-2 rounded-[5.6px] border border-neutral-800 bg-neutral-950/80 px-3 py-2">
+                    <code className="flex-1 truncate text-xs text-amber-300">
+                      {typeof window !== "undefined" ? `${window.location.origin}/api/whatsapp/webhook` : "/api/whatsapp/webhook"}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = `${window.location.origin}/api/whatsapp/webhook`;
+                        void navigator.clipboard.writeText(url);
+                        showToast("Webhook URL copied.");
+                      }}
+                      className="shrink-0 inline-flex items-center gap-1 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[11px] text-neutral-200 hover:border-neutral-500 hover:text-white transition-colors"
+                    >
+                      <Copy className="h-3 w-3" /> Copy
+                    </button>
+                  </div>
+                </div>
+
+                <div className={cardCls.replace("p-6", "p-4")}>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-mute mb-3">Environment variables needed</p>
+                  <div className="space-y-1 text-xs text-neutral-400 font-mono">
+                    <p><code className="text-amber-300">TWILIO_ACCOUNT_SID</code> — from twilio.com/console</p>
+                    <p><code className="text-amber-300">TWILIO_AUTH_TOKEN</code> — from twilio.com/console</p>
+                    <p><code className="text-amber-300">TWILIO_WHATSAPP_NUMBER</code> — e.g. <code className="text-neutral-300">+14155238886</code></p>
+                  </div>
+                </div>
+              </div>
+
+              <div className={cardCls}>
+                <h3 className="text-[11px] font-semibold uppercase tracking-widest text-zinc-mute">Setup guide</h3>
+                <ol className="space-y-2 text-sm text-neutral-400 list-decimal list-inside">
+                  <li>Create a Twilio account at <a href="https://twilio.com" target="_blank" rel="noreferrer" className="text-amber-400 underline">twilio.com</a>.</li>
+                  <li>Go to <strong className="text-neutral-300">Messaging → Try it out → WhatsApp</strong> to get a sandbox number.</li>
+                  <li>In the WhatsApp sandbox settings, set <strong className="text-neutral-300">When a message comes in</strong> to your webhook URL above (HTTP POST).</li>
+                  <li>Add the 3 env vars above to your Vercel project.</li>
+                  <li>Redeploy and test by WhatsApp messaging the Twilio sandbox number.</li>
+                  <li>For production: apply for a WhatsApp Business number through Twilio.</li>
                 </ol>
               </div>
             </div>

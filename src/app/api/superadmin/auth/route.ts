@@ -9,6 +9,13 @@ import {
 
 export const dynamic = "force-dynamic";
 
+export async function GET() {
+  const { getSASession } = await import("@/lib/superAdminAuth");
+  const ok = await getSASession();
+  if (!ok) return new Response(JSON.stringify({ ok: false }), { status: 401 });
+  return new Response(JSON.stringify({ ok: true }), { status: 200 });
+}
+
 export async function POST(req: Request) {
   if (!isSuperAdminConfigured()) {
     return NextResponse.json(

@@ -62,9 +62,17 @@ export interface BrandingConfig {
   farewellMessage: string;
 }
 
+export interface PaymentConfig {
+  enabled: boolean;
+  depositType: "fixed" | "percentage";
+  depositAmount: number;
+  currency: string;
+}
+
 export interface HotelConfig {
   branding: BrandingConfig;
   contact: ContactInfo;
+  payment?: PaymentConfig;
   telephony?: {
     webhookUrl: string;
     enabled: boolean;
@@ -172,7 +180,7 @@ export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
   supportedLanguages: ["en-US", "es-ES", "fr-FR", "de-DE", "ja-JP", "zh-CN", "hi-IN", "ne-NP", "ko-KR", "ar-SA", "pt-BR", "ru-RU", "it-IT", "tr-TR", "th-TH", "vi-VN", "id-ID", "nl-NL", "pl-PL", "sv-SE"],
 };
 
-import { hotels, ensureDbReady } from "./db";
+import { hotels } from "./db";
 import { syncInventoryFromConfig } from "./inventorySync";
 import {
   getTenantConfig,

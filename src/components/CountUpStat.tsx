@@ -51,8 +51,8 @@ export function CountUpStat({ value, label, durationMs = 1400 }: CountUpStatProp
     if (!active || parsed.target === null) return;
 
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setCount(parsed.target);
-      return;
+      const frame = requestAnimationFrame(() => setCount(parsed.target!));
+      return () => cancelAnimationFrame(frame);
     }
 
     let frame = 0;
