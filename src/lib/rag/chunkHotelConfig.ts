@@ -26,9 +26,31 @@ export function chunkHotelConfig(config: HotelConfig): HotelKnowledgeChunk[] {
     content: `Phone: ${config.contact.phone}. Email: ${config.contact.email}. Address: ${config.contact.address}, ${config.contact.city}, ${config.contact.country}.${config.contact.website ? ` Website: ${config.contact.website}.` : ""}`,
   });
 
+  if (config.contact.directions?.trim()) {
+    chunks.push({
+      chunkKey: "directions:main",
+      category: "directions",
+      title: "How to get to the hotel",
+      content: `Directions to ${config.branding.hotelName}: ${config.contact.directions.trim()}`,
+    });
+  }
+
+  const parkingParts = [
+    config.contact.parkingInfo?.trim(),
+    config.contact.airportShuttle?.trim(),
+  ].filter(Boolean);
+  if (parkingParts.length > 0) {
+    chunks.push({
+      chunkKey: "parking:main",
+      category: "transport",
+      title: "Parking and airport transfers",
+      content: parkingParts.join(" | "),
+    });
+  }
+
   const policyEntries: [string, string][] = [
-    ["check-in", `Check-in time: ${config.policies.checkInTime}`],
-    ["check-out", `Check-out time: ${config.policies.checkOutTime}`],
+    ["check-in", `Check-in time: ${config.policies.checkInTime}${config.policies.earlyCheckIn ? `. Early check-in: ${config.policies.earlyCheckIn}` : ""}`],
+    ["check-out", `Check-out time: ${config.policies.checkOutTime}${config.policies.lateCheckout ? `. Late checkout: ${config.policies.lateCheckout}` : ""}`],
     ["cancellation", `Cancellation policy: ${config.policies.cancellationPolicy}`],
     ["pets", `Pet policy: ${config.policies.petPolicy}`],
     ["smoking", `Smoking policy: ${config.policies.smokingPolicy}`],
@@ -47,11 +69,14 @@ export function chunkHotelConfig(config: HotelConfig): HotelKnowledgeChunk[] {
 
   for (const room of config.rooms) {
     const key = room.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const amenities = room.amenitiesIncluded?.length
+      ? ` In-room amenities: ${room.amenitiesIncluded.join(", ")}.`
+      : "";
     chunks.push({
       chunkKey: `room:${key}`,
       category: "room",
       title: room.name,
-      content: `${room.name}: ${room.currency}${room.pricePerNight}/night, max ${room.maxOccupancy} guests. ${room.description}${room.category ? ` Category: ${room.category}.` : ""}${room.imageUrl ? ` Image: ${room.imageUrl}` : ""}`,
+      content: `${room.name}: ${room.currency}${room.pricePerNight}/night, max ${room.maxOccupancy} guests. ${room.description}${room.category ? ` Category: ${room.category}.` : ""}${amenities}${room.imageUrl ? ` Image: ${room.imageUrl}` : ""}`,
     });
   }
 
@@ -84,6 +109,24 @@ export function chunkHotelConfig(config: HotelConfig): HotelKnowledgeChunk[] {
       title: faq.question.trim() || `FAQ ${i + 1}`,
       content: `When guests ask "${faq.question.trim()}", respond naturally: ${faq.answer.trim()}`,
     });
+  }
+
+  if (config.operations) {
+    const ops = config.operations;
+    const parts = [
+      ops.frontDeskHours ? `Front desk: ${ops.frontDeskHours}` : null,
+      ops.conciergeHours ? `Concierge: ${ops.conciergeHours}` : null,
+      ops.housekeepingHours ? `Housekeeping: ${ops.housekeepingHours}` : null,
+      ops.roomServiceHours ? `Room service: ${ops.roomServiceHours}` : null,
+    ].filter(Boolean);
+    if (parts.length > 0) {
+      chunks.push({
+        chunkKey: "operations:hours",
+        category: "operations",
+        title: "Hotel operating hours",
+        content: parts.join(". "),
+      });
+    }
   }
 
   if (config.receptionistPersona?.trim()) {

@@ -19,6 +19,8 @@ export interface RoomType {
   category?: string;
   /** Public URL (or local path like /icon.svg) used when rendering room images. */
   imageUrl?: string;
+  /** In-room amenities, e.g. ["Free WiFi", "Safe", "Mini-bar", "AC", "Smart TV"] */
+  amenitiesIncluded?: string[];
 }
 
 export interface DiningVenue {
@@ -42,6 +44,10 @@ export interface HotelPolicy {
   smokingPolicy: string;
   extraBedPolicy: string;
   childPolicy: string;
+  /** e.g. "Available from 11 AM for $30 fee, subject to availability" */
+  earlyCheckIn?: string;
+  /** e.g. "Available until 2 PM for $30 fee, subject to availability" */
+  lateCheckout?: string;
 }
 
 export interface ContactInfo {
@@ -51,6 +57,12 @@ export interface ContactInfo {
   address: string;
   city: string;
   country: string;
+  /** e.g. "Take Exit 5 off Ring Road, turn left on Hotel Lane. 5 min from city centre." */
+  directions?: string;
+  /** e.g. "Valet $25/day · Self-park Level B2 $15/day · EV charging available" */
+  parkingInfo?: string;
+  /** e.g. "Complimentary shuttle every 30 min from Terminal 2 — call front desk to arrange" */
+  airportShuttle?: string;
 }
 
 export interface BrandingConfig {
@@ -69,9 +81,17 @@ export interface PaymentConfig {
   currency: string;
 }
 
+export interface HotelOperations {
+  frontDeskHours?: string;    // e.g. "24/7"
+  conciergeHours?: string;    // e.g. "8 AM – 10 PM"
+  housekeepingHours?: string; // e.g. "8 AM – 6 PM"
+  roomServiceHours?: string;  // e.g. "6 AM – midnight"
+}
+
 export interface HotelConfig {
   branding: BrandingConfig;
   contact: ContactInfo;
+  operations?: HotelOperations;
   payment?: PaymentConfig;
   telephony?: {
     webhookUrl: string;
@@ -119,6 +139,15 @@ export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
     address: "1 Royal Marina Drive",
     city: "Monaco",
     country: "Monaco",
+    directions: "Located on Royal Marina Drive. From the city centre, head south on Avenue de la Costa for 500m, turn right at the marina roundabout.",
+    parkingInfo: "Valet parking available at the main entrance. Self-park underground on Level B1–B2 at €20/day.",
+    airportShuttle: "Complimentary helicopter transfer from Nice Côte d'Azur Airport (15 min). Limousine service also available — contact concierge to arrange.",
+  },
+  operations: {
+    frontDeskHours: "24/7",
+    conciergeHours: "7 AM – 11 PM",
+    housekeepingHours: "8 AM – 6 PM",
+    roomServiceHours: "6 AM – midnight",
   },
   policies: {
     checkInTime: "3:00 PM",

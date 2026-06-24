@@ -1,27 +1,59 @@
 "use client";
 
-const CSRF_COOKIE = "csrf-token";
-const CSRF_HEADER = "x-csrf-token";
+/**
+ * Guest auth client.
+ *
+ * The concierge runs inside a CROSS-ORIGIN <iframe> on the hotel's website,
+ * where browsers (Brave/Safari, and Chrome going forward) block third-party
+ * cookies. So the guest session cannot ride on a cookie. Instead the server
+ * returns a session token in the login/register response body; we persist it in
+ * localStorage (partitioned per top-level site inside the iframe) and send it as
+ * `Authorization: Bearer <token>` on every authenticated request.
+ */
+const GUEST_TOKEN_KEY = "staynep_guest_token";
 
-function getCookie(name: string): string | null {
-  if (typeof document === "undefined") return null;
-  const parts = document.cookie.split(";").map((v) => v.trim());
-  const found = parts.find((entry) => entry.startsWith(`${name}=`));
-  return found ? decodeURIComponent(found.slice(name.length + 1)) : null;
+export function getGuestToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(GUEST_TOKEN_KEY);
+  } catch {
+    return null;
+  }
 }
 
-function withCsrfHeaders(init?: RequestInit): RequestInit {
-  const method = (init?.method || "GET").toUpperCase();
-  const headers = new Headers(init?.headers || {});
-
-  if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
-    const csrfToken = getCookie(CSRF_COOKIE);
-    if (csrfToken && !headers.has(CSRF_HEADER)) {
-      headers.set(CSRF_HEADER, csrfToken);
-    }
+function setGuestToken(token: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(GUEST_TOKEN_KEY, token);
+  } catch {
+    /* storage unavailable (private mode / blocked) — auth degrades to this session only */
   }
+}
 
-  return { ...init, headers, credentials: "include" };
+function clearGuestToken(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(GUEST_TOKEN_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Build headers carrying the guest Bearer token. Exported so other in-iframe
+ * callers (chat, STT, feedback) can authenticate the guest too.
+ */
+export function guestAuthHeaders(base?: HeadersInit): Headers {
+  const headers = new Headers(base || {});
+  const token = getGuestToken();
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return headers;
+}
+
+function withAuth(init?: RequestInit): RequestInit {
+  return { ...init, headers: guestAuthHeaders(init?.headers), credentials: "include" };
 }
 
 export interface GuestProfile {
@@ -39,12 +71,8 @@ export interface GuestProfile {
   loyaltyLabel: string;
 }
 
-export async function ensureGuestCsrf(): Promise<void> {
-  await fetch("/api/auth/csrf", { credentials: "include" });
-}
-
 export async function fetchGuestMe(): Promise<GuestProfile | null> {
-  const res = await fetch("/api/guest/auth/me", { credentials: "include" });
+  const res = await fetch("/api/guest/auth/me", withAuth());
   if (res.status === 401) return null;
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "Failed to load guest profile");
@@ -58,32 +86,35 @@ export async function guestRegister(input: {
   phone?: string;
   preferredLanguage?: string;
 }): Promise<GuestProfile> {
-  await ensureGuestCsrf();
-  const res = await fetch("/api/guest/auth/register", withCsrfHeaders({
+  const res = await fetch("/api/guest/auth/register", withAuth({
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   }));
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "Registration failed");
+  if (data.token) setGuestToken(data.token as string);
   return data.guest as GuestProfile;
 }
 
 export async function guestLogin(email: string, password: string): Promise<GuestProfile> {
-  await ensureGuestCsrf();
-  const res = await fetch("/api/guest/auth/login", withCsrfHeaders({
+  const res = await fetch("/api/guest/auth/login", withAuth({
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   }));
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "Login failed");
+  if (data.token) setGuestToken(data.token as string);
   return data.guest as GuestProfile;
 }
 
 export async function guestLogout(): Promise<void> {
-  await ensureGuestCsrf();
-  await fetch("/api/guest/auth/logout", withCsrfHeaders({ method: "POST" }));
+  try {
+    await fetch("/api/guest/auth/logout", withAuth({ method: "POST" }));
+  } finally {
+    clearGuestToken();
+  }
 }
 
 export interface GuestBooking {
@@ -98,7 +129,7 @@ export interface GuestBooking {
 }
 
 export async function fetchGuestBookings(): Promise<GuestBooking[]> {
-  const res = await fetch("/api/guest/bookings", { credentials: "include" });
+  const res = await fetch("/api/guest/bookings", withAuth());
   if (res.status === 401) return [];
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "Failed to load bookings");
@@ -106,8 +137,7 @@ export async function fetchGuestBookings(): Promise<GuestBooking[]> {
 }
 
 export async function cancelGuestBooking(id: string): Promise<void> {
-  await ensureGuestCsrf();
-  const res = await fetch(`/api/guest/bookings/${id}`, withCsrfHeaders({
+  const res = await fetch(`/api/guest/bookings/${id}`, withAuth({
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "cancel" }),

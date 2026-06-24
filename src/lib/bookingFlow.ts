@@ -10,10 +10,12 @@ import { notifyBookingComplete } from "@/lib/bookingNotify";
 import {
   formatAlternativeSuggestions,
   formatAvailabilityList,
+  formatAvailableWindows,
+  findNextAvailableWindows,
   getAvailabilitySnapshot,
   suggestAlternatives,
 } from "@/lib/availabilityQuery";
-import { detectDateRange, type ChatHistoryMessage } from "@/lib/dateParsing";
+import { detectDateRange, todayIsoDate, type ChatHistoryMessage } from "@/lib/dateParsing";
 import { getKeywordsForLanguage } from "@/lib/languages";
 
 export type BookingSummary = {
@@ -50,7 +52,18 @@ export type BookingFlowResult = {
 
 type GuestProfile = { id: string; name: string; phone: string | null; email: string };
 
+/** Guest-authored text only — used for extracting facts the guest provided
+ *  (room type, dates, name, phone, room count). Never includes the assistant's
+ *  own messages, which may contain examples or confirmations that would be
+ *  misread as guest input. */
 function conversationText(message: string, history: ChatHistoryMessage[]): string {
+  const userHistory = history.filter((h) => h.role === "user");
+  return `${userHistory.map((h) => h.content).join(" ")} ${message}`;
+}
+
+/** Full conversation text (both roles) — used only where the assistant's
+ *  messages legitimately carry data, e.g. a booking ID echoed in a confirmation. */
+function fullConversationText(message: string, history: ChatHistoryMessage[]): string {
   return `${history.map((h) => h.content).join(" ")} ${message}`;
 }
 
@@ -62,6 +75,30 @@ function matchesIntent(message: string, langCode: string, extra: string[]): bool
 
 export function isBookingIntent(message: string, langCode: string): boolean {
   if (isCancelIntent(message) || isModifyIntent(message)) return false;
+  const lower = message.toLowerCase();
+
+  // Price / pure-info questions mention "room" but are NOT booking intents —
+  // let RAG answer them. ("how much is the deluxe room?", "what's the rate?")
+  if (/\b(how much|what'?s the (price|cost|rate)|price of|cost of|rate for|do you have a (pool|gym|spa))\b/i.test(lower)) {
+    return false;
+  }
+
+  // Explicit booking verbs
+  if (/\b(book|reserve|reservation|make a booking|hold a room)\b/i.test(lower)) return true;
+
+  // Natural phrasings: "(can I) get/need/want/looking for … a room/suite/stay"
+  if (/\b(get|need|want|looking for|would like|i'?d like|grab|take)\b[^.?!]{0,40}\b(room|suite|stay)\b/i.test(lower)) {
+    return true;
+  }
+
+  // "a room/suite" combined with a date or time cue
+  if (
+    /\b(room|suite)\b/i.test(lower) &&
+    /\b(tonight|tomorrow|this weekend|next week|in \d+ days?|for \d+ nights?|\d+ nights?|from|check.?in|\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2})\b/i.test(lower)
+  ) {
+    return true;
+  }
+
   return matchesIntent(message, langCode, ["make a booking", "hold a room"]);
 }
 
@@ -95,6 +132,35 @@ export function isNegative(message: string): boolean {
   const trimmed = message.trim();
   if (/^(no|nope|nah|wait|stop|cancel|don't|not yet)\b/i.test(trimmed)) return true;
   return /\b(no|nope|not yet|hold on|change that)\b/i.test(trimmed) && trimmed.length < 40;
+}
+
+/**
+ * Returns true when the message is a clear off-topic info request that should
+ * NOT be routed to the booking confirmation flow, even when a pendingBooking
+ * exists. Directions, parking, amenities, hotel services — anything that isn't
+ * about confirming/changing the current booking.
+ */
+export function isTopicEscape(message: string): boolean {
+  // Directions / how to get here
+  if (/\b(how do i get|directions?|navigate to|where is the hotel|how to (?:get|reach|find|arrive)|get to the hotel|getting here|find you)\b/i.test(message)) return true;
+  // Parking / transport (only if no booking verb)
+  if (
+    /\b(park(?:ing)?|valet|shuttle|transfer|taxi|uber|lyft|transport(?:ation)?|airport pick.?up)\b/i.test(message) &&
+    !/\b(book|reserv|cancel|modify|confirm)\b/i.test(message)
+  ) return true;
+  // Hotel amenities / services (only when not combined with booking verbs)
+  if (
+    /\b(wifi|wi-fi|internet|password|pool|gym|fitness|spa|wellness|breakfast|restaurant|dining|menu|bar|lounge|opening hours|check-in time|check-out time|amenities|facilities|concierge|laundry|room service)\b/i.test(message) &&
+    !/\b(book|reserv|cancel|modify|confirm|yes|no|sure|ok)\b/i.test(message)
+  ) return true;
+  return false;
+}
+
+/** "When is X available?" / "Do you have any free dates?" without specific dates. */
+export function isFindAvailableDatesIntent(message: string): boolean {
+  return /\b(when|which dates?|what dates?|any dates?|next available|earliest|soonest|free dates?|open dates?)\b/i.test(message) &&
+    /\b(available|free|open|book|stay|room|suite|vacancy)\b/i.test(message) &&
+    !/\b(\d{4}-\d{2}-\d{2}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d+(st|nd|rd|th))\b/i.test(message);
 }
 
 export function isSpecialRequestIntent(message: string): boolean {
@@ -135,14 +201,18 @@ function mergePendingBooking(
   config: HotelConfig
 ): PendingBooking {
   const roomNames = config.rooms.map((r) => r.name);
-  const dateRange = detectDateRange(message, history);
-  const details = extractGuestDetails(message, history);
+  // Detect changes from the CURRENT message only — otherwise stale dates/room
+  // from earlier in the conversation would override a guest's correction
+  // ("actually change it to <new dates>").
+  const dateRange = detectDateRange(message, []);
+  const details = extractGuestDetails(message, []);
   const note = extractSpecialRequestNote(message);
+  const newRooms = extractRequestedRooms(message, []);
   return {
-    roomType: detectRoomType(message, history, roomNames) ?? pending.roomType,
+    roomType: detectRoomType(message, [], roomNames) ?? pending.roomType,
     checkIn: dateRange.checkIn ?? pending.checkIn,
     checkOut: dateRange.checkOut ?? pending.checkOut,
-    rooms: extractRequestedRooms(message, history) || pending.rooms,
+    rooms: newRooms > 1 ? newRooms : pending.rooms,
     guestName: details.guestName ?? pending.guestName,
     guestPhone: details.guestPhone ?? pending.guestPhone,
     guestEmail: details.guestEmail ?? pending.guestEmail,
@@ -265,28 +335,121 @@ async function handleSpecialRequest(
   };
 }
 
+// Generic words shared across room names — not distinctive enough to identify
+// a specific room on their own (e.g. "room", "suite").
+const ROOM_NAME_STOPWORDS = new Set([
+  "room", "rooms", "suite", "suites", "the", "a", "an", "of", "with", "and",
+]);
+
+function roomKeywords(roomName: string): string[] {
+  return roomName
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length > 1 && !ROOM_NAME_STOPWORDS.has(w));
+}
+
 function detectRoomType(message: string, history: ChatHistoryMessage[], roomNames: string[]): string | null {
   const source = conversationText(message, history).toLowerCase();
+
+  // 1) Full room name appears verbatim — strongest signal.
   for (const roomName of roomNames) {
     if (source.includes(roomName.toLowerCase())) return roomName;
   }
+
+  // 2) Distinctive-keyword overlap, so "deluxe room" / "deluxe" / "king"
+  //    resolve to "Deluxe King Room". Pick the room with the most matched
+  //    keywords; bail out on a tie so we ask instead of guessing wrong.
+  const tokens = new Set(source.split(/[^a-z0-9]+/).filter(Boolean));
+  let best: { name: string; score: number } | null = null;
+  let tied = false;
+  for (const roomName of roomNames) {
+    const keywords = roomKeywords(roomName);
+    const score = keywords.filter((kw) => tokens.has(kw)).length;
+    if (score === 0) continue;
+    if (!best || score > best.score) {
+      best = { name: roomName, score };
+      tied = false;
+    } else if (score === best.score) {
+      tied = true;
+    }
+  }
+  if (best && !tied) return best.name;
+
   return null;
 }
 
-function extractGuestDetails(message: string, history: ChatHistoryMessage[]) {
+// Words that should never be captured as part of a name (they signal the
+// guest moved on to another detail in the same sentence).
+const NAME_STOPWORDS = /\b(and|my|phone|number|email|mail|tel|mobile|cell|contact|is|at|on|for|from|to|the|a|please|book|reserve|room|suite|night|nights|check)\b/i;
+
+function cleanName(raw: string): string | undefined {
+  let name = raw.trim();
+  // Cut the name at the first stopword — "John Smith and my number" → "John Smith"
+  const stop = name.search(NAME_STOPWORDS);
+  if (stop > 0) name = name.slice(0, stop).trim();
+  // Strip trailing punctuation/connectors
+  name = name.replace(/[,;.\s]+$/, "").trim();
+  // Reasonable name: 1–4 words, each starting with a letter
+  if (!name || name.length < 2) return undefined;
+  const words = name.split(/\s+/);
+  if (words.length > 4) return undefined;
+  return name;
+}
+
+function extractPhone(source: string): string | undefined {
+  // Strip date-like tokens first so ISO dates (2026-07-01) and slash dates
+  // (07/01/2026) are never mistaken for phone numbers.
+  const cleaned = source
+    .replace(/\b\d{4}-\d{2}-\d{2}\b/g, " ")
+    .replace(/\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/g, " ");
+  const match = cleaned.match(/(\+?\d[\d\s\-()]{6,}\d)/);
+  if (!match) return undefined;
+  const candidate = match[1].replace(/\s+/g, " ").trim();
+  // A real phone has 7–15 digits
+  const digitCount = (candidate.match(/\d/g) ?? []).length;
+  if (digitCount < 7 || digitCount > 15) return undefined;
+  return candidate;
+}
+
+export function extractGuestDetails(message: string, history: ChatHistoryMessage[]) {
   const source = conversationText(message, history);
   const emailMatch = source.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-z]{2,}/);
-  const phoneMatch = source.match(/(\+?\d[\d\s\-()]{7,}\d)/);
-  const nameMatch = source.match(/\b(?:my name is|name is|i am|this is)\s+([A-Za-z][A-Za-z\s.'-]{1,60})/i);
+
+  // Strong prefixes are unambiguous — accept any case ("my name is john").
+  const strongName = source.match(
+    /\b(?:my name is|name is|name'?s|i am|i'm|this is|it's|its|call me|booking for|reservation for|under the name)\s+([A-Za-z][A-Za-z\s.'-]{1,60})/i
+  );
+  // Weak prefixes ("for X", "under X") are ambiguous ("for two nights"), so
+  // require a Capitalized word to reduce false positives.
+  const weakName = source.match(/\b(?:for|under)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z'.-]+){0,2})/);
+  let guestName = strongName?.[1]
+    ? cleanName(strongName[1])
+    : weakName?.[1]
+      ? cleanName(weakName[1])
+      : undefined;
+
+  // Fallback: a bare "Firstname Lastname" at the START of the current message,
+  // e.g. "John Carter, 5551234567" or just "John Carter". Excludes room-name
+  // words to avoid capturing "Deluxe King Room" as a guest name.
+  if (!guestName) {
+    const ROOM_WORDS = /\b(room|suite|deluxe|king|queen|standard|penthouse|villa|double|single|twin|grand|royal)\b/i;
+    const lead = message.trim().match(/^([A-Z][a-z]+(?:\s+[A-Z][a-z'.-]+){1,2})\b/);
+    if (lead?.[1] && !ROOM_WORDS.test(lead[1])) {
+      const wholeIsName = /^[A-Z][a-z]+(?:\s+[A-Z][a-z'.-]+){1,2}[\s,]*$/.test(message.trim());
+      const hasPhone = /\d{7,}/.test(message.replace(/[\s\-()]/g, ""));
+      if (wholeIsName || hasPhone) guestName = cleanName(lead[1]);
+    }
+  }
+
   return {
-    guestName: nameMatch?.[1]?.trim(),
-    guestPhone: phoneMatch?.[1]?.replace(/\s+/g, " ").trim(),
+    guestName,
+    guestPhone: extractPhone(source),
     guestEmail: emailMatch?.[0]?.trim(),
   };
 }
 
 function extractBookingId(message: string, history: ChatHistoryMessage[]): string | null {
-  const source = conversationText(message, history);
+  const source = fullConversationText(message, history);
   const uuid = source.match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i);
   if (uuid) return uuid[0];
   const shortId = source.match(/\b(?:booking|confirmation|reference)\s*(?:id|#|:)?\s*([0-9a-f]{8})\b/i);
@@ -296,9 +459,16 @@ function extractBookingId(message: string, history: ChatHistoryMessage[]): strin
 }
 
 function extractRequestedRooms(message: string, history: ChatHistoryMessage[]): number {
-  const source = conversationText(message, history);
-  const match = source.match(/\b(\d+)\s*(?:rooms?|room)\b/i);
-  return Math.max(1, Number(match?.[1] || 1) || 1);
+  // Strip dates first so "2026-07-06" can't bleed "06" into the room count.
+  const source = conversationText(message, history)
+    .replace(/\b\d{4}-\d{2}-\d{2}\b/g, " ")
+    .replace(/\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/g, " ");
+  // "2 rooms", "2 suites", or "2 Deluxe King Rooms" (number + up to 3 words + room/suite)
+  const match =
+    source.match(/\b([1-9]\d?)\s+(?:[a-z]+\s+){0,3}(?:rooms?|suites?)\b/i) ||
+    source.match(/\b([1-9]\d?)\s*(?:rooms?|suites?)\b/i);
+  const n = Number(match?.[1] || 1) || 1;
+  return Math.max(1, Math.min(20, n));
 }
 
 async function resolveBookingRecord(
@@ -368,6 +538,43 @@ function serializeBookingReply(input: {
     return `Done — booking #${shortId} is updated: ${input.rooms} ${input.roomType} room(s) from ${input.checkIn} to ${input.checkOut} for ${input.guestName}.`;
   }
   return `You're all set! Booking #${shortId} is confirmed at ${input.hotelName}: ${input.rooms} ${input.roomType} room(s) from ${input.checkIn} to ${input.checkOut} for ${input.guestName}. A confirmation has been sent if we have your email.`;
+}
+
+async function handleFindAvailableDates(
+  message: string,
+  history: ChatHistoryMessage[],
+  config: HotelConfig
+): Promise<BookingFlowResult> {
+  const roomNames = config.rooms.map((r) => r.name);
+  const roomType = detectRoomType(message, history, roomNames);
+
+  // Try to extract desired stay length from message
+  const nightsMatch = conversationText(message, history).match(/\b(\d+)\s*(?:night|nights|day|days)\b/i);
+  const stayNights = nightsMatch ? Math.min(30, Math.max(1, Number(nightsMatch[1]))) : 2;
+
+  if (roomType) {
+    const windows = await findNextAvailableWindows(config, roomType, stayNights, { maxResults: 3 });
+    return { handled: true, reply: formatAvailableWindows(roomType, windows, stayNights), escalate: false };
+  }
+
+  // No room specified — check all room types for 1 night
+  const snapshot = await getAvailabilitySnapshot(config, new Date().toISOString().slice(0, 10),
+    (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })()
+  );
+  const available = snapshot.filter((r) => r.available > 0);
+  if (!available.length) {
+    return {
+      handled: true,
+      reply: "We're fully booked tonight. Which room type and dates are you looking at? I can check upcoming availability.",
+      escalate: false,
+    };
+  }
+  const list = available.map((r) => `${r.roomType} (${r.available} rooms, ${r.currency}${r.pricePerNight}/night)`).join("; ");
+  return {
+    handled: true,
+    reply: `We have availability right now: ${list}. Which room type interests you, and how many nights are you thinking?`,
+    escalate: false,
+  };
 }
 
 async function handleAvailabilityQuery(
@@ -560,7 +767,16 @@ async function handleNewBooking(
   if (dateRange.parseFailed) {
     return {
       handled: true,
-      reply: "I want to get your dates right — could you share check-in and check-out? For example, June 10 to June 12, or 2026-06-10 to 2026-06-12.",
+      reply: "I want to get your dates right — could you share your check-in and check-out dates? You can say something like \"next Friday for two nights\" or give me the exact dates.",
+      escalate: false,
+    };
+  }
+
+  // Reject past dates before doing anything else
+  if (dateRange.checkIn && dateRange.checkIn < todayIsoDate()) {
+    return {
+      handled: true,
+      reply: `It looks like ${dateRange.checkIn} is in the past. What dates are you looking at for your stay?`,
       escalate: false,
     };
   }
@@ -569,13 +785,20 @@ async function handleNewBooking(
     if (dateRange.checkIn && dateRange.needsClarification) {
       return {
         handled: true,
-        reply: `Perfect — starting ${dateRange.checkIn}. How many nights, or what's your check-out date?`,
+        reply: `Got it — arriving ${dateRange.checkIn}. How many nights will you be staying, or what's your check-out date?`,
         escalate: false,
       };
     }
+    // Vary the wording so the same phrase never fires twice in a row
+    const askDatesReplies = [
+      "I'd be happy to book that for you. What are your check-in and check-out dates?",
+      "Sure, let's get that sorted. Which dates were you thinking for check-in and check-out?",
+      "Happy to help — could you share your arrival and departure dates?",
+      "Of course! What dates work for your stay — check-in and check-out?",
+    ];
     return {
       handled: true,
-      reply: "I'd be happy to book that for you. What are your check-in and check-out dates?",
+      reply: askDatesReplies[message.length % askDatesReplies.length],
       escalate: false,
     };
   }
@@ -659,7 +882,7 @@ export function shouldRunBookingFlow(
   roomNames: string[] = [],
   pendingBooking?: PendingBooking | null
 ): boolean {
-  if (pendingBooking) return true;
+  if (pendingBooking && !isTopicEscape(message)) return true;
   if (isAffirmative(message) || isNegative(message)) {
     const recent = history.slice(-2);
     if (recent.some((h) => /\b(confirm|just to confirm|reply yes)\b/i.test(h.content))) return true;
@@ -667,6 +890,7 @@ export function shouldRunBookingFlow(
   if (isSpecialRequestIntent(message)) return true;
   if (isCancelIntent(message) || isModifyIntent(message)) return true;
   if (isAvailabilityIntent(message, langCode)) return true;
+  if (isFindAvailableDatesIntent(message)) return true;
   if (isBookingIntent(message, langCode)) return true;
 
   const recent = history.slice(-4);
@@ -709,6 +933,10 @@ export async function handleGuestBookingFlow(params: {
 
   if (isAvailabilityIntent(message, langCode)) {
     return handleAvailabilityQuery(message, history, config);
+  }
+
+  if (isFindAvailableDatesIntent(message)) {
+    return handleFindAvailableDates(message, history, config);
   }
 
   if (isBookingIntent(message, langCode)) {

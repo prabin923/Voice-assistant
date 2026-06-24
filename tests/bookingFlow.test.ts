@@ -24,9 +24,12 @@ describe("dateParsing", () => {
     expect(result.checkOut).toBe(addDays(tomorrow, 1));
   });
 
-  it("parses named month dates", () => {
+  it("parses named month dates (rolling past bare dates to next year)", () => {
     const result = detectDateRange("June 15 to June 18", []);
-    const year = new Date().getUTCFullYear();
+    const today = todayIsoDate();
+    const thisYear = new Date().getUTCFullYear();
+    // Bare "June 15" rolls to next year if it's already past today
+    const year = `${thisYear}-06-15` < today ? thisYear + 1 : thisYear;
     expect(result.checkIn).toBe(`${year}-06-15`);
     expect(result.checkOut).toBe(`${year}-06-18`);
   });

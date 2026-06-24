@@ -125,13 +125,18 @@ function isStrongLexicalMatch(chunks: RetrievedChunk[]): boolean {
   return chunks.length >= 2 && (chunks[0]?.score ?? 0) >= 0.5;
 }
 
-/** Index or refresh all hotel config chunks (skips unchanged content). */
+/** Index or refresh all hotel config chunks (skips unchanged content).
+ *  Only touches config-origin chunks — website chunks (web:* prefix) are
+ *  managed exclusively by syncWebsiteChunks() in websiteCrawler.ts.
+ */
 export async function syncKnowledgeIndex(config: HotelConfig): Promise<void> {
   await ensureDbReady();
   const chunks = chunkHotelConfig(config);
   const model = activeEmbedModel();
 
+  // Scope to config-origin chunks only — never touch web:* chunks here
   const existing = await prisma.knowledgeChunk.findMany({
+    where: { chunkKey: { not: { startsWith: "web:" } } },
     select: { chunkKey: true, contentHash: true, embedModel: true },
   });
   const existingMap = new Map(existing.map((row) => [row.chunkKey, row]));
@@ -214,6 +219,17 @@ function isMissingTableError(err: unknown): boolean {
 export async function getKnowledgeChunkCount(): Promise<number> {
   const rows = await loadIndexedChunks();
   return rows.length;
+}
+
+/** Returns chunk counts split by source — useful for the settings UI. */
+export async function getKnowledgeChunkStats(): Promise<{
+  total: number;
+  config: number;
+  website: number;
+}> {
+  const rows = await loadIndexedChunks();
+  const website = rows.filter((r) => r.chunkKey.startsWith("web:")).length;
+  return { total: rows.length, config: rows.length - website, website };
 }
 
 /** Semantic search over indexed hotel knowledge (cached index + lexical fast path). */

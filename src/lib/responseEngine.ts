@@ -34,7 +34,7 @@ function getOpenAI() {
 }
 
 function historyLimit(channel: "voice" | "text"): number {
-  return channel === "voice" ? 4 : 8;
+  return channel === "voice" ? 6 : 12;
 }
 
 function getGeminiModel(channel: "voice" | "text"): GenerativeModel {
@@ -46,8 +46,8 @@ function getGeminiModel(channel: "voice" | "text"): GenerativeModel {
     model: GEMINI_MODEL,
     systemInstruction: getCachedSystemInstruction(channel),
     generationConfig: {
-      maxOutputTokens: channel === "voice" ? 72 : 320,
-      temperature: channel === "voice" ? 0.6 : 0.45,
+      maxOutputTokens: channel === "voice" ? 90 : 450,
+      temperature: channel === "voice" ? 0.3 : 0.4,
     },
   });
   geminiModelCache.set(cacheKey, model);
@@ -59,6 +59,9 @@ export function invalidateResponseEngineCache(): void {
   instructionCache = null;
   geminiModelCache.clear();
 }
+
+// Invalidate on module load so stale models from previous deploys don't persist
+geminiModelCache.clear();
 
 function buildSystemInstructionRaw(channel: "voice" | "text" = "text", fullHotelData = false): string {
   const config = getHotelConfig();
@@ -79,14 +82,26 @@ function buildSystemInstructionRaw(channel: "voice" | "text" = "text", fullHotel
 NEVER [ESCALATE]: FAQ, amenities, dining hours, policies, room availability, room bookings, or restaurant table reservations — you handle these autonomously.`;
 
   const autonomousRules = `AUTONOMOUS CONCIERGE — no staff needed for:
-- Any hotel information (policies, amenities, dining, rooms, FAQ, directions, contact)
+- Any hotel information (policies, amenities, dining, rooms, FAQ, directions, parking, contact)
 - Room availability, booking, modification, cancellation (handled by the system when guests provide dates/details)
 - Restaurant table reservations at hotel venues (handled by the system)
 Answer confidently from HOTEL FACTS. Never say you cannot book rooms or tables.`;
 
+  const groundingRules = `GROUNDING RULES — strictly enforced:
+- Answer ONLY from the HOTEL FACTS provided in each message. Never invent facts.
+- If the answer is not in HOTEL FACTS, say: "I don't have that detail — our front desk can help at ${getHotelConfig().contact.phone}."
+- NEVER make up room features, prices, policies, availability, or amenities not explicitly listed.
+- NEVER confirm an action the system has not yet completed ("I've booked your room" must only follow a confirmed booking).`;
+
+  const varietyRules = `CONVERSATION VARIETY — always apply:
+- Vary your opening words every turn. Never start two consecutive replies identically.
+- Do not re-explain something already covered earlier in this conversation.
+- Do not repeat the same offer (e.g. "Would you like me to book?") more than once unless the guest changes topic.
+- Use different sentence structures: statements, questions, and suggestions — not just answers.`;
+
   const hotelFactsRule = fullHotelData
     ? ""
-    : `Each guest message includes HOTEL FACTS (and DIALOGUE EXAMPLES when retrieved) for that question. Use only those facts. Mirror the dialogue tone — concise, warm, conversational.`;
+    : `Each guest message includes HOTEL FACTS (and DIALOGUE EXAMPLES when retrieved) for that specific question. Use only those facts. Mirror the dialogue tone — concise, warm, conversational. If the guest asks something not covered by the HOTEL FACTS, politely say you don't have that detail and offer the front desk number.`;
 
   const hotelDataBlock = fullHotelData
     ? `\nHOTEL DATA:\n${buildHotelDataBlock(config, compact)}\n`
@@ -97,6 +112,8 @@ ${config.receptionistPersona}
 ${voiceRules}
 Answer ONLY what the guest asked. Use conversation context when relevant.
 ${autonomousRules}
+${groundingRules}
+${varietyRules}
 ${hotelFactsRule}${hotelDataBlock}
 ${escalationRules}
 For room availability with dates, ask for check-in/check-out — inventory is checked automatically.
@@ -137,14 +154,16 @@ export interface ChatMessage {
 async function prepareUserMessage(
   message: string,
   conversationHistory: ChatMessage[],
-  channel: "voice" | "text"
+  channel: "voice" | "text",
+  langCode?: string
 ): Promise<string> {
   const config = getHotelConfig();
   const { message: augmented } = await augmentUserMessageWithHotelContext(
     message,
     conversationHistory,
     config,
-    channel
+    channel,
+    langCode
   );
   return augmented;
 }
@@ -156,7 +175,7 @@ async function getAssistantResponseWithOpenAI(
   channel: "voice" | "text" = "text"
 ): Promise<{ reply: string; escalate: boolean; reason?: EscalationReason }> {
   const limit = historyLimit(channel);
-  const userContent = await prepareUserMessage(message, conversationHistory, channel);
+  const userContent = await prepareUserMessage(message, conversationHistory, channel, langCode);
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: getCachedSystemInstruction(channel) },
     ...conversationHistory.slice(-limit).map((msg) => ({
@@ -169,8 +188,8 @@ async function getAssistantResponseWithOpenAI(
   const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4o-mini",
     messages,
-    max_tokens: channel === "voice" ? 72 : 320,
-    temperature: channel === "voice" ? 0.6 : 0.45,
+    max_tokens: channel === "voice" ? 90 : 450,
+    temperature: channel === "voice" ? 0.3 : 0.4,
   });
 
   const text = completion.choices[0]?.message?.content?.trim() ?? "";
@@ -185,7 +204,7 @@ async function getAssistantResponseWithGemini(
   channel: "voice" | "text" = "text"
 ): Promise<{ reply: string; escalate: boolean; reason?: EscalationReason }> {
   const limit = historyLimit(channel);
-  const userContent = await prepareUserMessage(message, conversationHistory, channel);
+  const userContent = await prepareUserMessage(message, conversationHistory, channel, langCode);
   const history: Content[] = conversationHistory.slice(-limit).map((msg) => ({
     role: msg.role === "user" ? "user" : "model",
     parts: [{ text: msg.content }],
@@ -268,7 +287,7 @@ export async function* streamAssistantResponse(
   }
 
   const limit = historyLimit(channel);
-  const userContent = await prepareUserMessage(message, conversationHistory, channel);
+  const userContent = await prepareUserMessage(message, conversationHistory, channel, langCode);
   const history: Content[] = conversationHistory.slice(-limit).map((msg) => ({
     role: msg.role === "user" ? "user" : "model",
     parts: [{ text: msg.content }],

@@ -19,6 +19,7 @@ import { QuickActionsBar } from "@/components/QuickActionsBar";
 import { ServiceHealthBar } from "@/components/ServiceHealthBar";
 import { GuestAuthPanel, loadGuestProfile } from "@/components/GuestAuthPanel";
 import type { GuestProfile } from "@/lib/clientGuestAuth";
+import { guestAuthHeaders } from "@/lib/clientGuestAuth";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 import { vapiPanelShell } from "@/lib/vapiUi";
 import { useHotelPublicConfig } from "@/hooks/useHotelPublicConfig";
@@ -44,6 +45,7 @@ import {
   unlockBrowserAudio,
 } from "@/lib/clientNemotronVoice";
 import { sanitizeForSpeech, trimForVoiceReply, VOICE_STATUS } from "@/lib/humanizeSpeech";
+import { getUIStrings, type UIStrings } from "@/lib/languages";
 import { isJunkTranscription, sanitizeTranscription } from "@/lib/sttValidation";
 import { VoicePresenceBar } from "@/components/VoicePresenceBar";
 import { ConciergeAvatar } from "@/components/ConciergeAvatar";
@@ -60,28 +62,6 @@ interface LanguageOption {
   ttsLang: string;
 }
 
-interface UIStrings {
-  tapToSpeak: string;
-  listening: string;
-  speaking: string;
-  ready: string;
-  configure: string;
-  searchLanguage: string;
-  welcomeHint: string;
-  speakingIn: string;
-  footer: string;
-  you: string;
-  errorNetwork: string;
-  errorMicDenied: string;
-  errorNoSpeech: string;
-  errorGeneric: string;
-  errorUnsupported: string;
-  errorConnection: string;
-  virtualReceptionist: string;
-  poweredByAI: string;
-  languagesSupported: string;
-  suggestedQuestions: string;
-}
 
 function RoomImageCarousel({ images, isDark }: { images: string[]; isDark: boolean }) {
   // Parent always passes a stable key={images.join("|")} so this component
@@ -184,6 +164,19 @@ interface SpeechRecognitionLike {
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
 const CALL_HISTORY_STORAGE_KEY = "staynep-call-history";
+
+// Languages where Chrome/Edge Web Speech API has no support or very poor quality.
+// For these, we skip native STT entirely and go straight to server STT (Gemini/Whisper).
+const BROWSER_STT_UNRELIABLE = new Set([
+  "ne-NP",  // Nepali — limited/no Chrome STT support
+  "sw-KE",  // Swahili
+  "et-EE",  // Estonian
+  "lt-LT",  // Lithuanian
+  "fil-PH", // Filipino
+  "ms-MY",  // Malay — inconsistent
+  "uk-UA",  // Ukrainian — inconsistent
+  "bn-BD",  // Bengali — limited
+]);
 const STT_MODE_STORAGE_KEY = "assistant-stt-mode";
 const PREMIUM_VOICE_HINTS = [
   "neural",
@@ -236,20 +229,23 @@ const ALL_LANGUAGES: LanguageOption[] = [
   { code: "ro-RO",  name: "Romanian",           nativeName: "Română",        flag: "🇷🇴", ttsLang: "ro-RO" },
   { code: "ru-RU",  name: "Russian",            nativeName: "Русский",       flag: "🇷🇺", ttsLang: "ru-RU" },
   { code: "es-ES",  name: "Spanish",            nativeName: "Español",       flag: "🇪🇸", ttsLang: "es-ES" },
-  { code: "sw-KE",  name: "Swahili",            nativeName: "Kiswahili",     flag: "🇰🇪", ttsLang: "sw-KE" },
-  { code: "th-TH",  name: "Thai",               nativeName: "ไทย",           flag: "🇹🇭", ttsLang: "th-TH" },
-  { code: "tr-TR",  name: "Turkish",            nativeName: "Türkçe",        flag: "🇹🇷", ttsLang: "tr-TR" },
-  { code: "vi-VN",  name: "Vietnamese",         nativeName: "Tiếng Việt",    flag: "🇻🇳", ttsLang: "vi-VN" },
+  { code: "sw-KE",  name: "Swahili",            nativeName: "Kiswahili",        flag: "🇰🇪", ttsLang: "sw-KE" },
+  { code: "th-TH",  name: "Thai",               nativeName: "ไทย",              flag: "🇹🇭", ttsLang: "th-TH" },
+  { code: "tr-TR",  name: "Turkish",            nativeName: "Türkçe",           flag: "🇹🇷", ttsLang: "tr-TR" },
+  { code: "uk-UA",  name: "Ukrainian",          nativeName: "Українська",       flag: "🇺🇦", ttsLang: "uk-UA" },
+  { code: "vi-VN",  name: "Vietnamese",         nativeName: "Tiếng Việt",       flag: "🇻🇳", ttsLang: "vi-VN" },
+  { code: "ms-MY",  name: "Malay",              nativeName: "Bahasa Melayu",    flag: "🇲🇾", ttsLang: "ms-MY" },
+  { code: "sv-SE",  name: "Swedish",            nativeName: "Svenska",          flag: "🇸🇪", ttsLang: "sv-SE" },
+  { code: "zh-TW",  name: "Chinese (Taiwan)",   nativeName: "繁體中文",           flag: "🇹🇼", ttsLang: "zh-TW" },
+  { code: "fil-PH", name: "Filipino",           nativeName: "Filipino",         flag: "🇵🇭", ttsLang: "fil-PH" },
+  { code: "ta-IN",  name: "Tamil",              nativeName: "தமிழ்",             flag: "🇮🇳", ttsLang: "ta-IN" },
+  { code: "te-IN",  name: "Telugu",             nativeName: "తెలుగు",            flag: "🇮🇳", ttsLang: "te-IN" },
 ].sort((a, b) => a.name.localeCompare(b.name));
 
 // UI translations
-const UI_TRANSLATIONS: Record<string, UIStrings> = {
-  en: { tapToSpeak: "Tap to Speak", listening: "Listening...", speaking: "Speaking...", ready: "Ready", configure: "Configure", searchLanguage: "Search language...", welcomeHint: "Tap the microphone and ask me anything.", speakingIn: "Speaking in", footer: "Universal Voice Receptionist", you: "You", errorNetwork: "Network error", errorMicDenied: "Mic access denied", errorNoSpeech: "I didn't catch that — tap the mic and speak a little closer.", errorGeneric: "Error", errorUnsupported: "Not supported", errorConnection: "Connection error", virtualReceptionist: "Virtual Receptionist", poweredByAI: "AI Assistant", languagesSupported: "Languages", suggestedQuestions: "Try asking" },
-};
-
+// UI strings sourced from languages.ts — covers all 40+ languages natively
 function getUI(langCode: string): UIStrings {
-  const primary = langCode.split("-")[0];
-  return UI_TRANSLATIONS[primary] || UI_TRANSLATIONS["en"];
+  return getUIStrings(langCode);
 }
 
 function pickRecorderMimeType(): string | undefined {
@@ -319,6 +315,8 @@ export default function VoiceAssistant() {
   const useServerSTTRef = useRef(false);
   useServerSTTRef.current = useServerSTT;
   const voiceStackRef = useRef<"free" | "cloud">("free");
+  // Tracks consecutive no-speech failures so we switch to server STT after 2
+  const nativeSttNoSpeechCountRef = useRef(0);
   const lastServerSttAtRef = useRef(0);
   const serverSttFailCountRef = useRef(0);
   const autoListenAfterSpeakRef = useRef(false);
@@ -652,13 +650,30 @@ export default function VoiceAssistant() {
         }
       } else if (e.error === "not-allowed") {
         setErrorMessage(ui.errorMicDenied);
-      } else if (e.error === "no-speech" && autoListenAfterSpeakRef.current) {
-        setTimeout(() => {
-          if (inConversationRef.current) startListeningInternalRef.current();
-        }, VOICE_STT_RETRY_MS);
+      } else if (e.error === "no-speech") {
+        nativeSttNoSpeechCountRef.current += 1;
+        // After 2 consecutive no-speech failures, switch to server STT.
+        // This catches languages where the browser simply doesn't recognise the audio.
+        if (nativeSttNoSpeechCountRef.current >= 2 && sttReady !== false) {
+          nativeSttNoSpeechCountRef.current = 0;
+          useServerSTTRef.current = true;
+          setUseServerSTT(true);
+          window.localStorage.setItem(STT_MODE_STORAGE_KEY, "whisper");
+          setErrorMessage(null);
+          if (inConversationRef.current) {
+            setTimeout(() => startServerRecordingRef.current(), 100);
+          }
+        } else if (autoListenAfterSpeakRef.current) {
+          setTimeout(() => {
+            if (inConversationRef.current) startListeningInternalRef.current();
+          }, VOICE_STT_RETRY_MS);
+        }
       }
       setIsListening(false);
-      if (e.error !== "no-speech") autoListenAfterSpeakRef.current = false;
+      if (e.error !== "no-speech") {
+        autoListenAfterSpeakRef.current = false;
+        nativeSttNoSpeechCountRef.current = 0;
+      }
     };
     recognition.onend = () => {
       clearNativeSilenceTimer();
@@ -915,7 +930,7 @@ export default function VoiceAssistant() {
         ensureAudioUnlocked();
         const response = await fetch(tenantApiUrl("/api/chat/stream", tenantSlug), {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: guestAuthHeaders({ "Content-Type": "application/json" }),
           credentials: "include",
           body: JSON.stringify(payload),
         });
@@ -1069,7 +1084,7 @@ export default function VoiceAssistant() {
 
       const response = await fetch(tenantApiUrl("/api/chat", tenantSlug), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: guestAuthHeaders({ "Content-Type": "application/json" }),
         credentials: "include",
         body: JSON.stringify(payload),
       });
@@ -1115,6 +1130,7 @@ export default function VoiceAssistant() {
       }
       lastSubmittedTranscriptRef.current = text;
       lastSubmittedAtRef.current = now;
+      nativeSttNoSpeechCountRef.current = 0; // reset on successful transcript
 
       void handleUserMessage(text, inputModeRef.current === "voice");
     },
@@ -1219,7 +1235,7 @@ export default function VoiceAssistant() {
         formData.append('audio', audioBlob);
         formData.append('language', selectedLanguageRef.current.code);
         try {
-          const res = await fetch(tenantApiUrl("/api/stt", tenantSlug), { method: "POST", body: formData });
+          const res = await fetch(tenantApiUrl("/api/stt", tenantSlug), { method: "POST", headers: guestAuthHeaders(), credentials: "include", body: formData });
           const data = await res.json();
           const transcribed = typeof data.text === "string" ? sanitizeTranscription(data.text) : "";
           if (transcribed && !isJunkTranscription(transcribed)) {
@@ -1395,6 +1411,14 @@ export default function VoiceAssistant() {
     window.localStorage.setItem("assistant-language", lang.code);
     setShowLanguageMenu(false);
     setLanguageSearch("");
+    nativeSttNoSpeechCountRef.current = 0;
+
+    // Auto-switch to server STT for languages with poor/no browser support
+    if (BROWSER_STT_UNRELIABLE.has(lang.code) && sttReady !== false) {
+      useServerSTTRef.current = true;
+      setUseServerSTT(true);
+      window.localStorage.setItem(STT_MODE_STORAGE_KEY, "whisper");
+    }
   };
 
   const filteredLanguages = ALL_LANGUAGES.filter(l =>
@@ -1908,7 +1932,7 @@ export default function VoiceAssistant() {
                                   <button
                                     onClick={() => {
                                       setFeedbackGiven((prev) => ({ ...prev, [i]: "up" }));
-                                      fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageContent: msg.content, rating: "up" }) });
+                                      fetch("/api/feedback", { method: "POST", headers: guestAuthHeaders({ "Content-Type": "application/json" }), credentials: "include", body: JSON.stringify({ messageContent: msg.content, rating: "up" }) });
                                     }}
                                     className={`p-1 rounded-md transition-all ${isDark ? "text-neutral-600 hover:text-emerald-400" : "text-neutral-400 hover:text-emerald-600"}`}
                                     title="Helpful"
@@ -1918,7 +1942,7 @@ export default function VoiceAssistant() {
                                   <button
                                     onClick={() => {
                                       setFeedbackGiven((prev) => ({ ...prev, [i]: "down" }));
-                                      fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageContent: msg.content, rating: "down" }) });
+                                      fetch("/api/feedback", { method: "POST", headers: guestAuthHeaders({ "Content-Type": "application/json" }), credentials: "include", body: JSON.stringify({ messageContent: msg.content, rating: "down" }) });
                                     }}
                                     className={`p-1 rounded-md transition-all ${isDark ? "text-neutral-600 hover:text-amber-300" : "text-neutral-400 hover:text-amber-600"}`}
                                     title="Not helpful"

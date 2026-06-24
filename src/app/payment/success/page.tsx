@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2, Loader2, AlertCircle, CalendarCheck, ExternalLink } from "lucide-react";
@@ -34,7 +34,7 @@ function calendarUrl(b: BookingResult): string {
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}`;
 }
 
-export default function PaymentSuccessPage() {
+function PaymentSuccessContent() {
   const params = useSearchParams();
   const sessionId = params.get("session_id");
 
@@ -154,5 +154,17 @@ export default function PaymentSuccessPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PaymentSuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="relative min-h-screen overflow-hidden bg-void-canvas text-cream-text flex items-center justify-center">
+        <Loader2 className="w-10 h-10 animate-spin text-zinc-mute" />
+      </div>
+    }>
+      <PaymentSuccessContent />
+    </Suspense>
   );
 }

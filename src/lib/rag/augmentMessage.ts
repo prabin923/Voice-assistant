@@ -46,15 +46,54 @@ export function buildHotelDataBlock(config: HotelConfig, compact: boolean): stri
     .join("; ")}`;
 }
 
-function fullContextMessage(config: HotelConfig, message: string, channel: "voice" | "text") {
+// BCP-47 → readable name (English variants intentionally absent — no instruction needed)
+const LANG_NAMES: Record<string, string> = {
+  "ar-SA": "Arabic",          "bn-BD": "Bengali",        "bg-BG": "Bulgarian",
+  "zh-CN": "Chinese",         "zh-TW": "Chinese (Traditional)", "hr-HR": "Croatian",
+  "cs-CZ": "Czech",           "da-DK": "Danish",         "nl-NL": "Dutch",
+  "et-EE": "Estonian",        "fi-FI": "Finnish",        "fr-FR": "French",
+  "de-DE": "German",          "el-GR": "Greek",          "he-IL": "Hebrew",
+  "hi-IN": "Hindi",           "hu-HU": "Hungarian",      "id-ID": "Indonesian",
+  "it-IT": "Italian",         "ja-JP": "Japanese",       "ko-KR": "Korean",
+  "lt-LT": "Lithuanian",      "ms-MY": "Malay",          "ne-NP": "Nepali",
+  "no-NO": "Norwegian",       "pl-PL": "Polish",         "pt-BR": "Portuguese",
+  "ro-RO": "Romanian",        "ru-RU": "Russian",        "es-ES": "Spanish",
+  "sw-KE": "Swahili",         "sv-SE": "Swedish",        "ta-IN": "Tamil",
+  "te-IN": "Telugu",          "th-TH": "Thai",           "tr-TR": "Turkish",
+  "uk-UA": "Ukrainian",       "vi-VN": "Vietnamese",     "fil-PH": "Filipino",
+};
+
+/** Grounding footnote appended to every context block. */
+function groundingFootnote(phone: string): string {
+  return `\nONLY answer from the HOTEL FACTS above. If the answer is not listed, say: "I don't have that detail — our front desk can help at ${phone}."`;
+}
+
+/** One-line language instruction injected only for non-English languages. */
+function langLine(langCode?: string): string {
+  if (!langCode) return "";
+  const name = LANG_NAMES[langCode];
+  if (!name) return ""; // English variants — no instruction needed
+  return `\nRespond in ${name}.`;
+}
+
+function fullContextMessage(
+  config: HotelConfig,
+  message: string,
+  channel: "voice" | "text",
+  langCode?: string
+) {
   const fullData = buildHotelDataBlock(config, channel === "voice");
   return {
     usedRag: false,
-    message: `HOTEL DATA:\n${fullData}\n\nGUEST MESSAGE:\n${message}`,
+    message: `HOTEL DATA:\n${fullData}${langLine(langCode)}${groundingFootnote(config.contact.phone)}\n\nGUEST MESSAGE:\n${message}`,
   };
 }
 
-function fastVoiceFallbackMessage(config: HotelConfig, message: string) {
+function fastVoiceFallbackMessage(
+  config: HotelConfig,
+  message: string,
+  langCode?: string
+) {
   const concise = [
     `- ${config.branding.hotelName} | ${config.contact.phone} | ${config.contact.city}`,
     `- Check-in ${config.policies.checkInTime}, check-out ${config.policies.checkOutTime}`,
@@ -64,7 +103,7 @@ function fastVoiceFallbackMessage(config: HotelConfig, message: string) {
   return {
     usedRag: false,
     message:
-      `HOTEL FACTS:\n${concise}` +
+      `HOTEL FACTS:\n${concise}${langLine(langCode)}${groundingFootnote(config.contact.phone)}` +
       "\nVOICE MODE: Answer in 1-2 short conversational sentences." +
       `\n\nGUEST MESSAGE:\n${message}`,
   };
@@ -74,7 +113,8 @@ export async function augmentUserMessageWithHotelContext(
   message: string,
   history: ChatTurn[],
   config: HotelConfig,
-  channel: "voice" | "text"
+  channel: "voice" | "text",
+  langCode?: string
 ): Promise<{ message: string; usedRag: boolean }> {
   try {
     const topK = channel === "voice" ? 3 : 10;
@@ -84,8 +124,10 @@ export async function augmentUserMessageWithHotelContext(
       retrieveRelevantChunks(query, {
         topK,
         minScore: channel === "voice" ? 0.28 : 0.32,
+        // Voice: prefer fast keyword match first; fall back to semantic only
+        // when nothing strong is found (covers website prose chunks too).
         preferFastLexical: channel === "voice",
-        lexicalOnly: channel === "voice",
+        lexicalOnly: false,
       }),
       new Promise<RetrievedChunk[]>((resolve) =>
         setTimeout(() => resolve([]), ragTimeoutMs(channel))
@@ -93,34 +135,38 @@ export async function augmentUserMessageWithHotelContext(
     ]);
 
     if (chunks.length > 0) {
-        const dialogue = chunks.filter((c) => c.category === "dialogue");
-        const factual = chunks.filter((c) => c.category !== "dialogue");
-        const selected =
-          channel === "voice" && dialogue.length > 0
-            ? [...dialogue.slice(0, 2), ...factual.slice(0, Math.max(topK - 2, 2))]
-            : chunks;
+      const dialogue = chunks.filter((c) => c.category === "dialogue");
+      const factual  = chunks.filter((c) => c.category !== "dialogue");
 
-        const core = `- ${config.branding.hotelName} | ${config.contact.phone} | ${config.contact.city}`;
-        const facts = [core, ...selected.map((c) => `- ${c.title}: ${c.content}`)].join("\n");
-        const voiceHint =
-          channel === "voice"
-            ? dialogue.length > 0
-              ? "\nVOICE MODE: Match the natural tone of the DIALOGUE EXAMPLES above. Answer in 1–2 spoken sentences — warm and human, not a brochure."
-              : "\nVOICE MODE: Answer in 1–2 spoken sentences. Sound warm and human — not like reading a brochure."
-            : dialogue.length > 0
-              ? "\nMatch the conversational tone of the DIALOGUE EXAMPLES when helpful."
-              : "";
-        return {
-          usedRag: true,
-          message: `RELEVANT HOTEL FACTS:\n${facts}${voiceHint}\n\nGUEST MESSAGE:\n${message}`,
-        };
+      // Voice: prioritise dialogue examples for natural tone
+      const selected =
+        channel === "voice" && dialogue.length > 0
+          ? [...dialogue.slice(0, 2), ...factual.slice(0, Math.max(topK - 2, 2))]
+          : chunks;
+
+      const core = `- ${config.branding.hotelName} | ${config.contact.phone} | ${config.contact.city}`;
+      const facts = [core, ...selected.map((c) => `- ${c.title}: ${c.content}`)].join("\n");
+
+      const voiceHint =
+        channel === "voice"
+          ? dialogue.length > 0
+            ? "\nVOICE MODE: Match the natural tone of the DIALOGUE EXAMPLES above. Answer in 1–2 warm spoken sentences — concise, human, never a brochure."
+            : "\nVOICE MODE: Answer in 1–2 spoken sentences. Warm and human — not a brochure."
+          : dialogue.length > 0
+            ? "\nMatch the conversational tone of the DIALOGUE EXAMPLES when helpful."
+            : "";
+
+      return {
+        usedRag: true,
+        message: `HOTEL FACTS:\n${facts}${langLine(langCode)}${groundingFootnote(config.contact.phone)}${voiceHint}\n\nGUEST MESSAGE:\n${message}`,
+      };
     }
   } catch (err) {
     console.warn("[RAG] Augment failed, using full hotel data:", err);
   }
 
   if (channel === "voice") {
-    return fastVoiceFallbackMessage(config, message);
+    return fastVoiceFallbackMessage(config, message, langCode);
   }
-  return fullContextMessage(config, message, channel);
+  return fullContextMessage(config, message, channel, langCode);
 }

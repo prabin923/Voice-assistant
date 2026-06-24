@@ -160,7 +160,35 @@ export async function POST(req: Request) {
 
     const model = new GoogleGenerativeAI(apiKey).getGenerativeModel({ model: GEMINI_MODEL });
     const base64Audio = audioBuffer.toString("base64");
-    const prompt = `You are a speech-to-text engine. Output ONLY the exact words spoken in the audio. Language: ${safeLang}. If silent or unintelligible, output exactly: EMPTY`;
+
+    // Script hints: tell Gemini which script to output so it doesn't romanise
+    const scriptHints: Record<string, string> = {
+      "ne": "Write in Devanagari script (नेपाली).",
+      "hi": "Write in Devanagari script (हिन्दी).",
+      "mr": "Write in Devanagari script (मराठी).",
+      "ar": "Write in Arabic script (عربي).",
+      "he": "Write in Hebrew script (עברית).",
+      "ta": "Write in Tamil script (தமிழ்).",
+      "te": "Write in Telugu script (తెలుగు).",
+      "bn": "Write in Bengali script (বাংলা).",
+      "gu": "Write in Gujarati script (ગુજરાતી).",
+      "pa": "Write in Gurmukhi script (ਪੰਜਾਬੀ).",
+      "ml": "Write in Malayalam script (മലയാളം).",
+      "si": "Write in Sinhala script (සිංහල).",
+      "th": "Write in Thai script (ภาษาไทย).",
+      "lo": "Write in Lao script (ພາສາລາວ).",
+      "my": "Write in Myanmar script (မြန်မာ).",
+      "ka": "Write in Georgian script (ქართული).",
+      "am": "Write in Ethiopic script (አማርኛ).",
+      "km": "Write in Khmer script (ខ្មែរ).",
+      "zh": "Write in Chinese characters (中文).",
+      "ja": "Write in Japanese script (日本語).",
+      "ko": "Write in Korean script (한국어).",
+    };
+
+    const primaryLang = safeLang.split("-")[0];
+    const scriptHint = scriptHints[primaryLang] ? ` ${scriptHints[primaryLang]}` : "";
+    const prompt = `You are a speech-to-text engine. Output ONLY the exact words spoken in the audio. Language: ${safeLang}.${scriptHint} Do NOT transliterate into Latin characters. If silent or unintelligible, output exactly: EMPTY`;
 
     const result = await model.generateContent([
       prompt,

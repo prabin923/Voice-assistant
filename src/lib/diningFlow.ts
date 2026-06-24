@@ -11,8 +11,10 @@ import {
   detectPartySize,
   detectReservationTime,
   formatReservationTime,
+  parseVenueHours,
 } from "@/lib/timeParsing";
-import { isAffirmative, isNegative } from "@/lib/bookingFlow";
+import { todayIsoDate } from "@/lib/dateParsing";
+import { isAffirmative, isNegative, extractGuestDetails } from "@/lib/bookingFlow";
 
 export type { DiningReservationSummary as DiningSummary };
 
@@ -39,19 +41,9 @@ export type DiningFlowResult = {
 type GuestProfile = { id: string; name: string; phone: string | null; email: string };
 
 function conversationText(message: string, history: ChatHistoryMessage[]): string {
-  return `${history.map((h) => h.content).join(" ")} ${message}`;
-}
-
-function extractGuestDetails(message: string, history: ChatHistoryMessage[]) {
-  const source = conversationText(message, history);
-  const emailMatch = source.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-z]{2,}/);
-  const phoneMatch = source.match(/(\+?\d[\d\s\-()]{7,}\d)/);
-  const nameMatch = source.match(/\b(?:my name is|name is|i am|this is)\s+([A-Za-z][A-Za-z\s.'-]{1,60})/i);
-  return {
-    guestName: nameMatch?.[1]?.trim(),
-    guestPhone: phoneMatch?.[1]?.replace(/\s+/g, " ").trim(),
-    guestEmail: emailMatch?.[0]?.trim(),
-  };
+  // Guest-authored text only — see bookingFlow.conversationText for rationale.
+  const userHistory = history.filter((h) => h.role === "user");
+  return `${userHistory.map((h) => h.content).join(" ")} ${message}`;
 }
 
 function detectVenue(message: string, history: ChatHistoryMessage[], venueNames: string[]): string | null {
@@ -199,12 +191,36 @@ async function handleNewDiningReservation(
     };
   }
 
-  if (!reservationTime) {
+  // Reject past dates
+  if (reservationDate < todayIsoDate()) {
     return {
       handled: true,
-      reply: `Perfect — ${venueName} on ${reservationDate}. What time should I book the table for?`,
+      reply: `It looks like ${reservationDate} has already passed. Which date would you like to book the table for?`,
       escalate: false,
     };
+  }
+
+  if (!reservationTime) {
+    const venue = config.dining.find((v) => v.name === venueName);
+    const hoursHint = venue?.hours ? ` (open ${venue.hours})` : "";
+    return {
+      handled: true,
+      reply: `Perfect — ${venueName} on ${reservationDate}${hoursHint}. What time should I book the table for?`,
+      escalate: false,
+    };
+  }
+
+  // Validate time against venue operating hours
+  const venueConfig = config.dining.find((v) => v.name === venueName);
+  if (venueConfig?.hours) {
+    const hoursCheck = parseVenueHours(venueConfig.hours, reservationTime);
+    if (!hoursCheck.open) {
+      return {
+        handled: true,
+        reply: `${venueName} isn't open at ${formatReservationTime(reservationTime)}. Their hours are: ${hoursCheck.hoursText}. What time works for you?`,
+        escalate: false,
+      };
+    }
   }
 
   const details = extractGuestDetails(message, history);

@@ -472,6 +472,7 @@ export interface UIStrings {
   virtualReceptionist: string;
   poweredByAI: string;
   languagesSupported: string;
+  suggestedQuestions: string;
 }
 
 const UI_STRINGS: Record<string, UIStrings> = {
@@ -495,6 +496,7 @@ const UI_STRINGS: Record<string, UIStrings> = {
     virtualReceptionist: "Virtual Receptionist",
     poweredByAI: "Powered by AI",
     languagesSupported: "Languages Supported",
+    suggestedQuestions: "Try asking",
   },
   es: {
     tapToSpeak: "Toca para hablar",
@@ -516,6 +518,7 @@ const UI_STRINGS: Record<string, UIStrings> = {
     virtualReceptionist: "Recepcionista Virtual",
     poweredByAI: "Impulsado por IA",
     languagesSupported: "Idiomas soportados",
+    suggestedQuestions: "Prueba preguntando",
   },
   fr: {
     tapToSpeak: "Appuyez pour parler",
@@ -537,6 +540,7 @@ const UI_STRINGS: Record<string, UIStrings> = {
     virtualReceptionist: "Réceptionniste Virtuel",
     poweredByAI: "Propulsé par l'IA",
     languagesSupported: "Langues prises en charge",
+    suggestedQuestions: "Essayez de demander",
   },
   de: {
     tapToSpeak: "Tippen zum Sprechen",
@@ -558,6 +562,7 @@ const UI_STRINGS: Record<string, UIStrings> = {
     virtualReceptionist: "Virtueller Rezeptionist",
     poweredByAI: "KI-gestützt",
     languagesSupported: "Unterstützte Sprachen",
+    suggestedQuestions: "Versuchen Sie zu fragen",
   },
   ja: {
     tapToSpeak: "タップして話す",
@@ -579,6 +584,7 @@ const UI_STRINGS: Record<string, UIStrings> = {
     virtualReceptionist: "バーチャル・レセプショニスト",
     poweredByAI: "AI搭載",
     languagesSupported: "対応言語",
+    suggestedQuestions: "試しに聞いてみてください",
   },
   zh: {
     tapToSpeak: "点击说话",
@@ -600,6 +606,7 @@ const UI_STRINGS: Record<string, UIStrings> = {
     virtualReceptionist: "虚拟接待员",
     poweredByAI: "AI驱动",
     languagesSupported: "支持的语言",
+    suggestedQuestions: "试着问我",
   },
   ko: {
     tapToSpeak: "탭하여 말하기",
@@ -621,6 +628,7 @@ const UI_STRINGS: Record<string, UIStrings> = {
     virtualReceptionist: "가상 안내원",
     poweredByAI: "AI 기반",
     languagesSupported: "지원 언어",
+    suggestedQuestions: "이렇게 물어보세요",
   },
   hi: {
     tapToSpeak: "बोलने के लिए टैप करें",
@@ -642,6 +650,7 @@ const UI_STRINGS: Record<string, UIStrings> = {
     virtualReceptionist: "वर्चुअल रिसेप्शनिस्ट",
     poweredByAI: "AI संचालित",
     languagesSupported: "समर्थित भाषाएँ",
+    suggestedQuestions: "पूछकर देखें",
   },
   ne: {
     tapToSpeak: "बोल्नको लागि ट्याप गर्नुहोस्",
@@ -663,6 +672,7 @@ const UI_STRINGS: Record<string, UIStrings> = {
     virtualReceptionist: "भर्चुअल रिसेप्सनिस्ट",
     poweredByAI: "AI द्वारा संचालित",
     languagesSupported: "समर्थित भाषाहरू",
+    suggestedQuestions: "सोध्नुस्",
   },
   ar: {
     tapToSpeak: "انقر للتحدث",
@@ -684,6 +694,7 @@ const UI_STRINGS: Record<string, UIStrings> = {
     virtualReceptionist: "موظف استقبال افتراضي",
     poweredByAI: "بدعم الذكاء الاصطناعي",
     languagesSupported: "اللغات المدعومة",
+    suggestedQuestions: "جرب السؤال",
   },
   pt: {
     tapToSpeak: "Toque para falar",
@@ -705,6 +716,7 @@ const UI_STRINGS: Record<string, UIStrings> = {
     virtualReceptionist: "Recepcionista Virtual",
     poweredByAI: "Impulsionado por IA",
     languagesSupported: "Idiomas suportados",
+    suggestedQuestions: "Tente perguntar",
   },
   ru: {
     tapToSpeak: "Нажмите, чтобы говорить",
@@ -726,6 +738,7 @@ const UI_STRINGS: Record<string, UIStrings> = {
     virtualReceptionist: "Виртуальный портье",
     poweredByAI: "На базе ИИ",
     languagesSupported: "Поддерживаемые языки",
+    suggestedQuestions: "Попробуйте спросить",
   },
   it: {
     tapToSpeak: "Tocca per parlare",
@@ -747,6 +760,7 @@ const UI_STRINGS: Record<string, UIStrings> = {
     virtualReceptionist: "Receptionist Virtuale",
     poweredByAI: "Alimentato dall'IA",
     languagesSupported: "Lingue supportate",
+    suggestedQuestions: "Prova a chiedere",
   },
   tr: {
     tapToSpeak: "Konuşmak için dokunun",
@@ -768,10 +782,82 @@ const UI_STRINGS: Record<string, UIStrings> = {
     virtualReceptionist: "Sanal Resepsiyonist",
     poweredByAI: "Yapay Zeka ile",
     languagesSupported: "Desteklenen diller",
+    suggestedQuestions: "Sormayı deneyin",
   },
+  // ── Additional languages (UI strings) ────────────────────────────────────
+  nl: { tapToSpeak: "Tik om te spreken", listening: "Luisteren...", speaking: "Spreken...", ready: "Gereed", configure: "Instellen", searchLanguage: "Taal zoeken...", welcomeHint: "Tik op de microfoon en stel een vraag.", speakingIn: "Taal", footer: "Universele Virtuele Receptionist", you: "U", errorNetwork: "Netwerkfout", errorMicDenied: "Microfoon geweigerd", errorNoSpeech: "Geen spraak gedetecteerd", errorGeneric: "Fout", errorUnsupported: "Niet ondersteund", errorConnection: "Verbindingsfout", virtualReceptionist: "Virtuele Receptionist", poweredByAI: "Aangedreven door AI", languagesSupported: "Ondersteunde talen", suggestedQuestions: "Probeer te vragen" },
+  pl: { tapToSpeak: "Dotknij, aby mówić", listening: "Słucham...", speaking: "Mówię...", ready: "Gotowy", configure: "Konfiguruj", searchLanguage: "Szukaj języka...", welcomeHint: "Dotknij mikrofonu i zapytaj o cokolwiek.", speakingIn: "Język", footer: "Uniwersalny Wirtualny Recepcjonista", you: "Ty", errorNetwork: "Błąd sieci", errorMicDenied: "Odmowa dostępu do mikrofonu", errorNoSpeech: "Nie wykryto mowy", errorGeneric: "Błąd", errorUnsupported: "Nieobsługiwane", errorConnection: "Błąd połączenia", virtualReceptionist: "Wirtualny Recepcjonista", poweredByAI: "Napędzane przez AI", languagesSupported: "Obsługiwane języki", suggestedQuestions: "Spróbuj zapytać" },
+  cs: { tapToSpeak: "Klepnutím mluvte", listening: "Poslouchám...", speaking: "Mluvím...", ready: "Připraven", configure: "Konfigurovat", searchLanguage: "Hledat jazyk...", welcomeHint: "Klepněte na mikrofon a zeptejte se.", speakingIn: "Jazyk", footer: "Univerzální Virtuální Recepční", you: "Vy", errorNetwork: "Chyba sítě", errorMicDenied: "Přístup k mikrofonu odepřen", errorNoSpeech: "Žádná řeč nezjištěna", errorGeneric: "Chyba", errorUnsupported: "Nepodporováno", errorConnection: "Chyba připojení", virtualReceptionist: "Virtuální Recepční", poweredByAI: "Poháněno AI", languagesSupported: "Podporované jazyky", suggestedQuestions: "Zkuste se zeptat" },
+  ro: { tapToSpeak: "Atingeți pentru a vorbi", listening: "Ascult...", speaking: "Vorbesc...", ready: "Gata", configure: "Configurare", searchLanguage: "Caută limbă...", welcomeHint: "Atingeți microfonul și întrebați orice.", speakingIn: "Limbă", footer: "Recepționer Virtual Universal", you: "Dvs.", errorNetwork: "Eroare rețea", errorMicDenied: "Acces microfon refuzat", errorNoSpeech: "Nicio voce detectată", errorGeneric: "Eroare", errorUnsupported: "Neacceptat", errorConnection: "Eroare conexiune", virtualReceptionist: "Recepționer Virtual", poweredByAI: "Susținut de AI", languagesSupported: "Limbi acceptate", suggestedQuestions: "Încearcă să întrebi" },
+  da: { tapToSpeak: "Tryk for at tale", listening: "Lytter...", speaking: "Taler...", ready: "Klar", configure: "Konfigurer", searchLanguage: "Søg sprog...", welcomeHint: "Tryk på mikrofonen og spørg mig om noget.", speakingIn: "Sprog", footer: "Universal Virtuel Receptionist", you: "Dig", errorNetwork: "Netværksfejl", errorMicDenied: "Mikrofon nægtet", errorNoSpeech: "Ingen tale opdaget", errorGeneric: "Fejl", errorUnsupported: "Ikke understøttet", errorConnection: "Forbindelsesfejl", virtualReceptionist: "Virtuel Receptionist", poweredByAI: "Drevet af AI", languagesSupported: "Understøttede sprog", suggestedQuestions: "Prøv at spørge" },
+  fi: { tapToSpeak: "Napauta puhuaksesi", listening: "Kuuntelen...", speaking: "Puhun...", ready: "Valmis", configure: "Määritä", searchLanguage: "Hae kieltä...", welcomeHint: "Napauta mikrofonia ja kysy mitä tahansa.", speakingIn: "Kieli", footer: "Universaali Virtuaalinen Vastaanottovirkailija", you: "Sinä", errorNetwork: "Verkkovirhe", errorMicDenied: "Mikrofoni evätty", errorNoSpeech: "Puhetta ei havaittu", errorGeneric: "Virhe", errorUnsupported: "Ei tuettu", errorConnection: "Yhteysvirhe", virtualReceptionist: "Virtuaalinen Vastaanottovirkailija", poweredByAI: "AI:n käyttämä", languagesSupported: "Tuetut kielet", suggestedQuestions: "Kokeile kysyä" },
+  sv: { tapToSpeak: "Tryck för att tala", listening: "Lyssnar...", speaking: "Talar...", ready: "Redo", configure: "Konfigurera", searchLanguage: "Sök språk...", welcomeHint: "Tryck på mikrofonen och fråga mig vad som helst.", speakingIn: "Språk", footer: "Universell Virtuell Receptionist", you: "Du", errorNetwork: "Nätverksfel", errorMicDenied: "Mikrofon nekad", errorNoSpeech: "Inget tal upptäckt", errorGeneric: "Fel", errorUnsupported: "Stöds ej", errorConnection: "Anslutningsfel", virtualReceptionist: "Virtuell Receptionist", poweredByAI: "Drivs av AI", languagesSupported: "Språk som stöds", suggestedQuestions: "Prova att fråga" },
+  el: { tapToSpeak: "Πατήστε για να μιλήσετε", listening: "Ακούω...", speaking: "Μιλώ...", ready: "Έτοιμος", configure: "Ρύθμιση", searchLanguage: "Αναζήτηση γλώσσας...", welcomeHint: "Πατήστε το μικρόφωνο και ρωτήστε ό,τι θέλετε.", speakingIn: "Γλώσσα", footer: "Παγκόσμιος Εικονικός Ρεσεψιονίστ", you: "Εσείς", errorNetwork: "Σφάλμα δικτύου", errorMicDenied: "Μικρόφωνο απορρίφθηκε", errorNoSpeech: "Δεν εντοπίστηκε ομιλία", errorGeneric: "Σφάλμα", errorUnsupported: "Μη υποστηριζόμενο", errorConnection: "Σφάλμα σύνδεσης", virtualReceptionist: "Εικονικός Ρεσεψιονίστ", poweredByAI: "Τεχνητή Νοημοσύνη", languagesSupported: "Υποστηριζόμενες γλώσσες", suggestedQuestions: "Δοκιμάστε να ρωτήσετε" },
+  he: { tapToSpeak: "הקש לדבר", listening: "מאזין...", speaking: "מדבר...", ready: "מוכן", configure: "הגדר", searchLanguage: "חפש שפה...", welcomeHint: "הקש על המיקרופון ושאל כל שאלה.", speakingIn: "שפה", footer: "קבלן וירטואלי אוניברסלי", you: "אתה", errorNetwork: "שגיאת רשת", errorMicDenied: "מיקרופון נדחה", errorNoSpeech: "לא זוהתה דיבור", errorGeneric: "שגיאה", errorUnsupported: "לא נתמך", errorConnection: "שגיאת חיבור", virtualReceptionist: "קבלן וירטואלי", poweredByAI: "מופעל על ידי AI", languagesSupported: "שפות נתמכות", suggestedQuestions: "נסה לשאול" },
+  id: { tapToSpeak: "Ketuk untuk bicara", listening: "Mendengarkan...", speaking: "Berbicara...", ready: "Siap", configure: "Konfigurasi", searchLanguage: "Cari bahasa...", welcomeHint: "Ketuk mikrofon dan tanyakan apa saja.", speakingIn: "Bahasa", footer: "Resepsionis Virtual Universal", you: "Anda", errorNetwork: "Kesalahan jaringan", errorMicDenied: "Mikrofon ditolak", errorNoSpeech: "Tidak ada suara terdeteksi", errorGeneric: "Kesalahan", errorUnsupported: "Tidak didukung", errorConnection: "Kesalahan koneksi", virtualReceptionist: "Resepsionis Virtual", poweredByAI: "Didukung AI", languagesSupported: "Bahasa yang didukung", suggestedQuestions: "Coba tanyakan" },
+  th: { tapToSpeak: "แตะเพื่อพูด", listening: "กำลังฟัง...", speaking: "กำลังพูด...", ready: "พร้อม", configure: "ตั้งค่า", searchLanguage: "ค้นหาภาษา...", welcomeHint: "แตะไมโครโฟนแล้วถามอะไรก็ได้", speakingIn: "ภาษา", footer: "พนักงานต้อนรับเสมือนสากล", you: "คุณ", errorNetwork: "ข้อผิดพลาดเครือข่าย", errorMicDenied: "ถูกปฏิเสธไมโครโฟน", errorNoSpeech: "ไม่พบเสียงพูด", errorGeneric: "ข้อผิดพลาด", errorUnsupported: "ไม่รองรับ", errorConnection: "ข้อผิดพลาดการเชื่อมต่อ", virtualReceptionist: "พนักงานต้อนรับเสมือน", poweredByAI: "ขับเคลื่อนโดย AI", languagesSupported: "ภาษาที่รองรับ", suggestedQuestions: "ลองถามดู" },
+  vi: { tapToSpeak: "Nhấn để nói", listening: "Đang nghe...", speaking: "Đang nói...", ready: "Sẵn sàng", configure: "Cấu hình", searchLanguage: "Tìm kiếm ngôn ngữ...", welcomeHint: "Nhấn vào microphone và hỏi bất cứ điều gì.", speakingIn: "Ngôn ngữ", footer: "Lễ tân ảo toàn cầu", you: "Bạn", errorNetwork: "Lỗi mạng", errorMicDenied: "Microphone bị từ chối", errorNoSpeech: "Không phát hiện giọng nói", errorGeneric: "Lỗi", errorUnsupported: "Không được hỗ trợ", errorConnection: "Lỗi kết nối", virtualReceptionist: "Lễ tân ảo", poweredByAI: "Được hỗ trợ bởi AI", languagesSupported: "Ngôn ngữ được hỗ trợ", suggestedQuestions: "Thử hỏi" },
+  uk: { tapToSpeak: "Натисніть, щоб говорити", listening: "Слухаю...", speaking: "Говорю...", ready: "Готово", configure: "Налаштувати", searchLanguage: "Пошук мови...", welcomeHint: "Натисніть на мікрофон і запитайте будь-що.", speakingIn: "Мова", footer: "Універсальний Віртуальний Портьє", you: "Ви", errorNetwork: "Помилка мережі", errorMicDenied: "Доступ до мікрофона заборонено", errorNoSpeech: "Мовлення не виявлено", errorGeneric: "Помилка", errorUnsupported: "Не підтримується", errorConnection: "Помилка з'єднання", virtualReceptionist: "Віртуальний Портьє", poweredByAI: "На базі ШІ", languagesSupported: "Підтримувані мови", suggestedQuestions: "Спробуйте запитати" },
+  ms: { tapToSpeak: "Ketuk untuk bercakap", listening: "Mendengar...", speaking: "Bercakap...", ready: "Sedia", configure: "Konfigurasi", searchLanguage: "Cari bahasa...", welcomeHint: "Ketuk mikrofon dan tanya apa sahaja.", speakingIn: "Bahasa", footer: "Resepsionis Maya Universal", you: "Anda", errorNetwork: "Ralat rangkaian", errorMicDenied: "Mikrofon ditolak", errorNoSpeech: "Tiada suara dikesan", errorGeneric: "Ralat", errorUnsupported: "Tidak disokong", errorConnection: "Ralat sambungan", virtualReceptionist: "Resepsionis Maya", poweredByAI: "Dikuasakan oleh AI", languagesSupported: "Bahasa yang disokong", suggestedQuestions: "Cuba tanya" },
+  bg: { tapToSpeak: "Докоснете за говор", listening: "Слушам...", speaking: "Говоря...", ready: "Готово", configure: "Настройки", searchLanguage: "Търсене на език...", welcomeHint: "Докоснете микрофона и попитайте нещо.", speakingIn: "Език", footer: "Универсален Виртуален Рецепционист", you: "Вие", errorNetwork: "Мрежова грешка", errorMicDenied: "Микрофонът е отказан", errorNoSpeech: "Не е открита реч", errorGeneric: "Грешка", errorUnsupported: "Не се поддържа", errorConnection: "Грешка при свързване", virtualReceptionist: "Виртуален Рецепционист", poweredByAI: "Захранвано от AI", languagesSupported: "Поддържани езици", suggestedQuestions: "Опитайте да попитате" },
+  hr: { tapToSpeak: "Dodirnite za govor", listening: "Slušam...", speaking: "Govorim...", ready: "Spreman", configure: "Konfiguracija", searchLanguage: "Traži jezik...", welcomeHint: "Dodirnite mikrofon i pitajte bilo što.", speakingIn: "Jezik", footer: "Univerzalni Virtualni Receptionist", you: "Vi", errorNetwork: "Greška mreže", errorMicDenied: "Mikrofon odbijen", errorNoSpeech: "Govor nije otkriven", errorGeneric: "Greška", errorUnsupported: "Nije podržano", errorConnection: "Greška veze", virtualReceptionist: "Virtualni Receptionist", poweredByAI: "Pokreće AI", languagesSupported: "Podržani jezici", suggestedQuestions: "Pokušajte pitati" },
+  et: { tapToSpeak: "Puudutage kõnelemiseks", listening: "Kuulan...", speaking: "Räägin...", ready: "Valmis", configure: "Seadista", searchLanguage: "Otsi keelt...", welcomeHint: "Puudutage mikrofoni ja küsige midagi.", speakingIn: "Keel", footer: "Universaalne Virtuaalne Administraator", you: "Teie", errorNetwork: "Võrguviga", errorMicDenied: "Mikrofon keelatud", errorNoSpeech: "Kõnet ei tuvastatud", errorGeneric: "Viga", errorUnsupported: "Ei toetata", errorConnection: "Ühenduse viga", virtualReceptionist: "Virtuaalne Administraator", poweredByAI: "AI-toega", languagesSupported: "Toetatud keeled", suggestedQuestions: "Proovige küsida" },
+  hu: { tapToSpeak: "Érintse meg a beszédhez", listening: "Hallgatom...", speaking: "Beszélek...", ready: "Kész", configure: "Beállítás", searchLanguage: "Nyelv keresése...", welcomeHint: "Érintse meg a mikrofont és kérdezzen bármit.", speakingIn: "Nyelv", footer: "Univerzális Virtuális Recepciós", you: "Ön", errorNetwork: "Hálózati hiba", errorMicDenied: "Mikrofon megtagadva", errorNoSpeech: "Nem észlelt beszédet", errorGeneric: "Hiba", errorUnsupported: "Nem támogatott", errorConnection: "Kapcsolódási hiba", virtualReceptionist: "Virtuális Recepciós", poweredByAI: "AI által működtetve", languagesSupported: "Támogatott nyelvek", suggestedQuestions: "Próbáljon kérdezni" },
+  lt: { tapToSpeak: "Palieskite kalbėti", listening: "Klausau...", speaking: "Kalbu...", ready: "Paruošta", configure: "Konfigūruoti", searchLanguage: "Ieškoti kalbos...", welcomeHint: "Palieskite mikrofoną ir klauskite bet ko.", speakingIn: "Kalba", footer: "Universalus Virtualus Registratūros Darbuotojas", you: "Jūs", errorNetwork: "Tinklo klaida", errorMicDenied: "Mikrofonas atmestas", errorNoSpeech: "Kalba neaptikta", errorGeneric: "Klaida", errorUnsupported: "Nepalaikoma", errorConnection: "Ryšio klaida", virtualReceptionist: "Virtualus Registratūros Darbuotojas", poweredByAI: "Valdoma AI", languagesSupported: "Palaikomos kalbos", suggestedQuestions: "Pabandykite klausti" },
+  no: { tapToSpeak: "Trykk for å snakke", listening: "Lytter...", speaking: "Snakker...", ready: "Klar", configure: "Konfigurer", searchLanguage: "Søk etter språk...", welcomeHint: "Trykk på mikrofonen og spør om hva som helst.", speakingIn: "Språk", footer: "Universell Virtuell Resepsjonist", you: "Du", errorNetwork: "Nettverksfeil", errorMicDenied: "Mikrofon nektet", errorNoSpeech: "Ingen tale oppdaget", errorGeneric: "Feil", errorUnsupported: "Ikke støttet", errorConnection: "Tilkoblingsfeil", virtualReceptionist: "Virtuell Resepsjonist", poweredByAI: "Drevet av AI", languagesSupported: "Støttede språk", suggestedQuestions: "Prøv å spørre" },
+  sw: { tapToSpeak: "Gusa ili kuzungumza", listening: "Sikiliza...", speaking: "Ninazungumza...", ready: "Tayari", configure: "Sanidi", searchLanguage: "Tafuta lugha...", welcomeHint: "Gusa kipaza sauti na uulize chochote.", speakingIn: "Lugha", footer: "Mpokeaji wa Kimataifa wa Kawaida", you: "Wewe", errorNetwork: "Hitilafu ya mtandao", errorMicDenied: "Kipaza sauti kimezuiwa", errorNoSpeech: "Hakuna sauti iliyogunduliwa", errorGeneric: "Hitilafu", errorUnsupported: "Haitegemezi", errorConnection: "Hitilafu ya muunganisho", virtualReceptionist: "Mpokeaji wa Kawaida", poweredByAI: "Inaendeshwa na AI", languagesSupported: "Lugha zinazoungwa mkono", suggestedQuestions: "Jaribu kuuliza" },
+  bn: { tapToSpeak: "কথা বলতে ট্যাপ করুন", listening: "শুনছি...", speaking: "বলছি...", ready: "প্রস্তুত", configure: "কনফিগার করুন", searchLanguage: "ভাষা খুঁজুন...", welcomeHint: "মাইক্রোফোনে ট্যাপ করুন এবং যেকোনো কিছু জিজ্ঞাসা করুন।", speakingIn: "ভাষা", footer: "ইউনিভার্সাল ভার্চুয়াল রিসেপশনিস্ট", you: "আপনি", errorNetwork: "নেটওয়ার্ক ত্রুটি", errorMicDenied: "মাইক্রোফোন প্রত্যাখ্যাত", errorNoSpeech: "কোনো কথা সনাক্ত হয়নি", errorGeneric: "ত্রুটি", errorUnsupported: "সমর্থিত নয়", errorConnection: "সংযোগ ত্রুটি", virtualReceptionist: "ভার্চুয়াল রিসেপশনিস্ট", poweredByAI: "AI দ্বারা চালিত", languagesSupported: "সমর্থিত ভাষা", suggestedQuestions: "জিজ্ঞাসা করে দেখুন" },
 };
 
 export function getUIStrings(langCode: string): UIStrings {
   const primary = langCode.split("-")[0];
   return UI_STRINGS[primary] || UI_STRINGS["en"];
 }
+
+// ── Missing SUPPORTED_LANGUAGES entries ───────────────────────────────────────
+const MISSING_LANGUAGES: LanguageDefinition[] = [
+  { code: "bg-BG",  name: "Bulgarian",   nativeName: "Български",        flag: "🇧🇬", ttsLang: "bg-BG" },
+  { code: "hr-HR",  name: "Croatian",    nativeName: "Hrvatski",         flag: "🇭🇷", ttsLang: "hr-HR" },
+  { code: "et-EE",  name: "Estonian",    nativeName: "Eesti",            flag: "🇪🇪", ttsLang: "et-EE" },
+  { code: "hu-HU",  name: "Hungarian",   nativeName: "Magyar",           flag: "🇭🇺", ttsLang: "hu-HU" },
+  { code: "lt-LT",  name: "Lithuanian",  nativeName: "Lietuvių",         flag: "🇱🇹", ttsLang: "lt-LT" },
+  { code: "no-NO",  name: "Norwegian",   nativeName: "Norsk",            flag: "🇳🇴", ttsLang: "nb-NO" },
+  { code: "sw-KE",  name: "Swahili",     nativeName: "Kiswahili",        flag: "🇰🇪", ttsLang: "sw-KE" },
+];
+SUPPORTED_LANGUAGES.push(...MISSING_LANGUAGES);
+
+// ── Missing intent keywords ───────────────────────────────────────────────────
+const EXTRA_KEYWORDS: Record<string, Record<IntentKey, string[]>> = {
+  nl: { greeting: ["hallo","goedemorgen","goedemiddag"], booking: ["boeken","reserveren","reservering","beschikbaar","nacht"], room_info: ["kamer","suite","bed"], pricing: ["prijs","kosten","hoeveel","tarief"], checkin: ["inchecken","aankomst"], checkout: ["uitchecken","vertrek"], dining: ["ontbijt","lunch","diner","restaurant","menu"], amenities: ["zwembad","gym","spa","wifi","parkeren"], policies: ["beleid","annuleren","huisdier","roken","kinderen"], contact: ["adres","locatie","telefoon","email"], shuttle: ["shuttle","vliegveld","taxi"], laundry: ["wasserij","wassen"], thanks: ["dank","bedankt"], complaint: ["klacht","probleem","kapot","vuil"], human_agent: ["medewerker","manager","receptie"], farewell: ["doei","tot ziens","goedenacht"] },
+  pl: { greeting: ["cześć","dzień dobry","dobry wieczór"], booking: ["zarezerwować","rezerwacja","dostępność","dostępny","noc"], room_info: ["pokój","apartament","łóżko"], pricing: ["cena","koszt","ile","tarif"], checkin: ["zameldowanie","przyjazd"], checkout: ["wymeldowanie","wyjazd"], dining: ["śniadanie","obiad","kolacja","restauracja","menu"], amenities: ["basen","siłownia","spa","wifi","parking"], policies: ["polityka","anulować","zwierzę","palenie","dzieci"], contact: ["adres","lokalizacja","telefon","email"], shuttle: ["transfer","lotnisko","taksówka"], laundry: ["pralnia","pranie"], thanks: ["dziękuję","dziękuję bardzo"], complaint: ["skarga","problem","zepsuty","brudny"], human_agent: ["pracownik","menedżer","recepcja"], farewell: ["do widzenia","dobranoc"] },
+  cs: { greeting: ["ahoj","dobrý den","dobré ráno"], booking: ["rezervovat","rezervace","dostupnost","noc"], room_info: ["pokoj","apartmán","postel"], pricing: ["cena","kolik","tarif"], checkin: ["check-in","příjezd"], checkout: ["check-out","odjezd"], dining: ["snídaně","oběd","večeře","restaurace","menu"], amenities: ["bazén","posilovna","spa","wifi","parkování"], policies: ["politika","zrušit","domácí zvíře","kouření","děti"], contact: ["adresa","poloha","telefon","email"], shuttle: ["shuttle","letiště","taxi"], laundry: ["prádelna","praní"], thanks: ["díky","děkuji"], complaint: ["stížnost","problém","rozbitý","špinavý"], human_agent: ["zaměstnanec","manažer","recepce"], farewell: ["na shledanou","dobrou noc"] },
+  ro: { greeting: ["bună","bună ziua","bună seara"], booking: ["rezerva","rezervare","disponibil","noapte"], room_info: ["cameră","apartament","pat"], pricing: ["preț","cost","cât","tarif"], checkin: ["check-in","sosire"], checkout: ["check-out","plecare"], dining: ["mic dejun","prânz","cină","restaurant","meniu"], amenities: ["piscină","sală de sport","spa","wifi","parcare"], policies: ["politică","anula","animal","fumat","copii"], contact: ["adresă","locație","telefon","email"], shuttle: ["navetă","aeroport","taxi"], laundry: ["spălătorie","spălare"], thanks: ["mulțumesc","vă mulțumesc"], complaint: ["reclamație","problemă","stricat","murdar"], human_agent: ["angajat","manager","recepție"], farewell: ["la revedere","noapte bună"] },
+  da: { greeting: ["hej","godmorgen","goddag"], booking: ["booke","reservere","reservation","tilgængelig","nat"], room_info: ["værelse","suite","seng"], pricing: ["pris","omkostning","hvor meget","takst"], checkin: ["check-in","ankomst"], checkout: ["check-out","afrejse"], dining: ["morgenmad","frokost","aftensmad","restaurant","menu"], amenities: ["pool","fitnesscenter","spa","wifi","parkering"], policies: ["politik","aflyse","kæledyr","rygning","børn"], contact: ["adresse","placering","telefon","email"], shuttle: ["shuttle","lufthavn","taxa"], laundry: ["vaskeri","vask"], thanks: ["tak","mange tak"], complaint: ["klage","problem","ødelagt","beskidt"], human_agent: ["medarbejder","leder","reception"], farewell: ["farvel","godnat"] },
+  fi: { greeting: ["hei","hyvää huomenta","hyvää päivää"], booking: ["varata","varaus","saatavuus","yö"], room_info: ["huone","sviitti","sänky"], pricing: ["hinta","kustannus","paljonko","taksa"], checkin: ["sisäänkirjautuminen","saapuminen"], checkout: ["uloskirjautuminen","lähtö"], dining: ["aamiainen","lounas","illallinen","ravintola","menu"], amenities: ["uima-allas","kuntosali","kylpylä","wifi","pysäköinti"], policies: ["käytäntö","peruuttaa","lemmikki","tupakointi","lapset"], contact: ["osoite","sijainti","puhelin","sähköposti"], shuttle: ["shuttlebussi","lentokenttä","taksi"], laundry: ["pesula","pesu"], thanks: ["kiitos","paljon kiitoksia"], complaint: ["valitus","ongelma","rikki","likainen"], human_agent: ["työntekijä","johtaja","vastaanotto"], farewell: ["näkemiin","hyvää yötä"] },
+  sv: { greeting: ["hej","god morgon","god dag"], booking: ["boka","reservera","reservation","tillgänglig","natt"], room_info: ["rum","svit","säng"], pricing: ["pris","kostnad","hur mycket","taxa"], checkin: ["incheckning","ankomst"], checkout: ["utcheckning","avresa"], dining: ["frukost","lunch","middag","restaurang","meny"], amenities: ["pool","gym","spa","wifi","parkering"], policies: ["policy","avboka","husdjur","rökning","barn"], contact: ["adress","plats","telefon","e-post"], shuttle: ["shuttle","flygplats","taxi"], laundry: ["tvätteri","tvätt"], thanks: ["tack","tack så mycket"], complaint: ["klagomål","problem","trasig","smutsig"], human_agent: ["anställd","chef","reception"], farewell: ["hej då","god natt"] },
+  el: { greeting: ["γεια","καλημέρα","καλησπέρα"], booking: ["κράτηση","κλείσιμο","διαθεσιμότητα","νύχτα"], room_info: ["δωμάτιο","σουίτα","κρεβάτι"], pricing: ["τιμή","κόστος","πόσο","τιμολόγιο"], checkin: ["check-in","άφιξη"], checkout: ["check-out","αναχώρηση"], dining: ["πρωινό","μεσημεριανό","δείπνο","εστιατόριο","μενού"], amenities: ["πισίνα","γυμναστήριο","σπα","wifi","πάρκινγκ"], policies: ["πολιτική","ακύρωση","κατοικίδιο","κάπνισμα","παιδιά"], contact: ["διεύθυνση","τοποθεσία","τηλέφωνο","email"], shuttle: ["shuttle","αεροδρόμιο","ταξί"], laundry: ["πλυντήριο","πλύσιμο"], thanks: ["ευχαριστώ","ευχαριστώ πολύ"], complaint: ["παράπονο","πρόβλημα","χαλασμένο","βρώμικο"], human_agent: ["υπάλληλος","διευθυντής","ρεσεψιόν"], farewell: ["αντίο","καληνύχτα"] },
+  he: { greeting: ["שלום","בוקר טוב","ערב טוב"], booking: ["הזמנה","להזמין","זמינות","לילה"], room_info: ["חדר","סוויטה","מיטה"], pricing: ["מחיר","עלות","כמה","תעריף"], checkin: ["צ'ק-אין","הגעה"], checkout: ["צ'ק-אאוט","עזיבה"], dining: ["ארוחת בוקר","צהריים","ארוחת ערב","מסעדה","תפריט"], amenities: ["בריכה","חדר כושר","ספא","wifi","חניה"], policies: ["מדיניות","ביטול","חיית מחמד","עישון","ילדים"], contact: ["כתובת","מיקום","טלפון","אימייל"], shuttle: ["שאטל","שדה תעופה","מונית"], laundry: ["כביסה","שטיפה"], thanks: ["תודה","תודה רבה"], complaint: ["תלונה","בעיה","שבור","מלוכלך"], human_agent: ["עובד","מנהל","קבלה"], farewell: ["שלום","לילה טוב"] },
+  id: { greeting: ["halo","selamat pagi","selamat siang","selamat sore"], booking: ["pesan","reservasi","tersedia","ketersediaan","malam"], room_info: ["kamar","suite","tempat tidur"], pricing: ["harga","biaya","berapa","tarif"], checkin: ["check-in","kedatangan"], checkout: ["check-out","keberangkatan"], dining: ["sarapan","makan siang","makan malam","restoran","menu"], amenities: ["kolam renang","gym","spa","wifi","parkir"], policies: ["kebijakan","batalkan","hewan peliharaan","merokok","anak-anak"], contact: ["alamat","lokasi","telepon","email"], shuttle: ["shuttle","bandara","taksi"], laundry: ["laundri","cuci"], thanks: ["terima kasih","makasih"], complaint: ["keluhan","masalah","rusak","kotor"], human_agent: ["staf","manajer","resepsi"], farewell: ["selamat tinggal","selamat malam"] },
+  th: { greeting: ["สวัสดี","สวัสดีครับ","สวัสดีค่ะ"], booking: ["จอง","การจอง","ว่าง","คืน"], room_info: ["ห้อง","สวีท","เตียง"], pricing: ["ราคา","ค่าใช้จ่าย","เท่าไหร่","อัตรา"], checkin: ["เช็คอิน","เดินทางถึง"], checkout: ["เช็คเอาท์","ออกเดินทาง"], dining: ["อาหารเช้า","อาหารกลางวัน","อาหารเย็น","ร้านอาหาร","เมนู"], amenities: ["สระว่ายน้ำ","ฟิตเนส","สปา","wifi","ที่จอดรถ"], policies: ["นโยบาย","ยกเลิก","สัตว์เลี้ยง","สูบบุหรี่","เด็ก"], contact: ["ที่อยู่","ตำแหน่ง","โทรศัพท์","อีเมล"], shuttle: ["รถรับส่ง","สนามบิน","แท็กซี่"], laundry: ["ซักผ้า","รีดผ้า"], thanks: ["ขอบคุณ","ขอบคุณมาก"], complaint: ["ร้องเรียน","ปัญหา","เสีย","สกปรก"], human_agent: ["พนักงาน","ผู้จัดการ","แผนกต้อนรับ"], farewell: ["ลาก่อน","ราตรีสวัสดิ์"] },
+  vi: { greeting: ["xin chào","chào buổi sáng","chào buổi tối"], booking: ["đặt phòng","đặt","còn phòng","đêm"], room_info: ["phòng","suite","giường"], pricing: ["giá","chi phí","bao nhiêu","mức giá"], checkin: ["nhận phòng","đến"], checkout: ["trả phòng","rời đi"], dining: ["bữa sáng","bữa trưa","bữa tối","nhà hàng","thực đơn"], amenities: ["hồ bơi","phòng gym","spa","wifi","bãi đỗ xe"], policies: ["chính sách","hủy","thú cưng","hút thuốc","trẻ em"], contact: ["địa chỉ","vị trí","điện thoại","email"], shuttle: ["xe đưa đón","sân bay","taxi"], laundry: ["giặt đồ","ủi đồ"], thanks: ["cảm ơn","cảm ơn nhiều"], complaint: ["khiếu nại","vấn đề","hỏng","bẩn"], human_agent: ["nhân viên","quản lý","lễ tân"], farewell: ["tạm biệt","chúc ngủ ngon"] },
+  uk: { greeting: ["привіт","добрий ранок","добрий день","добрий вечір"], booking: ["забронювати","бронювання","наявність","ніч"], room_info: ["номер","люкс","ліжко"], pricing: ["ціна","вартість","скільки","тариф"], checkin: ["заселення","прибуття"], checkout: ["виселення","від'їзд"], dining: ["сніданок","обід","вечеря","ресторан","меню"], amenities: ["басейн","спортзал","спа","вай-фай","парковка"], policies: ["правила","скасування","домашня тварина","куріння","діти"], contact: ["адреса","місцезнаходження","телефон","електронна пошта"], shuttle: ["трансфер","аеропорт","таксі"], laundry: ["пральня","прання"], thanks: ["дякую","дякую дуже"], complaint: ["скарга","проблема","зламано","брудно"], human_agent: ["персонал","менеджер","адміністрація"], farewell: ["до побачення","на добраніч"] },
+  ms: { greeting: ["helo","selamat pagi","selamat petang"], booking: ["tempah","tempahan","tersedia","ketersediaan","malam"], room_info: ["bilik","suite","katil"], pricing: ["harga","kos","berapa","kadar"], checkin: ["daftar masuk","ketibaan"], checkout: ["daftar keluar","pelepasan"], dining: ["sarapan","makan tengah hari","makan malam","restoran","menu"], amenities: ["kolam renang","gim","spa","wifi","parkir"], policies: ["dasar","batalkan","haiwan peliharaan","merokok","kanak-kanak"], contact: ["alamat","lokasi","telefon","e-mel"], shuttle: ["bas ulang-alik","lapangan terbang","teksi"], laundry: ["dobi","mencuci"], thanks: ["terima kasih","terima kasih banyak"], complaint: ["aduan","masalah","rosak","kotor"], human_agent: ["kakitangan","pengurus","kaunter"], farewell: ["selamat tinggal","selamat malam"] },
+  bg: { greeting: ["здравейте","добро утро","добър ден"], booking: ["резервация","резервирам","наличност","нощ"], room_info: ["стая","апартамент","легло"], pricing: ["цена","колко","тарифа"], checkin: ["настаняване","пристигане"], checkout: ["напускане","отпътуване"], dining: ["закуска","обяд","вечеря","ресторант","меню"], amenities: ["басейн","фитнес","спа","wifi","паркинг"], policies: ["политика","отмяна","домашен любимец","пушене","деца"], contact: ["адрес","местоположение","телефон","имейл"], shuttle: ["трансфер","летище","такси"], laundry: ["пране","гладене"], thanks: ["благодаря","благодаря много"], complaint: ["оплакване","проблем","счупено","мръсно"], human_agent: ["служител","мениджър","рецепция"], farewell: ["довиждане","лека нощ"] },
+  hr: { greeting: ["bok","dobro jutro","dobar dan","dobra večer"], booking: ["rezervacija","rezervirati","dostupnost","noć"], room_info: ["soba","apartman","krevet"], pricing: ["cijena","koliko","tarifa"], checkin: ["prijava","dolazak"], checkout: ["odjava","odlazak"], dining: ["doručak","ručak","večera","restoran","jelovnik"], amenities: ["bazen","teretana","spa","wifi","parking"], policies: ["politika","otkazati","kućni ljubimac","pušenje","djeca"], contact: ["adresa","lokacija","telefon","e-mail"], shuttle: ["shuttle","aerodrom","taksi"], laundry: ["praonica","pranje"], thanks: ["hvala","hvala lijepo"], complaint: ["pritužba","problem","pokvareno","prljavo"], human_agent: ["zaposlenik","menadžer","recepcija"], farewell: ["doviđenja","laku noć"] },
+  et: { greeting: ["tere","tere hommikust","tere õhtust"], booking: ["broneering","broneerima","saadaval","öö"], room_info: ["tuba","sviit","voodi"], pricing: ["hind","maksumus","palju","tariif"], checkin: ["sisseregistreerimine","saabumisaeg"], checkout: ["väljaregistreerimine","lahkumisaeg"], dining: ["hommikusöök","lõunasöök","õhtusöök","restoran","menüü"], amenities: ["bassein","jõusaal","spaad","wifi","parkla"], policies: ["poliitika","tühistada","lemmikloom","suitsetamine","lapsed"], contact: ["aadress","asukoht","telefon","e-post"], shuttle: ["buss","lennujaam","takso"], laundry: ["pesula","pesemine"], thanks: ["tänan","suur tänu"], complaint: ["kaebus","probleem","katki","must"], human_agent: ["töötaja","juht","vastuvõtt"], farewell: ["head aega","head ööd"] },
+  hu: { greeting: ["szia","jó reggelt","jó napot","jó estét"], booking: ["foglalás","foglalni","elérhetőség","éjszaka"], room_info: ["szoba","apartman","ágy"], pricing: ["ár","mennyibe kerül","tarifa"], checkin: ["bejelentkezés","érkezés"], checkout: ["kijelentkezés","távozás"], dining: ["reggeli","ebéd","vacsora","étterem","menü"], amenities: ["uszoda","edzőterem","spa","wifi","parkoló"], policies: ["szabályzat","lemondás","kisállat","dohányzás","gyerekek"], contact: ["cím","helyszín","telefon","e-mail"], shuttle: ["transzfer","repülőtér","taxi"], laundry: ["mosoda","mosás"], thanks: ["köszönöm","nagyon köszönöm"], complaint: ["panasz","probléma","törött","piszkos"], human_agent: ["alkalmazott","menedzser","recepció"], farewell: ["viszontlátásra","jó éjszakát"] },
+  lt: { greeting: ["labas","labas rytas","labas vakaras"], booking: ["rezervacija","rezervuoti","galimybė","naktis"], room_info: ["kambarys","apartamentai","lova"], pricing: ["kaina","kiek kainuoja","tarifas"], checkin: ["įregistravimas","atvykimas"], checkout: ["išsiregistravimas","išvykimas"], dining: ["pusryčiai","pietūs","vakarienė","restoranas","meniu"], amenities: ["baseinas","sporto salė","spa","wifi","automobilių stovėjimas"], policies: ["politika","atšaukti","augintinis","rūkymas","vaikai"], contact: ["adresas","vieta","telefonas","el. paštas"], shuttle: ["šitlas","oro uostas","taksi"], laundry: ["skalbykla","skalbimas"], thanks: ["ačiū","labai ačiū"], complaint: ["skundas","problema","sugedęs","nešvarus"], human_agent: ["darbuotojas","vadovas","registratūra"], farewell: ["viso gero","labos nakties"] },
+  no: { greeting: ["hei","god morgen","god dag"], booking: ["bestille","reservere","reservasjon","tilgjengelig","natt"], room_info: ["rom","suite","seng"], pricing: ["pris","kostnad","hvor mye","takst"], checkin: ["innsjekk","ankomst"], checkout: ["utsjekk","avreise"], dining: ["frokost","lunsj","middag","restaurant","meny"], amenities: ["basseng","treningssenter","spa","wifi","parkering"], policies: ["retningslinjer","avbestille","kjæledyr","røyking","barn"], contact: ["adresse","sted","telefon","e-post"], shuttle: ["shuttle","flyplass","taxi"], laundry: ["vaskeri","vask"], thanks: ["takk","tusen takk"], complaint: ["klage","problem","ødelagt","skitne"], human_agent: ["ansatt","leder","resepsjon"], farewell: ["ha det","god natt"] },
+  sw: { greeting: ["habari","asubuhi njema","jioni njema"], booking: ["hifadhi","kuhifadhi","upatikanaji","usiku"], room_info: ["chumba","suite","kitanda"], pricing: ["bei","gharama","ngapi","kiwango"], checkin: ["usajili wa kuingia","kuwasili"], checkout: ["usajili wa kutoka","kuondoka"], dining: ["kiamsha kinywa","chakula cha mchana","chakula cha jioni","mkahawa","menyu"], amenities: ["bwawa","ukumbi wa mazoezi","spa","wifi","maegesho"], policies: ["sera","ghairi","kipenzi","kuvuta sigara","watoto"], contact: ["anwani","mahali","simu","barua pepe"], shuttle: ["shuttle","uwanja wa ndege","teksi"], laundry: ["dobi","kuosha"], thanks: ["asante","asante sana"], complaint: ["malalamiko","tatizo","imevunjika","chafu"], human_agent: ["mfanyakazi","meneja","mapokezi"], farewell: ["kwa heri","usiku mwema"] },
+};
+
+// Merge extra keywords into MULTILANG_KEYWORDS
+Object.assign(MULTILANG_KEYWORDS, EXTRA_KEYWORDS);
+
+// Additional languages with basic keyword coverage
+const MORE_KEYWORDS: Record<string, Record<IntentKey, string[]>> = {
+  fil: { greeting: ["kumusta","magandang umaga","magandang hapon"], booking: ["mag-book","reserba","available","gabi"], room_info: ["kwarto","suite","kama"], pricing: ["presyo","magkano","singil"], checkin: ["check-in","pagdating"], checkout: ["check-out","pag-alis"], dining: ["almusal","tanghalian","hapunan","kainan","menu"], amenities: ["pool","gym","spa","wifi","parking"], policies: ["patakaran","kansela","alaga","paninigarilyo","bata"], contact: ["address","lokasyon","telepono","email"], shuttle: ["shuttle","paliparan","taxi"], laundry: ["labanderya","labhan"], thanks: ["salamat","maraming salamat"], complaint: ["reklamo","problema","sira","marumi"], human_agent: ["staff","manager","reception","tao"], farewell: ["paalam","magandang gabi"] },
+  ta: { greeting: ["வணக்கம்","காலை வணக்கம்"], booking: ["முன்பதிவு","அறை கிடைக்கும்","இரவு"], room_info: ["அறை","சூட்","படுக்கை"], pricing: ["விலை","எவ்வளவு","கட்டணம்"], checkin: ["செக்-இன்","வருகை"], checkout: ["செக்-அவுட்","புறப்பாடு"], dining: ["காலை உணவு","மதிய உணவு","இரவு உணவு","உணவகம்","மெனு"], amenities: ["நீச்சல்குளம்","ஜிம்","ஸ்பா","wifi","பார்க்கிங்"], policies: ["கொள்கை","ரத்து","செல்லப்பிராணி","புகைத்தல்","குழந்தைகள்"], contact: ["முகவரி","தொலைபேசி","மின்னஞ்சல்"], shuttle: ["ஷட்டில்","விமான நிலையம்","டாக்சி"], laundry: ["துணி தோய்க்க","துவைத்தல்"], thanks: ["நன்றி","மிக்க நன்றி"], complaint: ["புகார்","சிக்கல்","உடைந்தது"], human_agent: ["ஊழியர்","மேலாளர்","வரவேற்பு"], farewell: ["விடைபெறுகிறேன்","நல்வழி"] },
+  te: { greeting: ["నమస్కారం","శుభోదయం"], booking: ["బుకింగ్","రిజర్వేషన్","అందుబాటు","రాత్రి"], room_info: ["గది","సూట్","మంచం"], pricing: ["ధర","ఎంత","రేటు"], checkin: ["చెక్-ఇన్","రాక"], checkout: ["చెక్-అవుట్","నిష్క్రమణ"], dining: ["అల్పాహారం","భోజనం","రాత్రి భోజనం","రెస్టారెంట్","మెనూ"], amenities: ["స్విమ్మింగ్ పూల్","జిమ్","స్పా","wifi","పార్కింగ్"], policies: ["విధానం","రద్దు","పెంపుడు జంతువు","ధూమపానం","పిల్లలు"], contact: ["చిరునామా","ఫోన్","ఇమెయిల్"], shuttle: ["షట్టిల్","విమానాశ్రయం","టాక్సీ"], laundry: ["లాండ్రీ","ఉతుకు"], thanks: ["ధన్యవాదాలు","చాలా ధన్యవాదాలు"], complaint: ["ఫిర్యాదు","సమస్య","పాడైంది"], human_agent: ["సిబ్బంది","మేనేజర్","రిసెప్షన్"], farewell: ["వీడ్కోలు","శుభరాత్రి"] },
+};
+Object.assign(MULTILANG_KEYWORDS, MORE_KEYWORDS);

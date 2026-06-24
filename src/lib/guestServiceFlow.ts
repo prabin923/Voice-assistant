@@ -4,6 +4,8 @@ import type { ChatHistoryMessage } from "@/lib/dateParsing";
 import {
   handleGuestBookingFlow,
   shouldRunBookingFlow,
+  isFindAvailableDatesIntent,
+  isTopicEscape,
   type BookingSummary,
   type PendingBooking,
 } from "@/lib/bookingFlow";
@@ -37,7 +39,8 @@ export function shouldRunGuestServiceFlow(
 ): boolean {
   return (
     shouldRunBookingFlow(message, history, langCode, roomNames, pendingBooking) ||
-    shouldRunDiningFlow(message, history, langCode, pendingDining)
+    shouldRunDiningFlow(message, history, langCode, pendingDining) ||
+    isFindAvailableDatesIntent(message)
   );
 }
 
@@ -53,7 +56,17 @@ export async function handleGuestServiceFlow(params: {
 }): Promise<GuestServiceFlowResult> {
   const { message, langCode, config, history, guestProfile, pendingBooking, pendingDining } = params;
 
-  if (pendingBooking) {
+  // Mid-booking topic escape (directions, parking, amenities): let the AI answer
+  // the question and preserve the in-flight booking/dining so the guest can resume.
+  if ((pendingBooking || pendingDining) && isTopicEscape(message)) {
+    return {
+      handled: false,
+      pendingBooking: pendingBooking ?? null,
+      pendingDining: pendingDining ?? null,
+    };
+  }
+
+  if (pendingBooking && !isTopicEscape(message)) {
     const booking = await handleGuestBookingFlow({
       message,
       langCode,
@@ -62,7 +75,7 @@ export async function handleGuestServiceFlow(params: {
       guestProfile,
       pendingBooking,
     });
-    return { ...booking, pendingDining: null };
+    if (booking.handled) return { ...booking, pendingDining: null };
   }
 
   if (pendingDining) {
