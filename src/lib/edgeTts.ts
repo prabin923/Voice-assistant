@@ -82,10 +82,20 @@ export function resolveEdgeVoice(
   language?: string,
   voiceStyle: NemotronVoicePersona = "warm"
 ): string {
-  const override = process.env.EDGE_TTS_VOICE?.trim();
-  if (override) return override;
-
   const normalized = normalizeLanguage(language);
+
+  // EDGE_TTS_VOICE pins a voice — but only honor it when it matches the
+  // requested language, otherwise it forces one voice (e.g. English) onto every
+  // language and the assistant can't speak Nepali/Hindi/etc.
+  const override = process.env.EDGE_TTS_VOICE?.trim();
+  if (override) {
+    const overrideLocale = override.split("-").slice(0, 2).join("-"); // "ne-NP-Hemkala…" -> "ne-NP"
+    const sameLocale = overrideLocale.toLowerCase() === normalized.toLowerCase();
+    const samePrimary =
+      overrideLocale.split("-")[0].toLowerCase() === normalized.split("-")[0].toLowerCase();
+    if (sameLocale || samePrimary) return override;
+  }
+
   if (VOICE_BY_LANG[normalized]) {
     return VOICE_BY_LANG[normalized][voiceStyle];
   }

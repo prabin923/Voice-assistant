@@ -7,6 +7,9 @@ import {
   type PendingBooking,
   type PendingDining,
 } from "@/lib/guestServiceFlow";
+import { runBookingAgent, AGENT_PENDING_BOOKING } from "@/lib/bookingAgent";
+import type { EscalationReason } from "@/lib/escalation";
+import { localizeServiceReply } from "@/lib/replyLocalize";
 import { scheduleChatSideEffects } from "@/lib/chatSideEffects";
 import { getClientIP } from "@/lib/rateLimit";
 import { aiNotConfiguredResponse, isAiConfigured } from "@/lib/ai";
@@ -36,6 +39,7 @@ export async function POST(req: Request) {
       hotel?: string;
       pendingBooking?: PendingBooking | null;
       pendingDining?: PendingDining | null;
+      agentActive?: boolean;
     };
 
     const tenantSlug =
@@ -93,40 +97,79 @@ export async function POST(req: Request) {
 
           let reply = "";
           let escalate = false;
-          let reason: string | undefined;
+          let reason: EscalationReason | undefined;
           let booking: unknown;
           let dining: unknown;
           let nextPending: PendingBooking | null | undefined = pendingBooking;
           let nextDiningPending: PendingDining | null | undefined = pendingDining;
 
-          const runService = shouldRunGuestServiceFlow(
-            message,
-            conversationHistory,
-            langCode,
-            config.rooms.map((r) => r.name),
-            pendingBooking,
-            pendingDining
-          );
-
-          if (runService) {
-            const serviceFlow = await handleGuestServiceFlow({
+          const engaged =
+            body.agentActive === true ||
+            shouldRunGuestServiceFlow(
               message,
+              conversationHistory,
               langCode,
-              config,
-              history: conversationHistory,
-              guestProfile,
+              config.rooms.map((r) => r.name),
               pendingBooking,
-              pendingDining,
-            });
+              pendingDining
+            );
 
-            if (serviceFlow.handled) {
-              reply = serviceFlow.reply || "";
-              escalate = Boolean(serviceFlow.escalate);
-              reason = serviceFlow.reason;
-              booking = serviceFlow.booking;
-              dining = serviceFlow.dining;
-              nextPending = serviceFlow.pendingBooking;
-              nextDiningPending = serviceFlow.pendingDining;
+          if (engaged) {
+            let agentReply = "";
+            let agentBooking: unknown;
+            let agentDining: unknown;
+            let agentActive = false;
+            let agentEscalate = false;
+            let handled = false;
+
+            try {
+              // LLM receptionist agent (tools wrap real availability + booking).
+              const agent = await runBookingAgent({
+                message,
+                langCode,
+                config,
+                history: conversationHistory,
+                channel: body.channel === "voice" ? "voice" : "text",
+                guestProfile,
+              });
+              agentReply = agent.reply;
+              agentBooking = agent.booking;
+              agentDining = agent.dining;
+              agentEscalate = agent.escalate;
+              agentActive = agent.active;
+              // Keep the agent engaged next turn while a booking is in progress.
+              nextPending = agentActive ? AGENT_PENDING_BOOKING : null;
+              nextDiningPending = null;
+              handled = true;
+            } catch (err) {
+              // Fall back to the deterministic flow (translated) if the agent fails.
+              console.warn("[bookingAgent] stream failed, using deterministic flow:", err);
+              const serviceFlow = await handleGuestServiceFlow({
+                message,
+                langCode,
+                config,
+                history: conversationHistory,
+                guestProfile,
+                pendingBooking,
+                pendingDining,
+              });
+              if (serviceFlow.handled) {
+                agentReply = await localizeServiceReply(serviceFlow.reply || "", langCode);
+                agentBooking = serviceFlow.booking;
+                agentDining = serviceFlow.dining;
+                agentEscalate = Boolean(serviceFlow.escalate);
+                reason = serviceFlow.reason;
+                nextPending = serviceFlow.pendingBooking;
+                nextDiningPending = serviceFlow.pendingDining;
+                handled = true;
+              }
+            }
+
+            if (handled) {
+              reply = agentReply;
+              escalate = agentEscalate;
+              booking = agentBooking;
+              dining = agentDining;
               push({ type: "delta", text: reply });
               push({
                 type: "done",
@@ -137,6 +180,7 @@ export async function POST(req: Request) {
                 dining,
                 pendingBooking: nextPending,
                 pendingDining: nextDiningPending,
+                agentActive,
               });
               scheduleChatSideEffects({
                 guestMessage: message,
@@ -144,7 +188,7 @@ export async function POST(req: Request) {
                 language: langCode,
                 guestId: guestSession?.guestId,
                 escalate,
-                reason: serviceFlow.reason,
+                reason,
               });
               controller.close();
               return;
@@ -170,6 +214,7 @@ export async function POST(req: Request) {
                 reason,
                 pendingBooking: nextPending,
                 pendingDining: nextDiningPending,
+                agentActive: false,
               });
             }
           }

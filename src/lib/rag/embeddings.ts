@@ -5,7 +5,11 @@ import { getActiveAiProvider } from "@/lib/ai";
 import { getGeminiApiKey } from "@/lib/gemini";
 import { getOpenAiApiKey } from "@/lib/openai";
 
-const GEMINI_EMBED_MODEL = "text-embedding-004";
+// text-embedding-004 is NOT served by the Generative Language API for current
+// keys (returns 404 on embedContent), which silently killed all RAG embeddings.
+// gemini-embedding-001 is the GA multilingual embedding model (supports task
+// types). Override via GEMINI_EMBED_MODEL if needed.
+const GEMINI_EMBED_MODEL = process.env.GEMINI_EMBED_MODEL?.trim() || "gemini-embedding-001";
 const OPENAI_EMBED_MODEL = "text-embedding-3-small";
 
 let genAiSingleton: GoogleGenerativeAI | null = null;

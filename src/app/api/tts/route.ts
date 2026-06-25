@@ -31,6 +31,35 @@ function sanitizeLanguage(language: unknown): string {
     .slice(0, 12);
 }
 
+// Map a non-Latin script to a TTS locale so we voice the ACTUAL language of the
+// text, even when the client passes the wrong language. With language mirroring,
+// the assistant may reply in Nepali while the widget is set to English — without
+// this, the English voice tries to read Devanagari and produces nothing useful.
+const SCRIPT_TO_LOCALE: { re: RegExp; locale: string; langs: string[] }[] = [
+  { re: /[ऀ-ॿ]/, locale: "ne-NP", langs: ["ne", "hi", "mr"] }, // Devanagari
+  { re: /[؀-ۿ]/, locale: "ar-SA", langs: ["ar", "ur", "fa"] },
+  { re: /[֐-׿]/, locale: "he-IL", langs: ["he"] },
+  { re: /[஀-௿]/, locale: "ta-IN", langs: ["ta"] },
+  { re: /[ఀ-౿]/, locale: "te-IN", langs: ["te"] },
+  { re: /[ঀ-৿]/, locale: "bn-BD", langs: ["bn"] },
+  { re: /[઀-૿]/, locale: "gu-IN", langs: ["gu"] },
+  { re: /[ഀ-ൿ]/, locale: "ml-IN", langs: ["ml"] },
+  { re: /[฀-๿]/, locale: "th-TH", langs: ["th"] },
+  { re: /[぀-ヿ]/, locale: "ja-JP", langs: ["ja"] }, // kana (before CJK)
+  { re: /[가-힯]/, locale: "ko-KR", langs: ["ko"] },
+  { re: /[一-鿿]/, locale: "zh-CN", langs: ["zh"] },
+];
+
+/** Choose the voice language from the text's script, respecting the caller's
+ *  language when it already uses that script (e.g. Devanagari + "hi-IN" → Hindi). */
+function speechLanguageForText(text: string, passedLang: string): string {
+  const primary = passedLang.split("-")[0].toLowerCase();
+  for (const { re, locale, langs } of SCRIPT_TO_LOCALE) {
+    if (re.test(text)) return langs.includes(primary) ? passedLang : locale;
+  }
+  return passedLang;
+}
+
 export async function GET() {
   return NextResponse.json({
     serverTtsReady: isServerTtsConfigured(),
@@ -73,7 +102,10 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const text = sanitizeSpeechText(String(body.text ?? ""));
-    const language = sanitizeLanguage(body.language);
+    // Pick the voice language from the text's script, not just the widget setting,
+    // so mirrored replies (e.g. Nepali text under an English widget) are spoken
+    // in the correct language/voice.
+    const language = speechLanguageForText(text, sanitizeLanguage(body.language));
     const voiceStyle = parseVoiceStyle(body.voiceStyle);
 
     if (!text) {

@@ -5,6 +5,7 @@ import {
   retrieveRelevantChunks,
   type RetrievedChunk,
 } from "@/lib/rag/knowledgeIndex";
+import { hasNonLatinScript } from "@/lib/rag/lexical";
 
 export type ChatTurn = { role: string; content: string };
 
@@ -68,12 +69,14 @@ function groundingFootnote(phone: string): string {
   return `\nONLY answer from the HOTEL FACTS above. If the answer is not listed, say: "I don't have that detail — our front desk can help at ${phone}."`;
 }
 
-/** One-line language instruction injected only for non-English languages. */
+/**
+ * Language instruction: mirror the language the guest is actually writing in —
+ * including romanized/transliterated languages (e.g. Nepali/Hindi typed in Latin
+ * letters) — rather than rigidly following the widget's language selector.
+ */
 function langLine(langCode?: string): string {
-  if (!langCode) return "";
-  const name = LANG_NAMES[langCode];
-  if (!name) return ""; // English variants — no instruction needed
-  return `\nRespond in ${name}.`;
+  const widget = (langCode && LANG_NAMES[langCode]) || "English";
+  return `\nReply in the SAME language the guest is writing in, including romanized/transliterated languages: if they type Nepali or Hindi in Latin letters (e.g. "kun kun room available xa"), understand it and reply in that language using its native script. Only default to ${widget} if the guest's language is genuinely unclear.`;
 }
 
 function fullContextMessage(
@@ -99,7 +102,13 @@ function fastVoiceFallbackMessage(
     `- Check-in ${config.policies.checkInTime}, check-out ${config.policies.checkOutTime}`,
     `- Rooms: ${config.rooms.slice(0, 3).map((r) => `${r.name} ${r.currency}${r.pricePerNight}`).join("; ")}`,
     `- Dining: ${config.dining.slice(0, 3).map((d) => d.name).join(", ") || "not listed"}`,
-  ].join("\n");
+    // Include real knowledge (amenities + FAQ), not just metadata, so the
+    // fallback can still answer "do you have X?" instead of guessing.
+    `- Amenities: ${config.amenities.map((a) => `${a.name}${a.hours ? ` (${a.hours})` : ""}`).join("; ") || "not listed"}`,
+    config.customFAQ?.length
+      ? `- FAQ: ${config.customFAQ.slice(0, 4).map((f) => `${f.question} → ${f.answer}`).join("; ")}`
+      : "",
+  ].filter(Boolean).join("\n");
   return {
     usedRag: false,
     message:
@@ -120,6 +129,15 @@ export async function augmentUserMessageWithHotelContext(
     const topK = channel === "voice" ? 3 : 10;
     const query = buildRetrievalQuery(message, history);
 
+    // Non-Latin (e.g. Nepali) queries can't use the lexical fast path against an
+    // English knowledge base, so they MUST embed — give them the longer text
+    // budget instead of the 180ms voice budget, or they always time out into the
+    // metadata-only fallback.
+    const timeoutMs =
+      channel === "voice" && hasNonLatinScript(query)
+        ? ragTimeoutMs("text")
+        : ragTimeoutMs(channel);
+
     const chunks = await Promise.race([
       retrieveRelevantChunks(query, {
         topK,
@@ -130,7 +148,7 @@ export async function augmentUserMessageWithHotelContext(
         lexicalOnly: false,
       }),
       new Promise<RetrievedChunk[]>((resolve) =>
-        setTimeout(() => resolve([]), ragTimeoutMs(channel))
+        setTimeout(() => resolve([]), timeoutMs)
       ),
     ]);
 

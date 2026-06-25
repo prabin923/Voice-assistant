@@ -44,7 +44,7 @@ export async function POST(req: Request) {
   // Settings resync
   if (body.source === "settings") {
     try {
-      await syncKnowledgeIndex(config);
+      await syncKnowledgeIndex(config, auth.session.hotelId);
       const stats = await getKnowledgeChunkStats();
       return NextResponse.json({ ok: true, source: "settings", settingsChunks: stats.config });
     } catch (err: unknown) {

@@ -419,6 +419,7 @@ export default function SettingsPage() {
               isDark={isDark}
               cardCls={cardCls}
               labelCls={labelCls}
+              rooms={config.rooms}
               onToast={showToast}
             />
           )}
