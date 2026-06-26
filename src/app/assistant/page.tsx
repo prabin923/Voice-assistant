@@ -1199,6 +1199,11 @@ export default function VoiceAssistant() {
           autoGainControl: true,
         },
       });
+      // Guard: session was stopped while waiting for mic permission
+      if (!inConversationRef.current && !autoListenAfterSpeakRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
       const mimeType = pickRecorderMimeType();
       const recorder = mimeType
         ? new MediaRecorder(stream, { mimeType })
