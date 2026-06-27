@@ -393,8 +393,13 @@ export default function StayNepAssistant() {
               ? fallback.error.trim()
               : ui.errorConnection;
           setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
-          autoListenAfterSpeakRef.current = true;
-          await speakText(reply);
+          if (inConversationRef.current) {
+            autoListenAfterSpeakRef.current = true;
+            const spoken = await speakText(reply);
+            if (!spoken && inConversationRef.current) {
+              setTimeout(() => { if (inConversationRef.current) startListeningInternalRef.current(); }, VOICE_RESUME_LISTEN_MS);
+            }
+          }
           return;
         }
 
@@ -461,11 +466,15 @@ export default function StayNepAssistant() {
           return next;
         });
 
-        if (finalReply) {
+        if (finalReply && inConversationRef.current) {
           autoListenAfterSpeakRef.current = true;
           prefetchReplyAudio(finalReply);
           if (!heardAudio) {
-            await speakText(finalReply, { onSpeechStart: markHeard, forceProvider: "server" });
+            const spoken = await speakText(finalReply, { onSpeechStart: markHeard, forceProvider: "server" });
+            // If server TTS unavailable, fall back to re-listening directly
+            if (!spoken && inConversationRef.current) {
+              setTimeout(() => { if (inConversationRef.current) startListeningInternalRef.current(); }, VOICE_RESUME_LISTEN_MS);
+            }
           } else if (inConversationRef.current) {
             setTimeout(() => { if (inConversationRef.current) startListeningInternalRef.current(); }, VOICE_RESUME_LISTEN_MS);
           }
@@ -1067,7 +1076,13 @@ export default function StayNepAssistant() {
                           }`}
                           style={msg.role === "assistant" ? { borderColor: `${STAYNEP_ACCENT}33` } : undefined}
                         >
-                          {msg.content}
+                          {msg.content || (
+                            <span className="flex items-center gap-1.5 text-neutral-500">
+                              <span className="h-1.5 w-1.5 rounded-full bg-current opacity-60 animate-bounce" style={{ animationDelay: "0ms" }} />
+                              <span className="h-1.5 w-1.5 rounded-full bg-current opacity-60 animate-bounce" style={{ animationDelay: "120ms" }} />
+                              <span className="h-1.5 w-1.5 rounded-full bg-current opacity-60 animate-bounce" style={{ animationDelay: "240ms" }} />
+                            </span>
+                          )}
                         </div>
                         <span className="px-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-600">
                           {msg.role === "user" ? ui.you : "StayNep"}
@@ -1075,7 +1090,7 @@ export default function StayNepAssistant() {
                       </div>
                     </div>
                   ))}
-                  {isProcessing && (
+                  {isProcessing && messages[messages.length - 1]?.role === "user" && (
                     <div className="flex gap-3 animate-in slide-in-from-bottom-2">
                       <ConciergeAvatar name={CONCIERGE_NAME} accentColor={STAYNEP_ACCENT} size="sm" isDark={isDark} className="mt-0.5" />
                       <div

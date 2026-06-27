@@ -116,24 +116,24 @@ export async function POST(req: Request) {
     const ip = getClientIP(req);
     const chatLimit = await checkGuestChatRateLimit({ ip });
     if (!chatLimit.allowed) {
-      return new Response(encodeSse({ type: "error", error: "Rate limit exceeded." }), {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded. Please wait a moment." }), {
         status: 429,
-        headers: { "Content-Type": "text/event-stream" },
+        headers: { "Content-Type": "application/json" },
       });
     }
 
     const message = sanitizeChatMessage(body.message);
     if (!message) {
-      return new Response(encodeSse({ type: "error", error: "Invalid message." }), {
+      return new Response(JSON.stringify({ error: "A valid message is required." }), {
         status: 400,
-        headers: { "Content-Type": "text/event-stream" },
+        headers: { "Content-Type": "application/json" },
       });
     }
 
     if (!isAiConfigured()) {
-      return new Response(encodeSse({ type: "error", ...aiNotConfiguredResponse() }), {
+      return new Response(JSON.stringify(aiNotConfiguredResponse()), {
         status: 501,
-        headers: { "Content-Type": "text/event-stream" },
+        headers: { "Content-Type": "application/json" },
       });
     }
 
