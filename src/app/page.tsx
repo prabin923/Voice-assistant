@@ -23,9 +23,14 @@ import {
   ChevronRight,
   Sparkles,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { Reveal } from "@/components/Reveal";
-import { GsapLandingAnimations } from "@/components/GsapLandingAnimations";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
+
+const GsapLandingAnimations = dynamic(
+  () => import("@/components/GsapLandingAnimations").then((m) => m.GsapLandingAnimations),
+  { ssr: false }
+);
 import { SpectrogramWaveform } from "@/components/SpectrogramWaveform";
 
 type PublicHotel = {
@@ -207,12 +212,13 @@ function HotelCard({ hotel }: { hotel: PublicHotel }) {
 function HotelGrid() {
   const [hotels, setHotels] = useState<PublicHotel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
 
   useEffect(() => {
     fetch("/api/hotels")
       .then((r) => r.json())
       .then((d) => setHotels(d.hotels ?? []))
-      .catch(() => {})
+      .catch(() => setFetchError(true))
       .finally(() => setLoading(false));
   }, []);
 
@@ -222,6 +228,23 @@ function HotelGrid() {
         {[0, 1, 2].map((i) => (
           <div key={i} className="h-64 animate-pulse rounded-[5.6px] border border-iron-border bg-carbon-surface" />
         ))}
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="mt-12 rounded-[5.6px] border border-iron-border bg-carbon-surface p-10 text-center">
+        <Building2 className="mx-auto h-8 w-8 text-zinc-mute" strokeWidth={1.5} />
+        <p className="mt-4 text-zinc-mute">Couldn't load hotels — check your connection and try again.</p>
+        <button
+          type="button"
+          onClick={() => { setFetchError(false); setLoading(true); fetch("/api/hotels").then((r) => r.json()).then((d) => setHotels(d.hotels ?? [])).catch(() => setFetchError(true)).finally(() => setLoading(false)); }}
+          className="vapi-btn-ember mt-6 inline-flex"
+        >
+          Retry
+          <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} />
+        </button>
       </div>
     );
   }
@@ -292,7 +315,7 @@ export default function HomePage() {
           <div data-gsap="hero-copy" className="mx-auto max-w-3xl text-center">
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-iron-border bg-carbon-surface px-3.5 py-1.5 text-[12px] text-zinc-mute">
               <Sparkles className="h-3.5 w-3.5 text-ember-orange" strokeWidth={2} />
-              Powered by Gemini · Neural TTS · 40+ languages
+              Powered by staynep · Neural TTS · 40+ languages
             </div>
 
             <h1 className="vapi-headline text-balance text-[clamp(2.5rem,6vw,4.25rem)]">

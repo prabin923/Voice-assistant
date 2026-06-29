@@ -104,6 +104,7 @@ export default function CallOverlay({
   const [liveTranscript, setLiveTranscript] = useState("");
   const [callLog, setCallLog] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [sttRetrying, setSttRetrying] = useState(false);
   const callStartedAtRef = useRef(Date.now());
   const callStateRef = useRef<CallState>("ringing");
   const endingCallRef = useRef(false);
@@ -365,7 +366,7 @@ export default function CallOverlay({
       endedAt,
       durationSec: duration,
       languageCode,
-      mode: liveMode ? "server" : useServerModeRef.current ? "server" : "native",
+      mode: (liveMode || useServerModeRef.current) ? "server" : "native",
       transcriptPreview,
       totalTurns: callLog.length,
     };
@@ -523,10 +524,14 @@ export default function CallOverlay({
           const res = await fetch('/api/stt', { method: 'POST', body: fd });
           const data = await res.json();
           const transcribed = typeof data.text === "string" ? data.text.trim() : "";
+          setSttRetrying(false);
           if (transcribed) sendMessage(transcribed);
           else if (autoListenRef.current) setTimeout(() => startListeningRef.current(), VOICE_STT_RETRY_MS);
         } catch {
-          if (autoListenRef.current) setTimeout(() => startListeningRef.current(), VOICE_STT_RETRY_MS);
+          if (autoListenRef.current) {
+            setSttRetrying(true);
+            setTimeout(() => { setSttRetrying(false); startListeningRef.current(); }, VOICE_STT_RETRY_MS);
+          }
         } finally { stream.getTracks().forEach(t => t.stop()); }
       };
 
@@ -873,7 +878,10 @@ export default function CallOverlay({
                   <p className="text-neutral-500 text-xs">{VOICE_STATUS.thinking}</p>
                 </div>
               )}
-              {!isListening && !isSpeaking && !isProcessing && (
+              {sttRetrying && (
+                <p className="text-amber-400/70 text-xs animate-pulse">Reconnecting mic…</p>
+              )}
+              {!isListening && !isSpeaking && !isProcessing && !sttRetrying && (
                 <p className="text-neutral-600 text-xs">{VOICE_STATUS.ready}</p>
               )}
             </div>

@@ -3,7 +3,20 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { Mic, Volume2, Loader2, PhoneCall, ChevronDown, ChevronLeft, ChevronRight, Check, ThumbsUp, ThumbsDown, History, ChevronUp, Send, MessageSquare, Globe2, X } from "lucide-react";
-import CallOverlay, { type CallHistoryRecord } from "@/components/CallOverlay";
+import dynamic from "next/dynamic";
+import type { CallHistoryRecord } from "@/components/CallOverlay";
+
+const CallOverlay = dynamic(() => import("@/components/CallOverlay"), {
+  ssr: false,
+  loading: () => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0a0a0a]">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-neutral-700 border-t-green-400" />
+        <p className="text-sm text-neutral-500">Connecting…</p>
+      </div>
+    </div>
+  ),
+});
 import {
   BookingSummaryCard,
   type BookingSummary,
