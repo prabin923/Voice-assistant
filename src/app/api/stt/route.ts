@@ -167,7 +167,7 @@ export async function POST(req: Request) {
         {
           error: "Speech-to-text not configured.",
           details: isFreeVoiceStack()
-            ? "Start Whisper: npm run whisper:up (or ./scripts/setup-local-whisper.sh). Set WHISPER_STT_ENDPOINT=http://127.0.0.1:8000/v1"
+            ? "Set GOOGLE_GENERATIVE_AI_API_KEY for Gemini STT, or point WHISPER_STT_ENDPOINT at a running Whisper server."
             : "Set NEMOTRON_ASR_ENDPOINT, WHISPER_STT_ENDPOINT, OPENAI_API_KEY, or GOOGLE_GENERATIVE_AI_API_KEY.",
         },
         { status: 501 }
