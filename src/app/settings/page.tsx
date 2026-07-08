@@ -25,6 +25,7 @@ interface RoomType {
   maxOccupancy: number;
   category?: string;
   imageUrl?: string;
+  amenitiesIncluded?: string[];
 }
 interface DiningVenue { name: string; cuisine: string; hours: string; description: string; }
 interface Amenity { name: string; description: string; hours?: string; }
@@ -32,8 +33,9 @@ interface FAQ { question: string; answer: string; }
 
 interface HotelConfig {
   branding: { hotelName: string; tagline: string; accentColor: string; welcomeMessage: string; farewellMessage: string; logoUrl?: string; };
-  contact: { phone: string; email: string; website?: string; address: string; city: string; country: string; };
-  policies: { checkInTime: string; checkOutTime: string; cancellationPolicy: string; petPolicy: string; smokingPolicy: string; extraBedPolicy: string; childPolicy: string; };
+  contact: { phone: string; email: string; website?: string; address: string; city: string; country: string; directions?: string; parkingInfo?: string; airportShuttle?: string; };
+  operations?: { frontDeskHours?: string; conciergeHours?: string; housekeepingHours?: string; roomServiceHours?: string; };
+  policies: { checkInTime: string; checkOutTime: string; cancellationPolicy: string; petPolicy: string; smokingPolicy: string; extraBedPolicy: string; childPolicy: string; earlyCheckIn?: string; lateCheckout?: string; };
   rooms: RoomType[];
   dining: DiningVenue[];
   amenities: Amenity[];
@@ -68,8 +70,9 @@ export default function SettingsPage() {
   const [embedInfo, setEmbedInfo] = useState<{ slug: string; snippet: string; widgetSnippet?: string; embedUrl: string } | null>(null);
   const [embedMode, setEmbedMode] = useState<"widget" | "iframe">("widget");
   const [slugDraft, setSlugDraft] = useState("");
-  const [webSync, setWebSync] = useState<{ chunkCount: number; lastSyncedAt: string | null } | null>(null);
+  const [webSync, setWebSync] = useState<{ website: { chunkCount: number; lastSyncedAt: string | null }; settings: { chunkCount: number } } | null>(null);
   const [webSyncing, setWebSyncing] = useState(false);
+  const [settingsSyncing, setSettingsSyncing] = useState(false);
   const [slugSaving, setSlugSaving] = useState(false);
 
   const showToast = useCallback((message: string, type: "success" | "delete" | "info" = "success") => {
@@ -101,7 +104,7 @@ export default function SettingsPage() {
       .then((data) => setKnowledgeGaps(data.gaps ?? []))
       .catch(() => {});
 
-    fetchJsonWithAuth<{ chunkCount: number; lastSyncedAt: string | null }>("/api/rag/sync")
+    fetchJsonWithAuth<{ website: { chunkCount: number; lastSyncedAt: string | null }; settings: { chunkCount: number } }>("/api/rag/sync")
       .then(setWebSync)
       .catch(() => {});
 
@@ -181,6 +184,13 @@ export default function SettingsPage() {
     }
   };
 
+  const refreshRagStats = async () => {
+    try {
+      const data = await fetchJsonWithAuth<{ website: { chunkCount: number; lastSyncedAt: string | null }; settings: { chunkCount: number } }>("/api/rag/sync");
+      setWebSync(data);
+    } catch { /* ignore */ }
+  };
+
   const syncWebsite = async () => {
     if (!config?.contact?.website?.trim()) {
       showToast("Add your website URL first, then save.", "info");
@@ -193,12 +203,29 @@ export default function SettingsPage() {
         chunksUpserted: number;
         chunksRemoved: number;
       }>("/api/rag/sync", { method: "POST" });
-      setWebSync({ chunkCount: (webSync?.chunkCount ?? 0) - (data.chunksRemoved ?? 0) + (data.chunksUpserted ?? 0), lastSyncedAt: new Date().toISOString() });
-      showToast(`Synced ${data.pagesVisited} pages · ${data.chunksUpserted} chunks indexed.`);
+      showToast(`Synced ${data.pagesVisited} pages · ${data.chunksUpserted} website chunks indexed.`);
+      await refreshRagStats();
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : "Sync failed.", "delete");
     } finally {
       setWebSyncing(false);
+    }
+  };
+
+  const syncSettings = async () => {
+    setSettingsSyncing(true);
+    try {
+      const data = await fetchJsonWithAuth<{ settingsChunks: number }>("/api/rag/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: "settings" }),
+      });
+      showToast(`Settings synced · ${data.settingsChunks} chunks indexed.`);
+      await refreshRagStats();
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Settings sync failed.", "delete");
+    } finally {
+      setSettingsSyncing(false);
     }
   };
 
@@ -392,6 +419,7 @@ export default function SettingsPage() {
               isDark={isDark}
               cardCls={cardCls}
               labelCls={labelCls}
+              rooms={config.rooms}
               onToast={showToast}
             />
           )}
@@ -772,59 +800,132 @@ export default function SettingsPage() {
                   <div><label className={labelCls}>Address</label><input className={inputCls} value={config.contact.address} onChange={e => updateContact("address", e.target.value)} /></div>
                   <div><label className={labelCls}>City</label><input className={inputCls} value={config.contact.city} onChange={e => updateContact("city", e.target.value)} /></div>
                   <div><label className={labelCls}>Country</label><input className={inputCls} value={config.contact.country} onChange={e => updateContact("country", e.target.value)} /></div>
+                  <div className="col-span-2">
+                    <label className={labelCls}>Directions to Hotel</label>
+                    <textarea className={inputCls} rows={2} value={config.contact.directions || ""} onChange={e => updateContact("directions", e.target.value)} placeholder="e.g. Take Exit 5 off Ring Road, turn left on Hotel Lane. 5 min from city centre." />
+                    <p className="text-xs text-zinc-mute mt-1">Guests asking &quot;how do I get to you?&quot; will hear this. The AI won&apos;t invent directions if this is empty.</p>
+                  </div>
+                  <div className="col-span-2">
+                    <label className={labelCls}>Parking Information</label>
+                    <textarea className={inputCls} rows={2} value={config.contact.parkingInfo || ""} onChange={e => updateContact("parkingInfo", e.target.value)} placeholder="e.g. Valet $25/day · Self-park Level B2 $15/day · EV charging available" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className={labelCls}>Airport Shuttle / Transfer</label>
+                    <textarea className={inputCls} rows={2} value={config.contact.airportShuttle || ""} onChange={e => updateContact("airportShuttle", e.target.value)} placeholder="e.g. Complimentary shuttle every 30 min from Terminal 2 — call front desk to arrange" />
+                  </div>
                 </div>
               </div>
 
-              {/* Website RAG sync */}
+              {/* Operations Hours */}
               <div className={cardCls}>
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h2 className="text-base font-semibold text-cream-text flex items-center gap-2">
-                      <Globe2 className="w-4 h-4 text-ember-orange" /> Train AI from your website
-                    </h2>
-                    <p className="text-sm text-zinc-mute mt-1">
-                      The assistant crawls your website, reads every page, and stores the content as searchable knowledge. Guests can then ask anything about your hotel — even details not in your manual config — and get accurate answers.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void syncWebsite()}
-                    disabled={webSyncing || !config.contact.website?.trim()}
-                    className="vapi-btn-ember vapi-btn-compact shrink-0 disabled:opacity-40"
-                  >
-                    {webSyncing ? (
-                      <><Loader2 className="w-4 h-4 animate-spin" /> Crawling…</>
-                    ) : (
-                      <><RotateCcw className="w-4 h-4" /> Sync now</>
-                    )}
-                  </button>
+                <h2 className="text-base font-semibold text-cream-text flex items-center gap-2"><Clock className="w-4 h-4 text-ember-orange" /> Operating Hours</h2>
+                <p className="text-sm text-zinc-mute">Guests asking &quot;when does housekeeping come?&quot; or &quot;is front desk open?&quot; will get these answers.</p>
+                <div className="grid grid-cols-2 gap-4">
+                  {(["frontDeskHours","conciergeHours","housekeepingHours","roomServiceHours"] as const).map((key) => {
+                    const labels: Record<string, string> = { frontDeskHours: "Front Desk", conciergeHours: "Concierge", housekeepingHours: "Housekeeping", roomServiceHours: "Room Service" };
+                    return (
+                      <div key={key}>
+                        <label className={labelCls}>{labels[key]}</label>
+                        <input className={inputCls} value={config.operations?.[key] || ""} onChange={e => setConfig({ ...config, operations: { ...(config.operations ?? {}), [key]: e.target.value } })} placeholder='e.g. "24/7" or "8 AM – 6 PM"' />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* AI Knowledge Sources */}
+              <div className={cardCls}>
+                <div>
+                  <h2 className="text-base font-semibold text-cream-text flex items-center gap-2">
+                    <Globe2 className="w-4 h-4 text-ember-orange" /> AI Knowledge Sources
+                  </h2>
+                  <p className="text-sm text-zinc-mute mt-1">
+                    The assistant retrieves answers from two sources: your hotel <strong className="text-bone-text">Settings</strong> (rooms, policies, FAQ, dining) and your <strong className="text-bone-text">Website</strong>. Both are searched together for every guest question.
+                  </p>
                 </div>
 
-                {/* Status */}
-                {webSync && webSync.chunkCount > 0 ? (
-                  <div className="flex items-center gap-2 rounded-[5.6px] border border-mint-pulse/25 bg-mint-pulse/8 px-4 py-2.5 text-sm">
-                    <CheckCircle2 className="w-4 h-4 shrink-0 text-mint-pulse" />
-                    <span className="text-mint-pulse font-medium">{webSync.chunkCount} chunks indexed</span>
-                    {webSync.lastSyncedAt && (
-                      <span className="text-zinc-mute text-xs">
-                        · Last synced {new Date(webSync.lastSyncedAt).toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    )}
+                {/* Source 1 — Settings */}
+                <div className="rounded-[5.6px] border border-iron-border bg-slab-elevated p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-cream-text">Source 1 — Hotel Settings</p>
+                      <p className="text-xs text-zinc-mute mt-0.5">Rooms, prices, policies, FAQ, dining, amenities. Auto-synced when you save settings.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void syncSettings()}
+                      disabled={settingsSyncing}
+                      className={`${vapiGhostBtn} text-xs shrink-0 disabled:opacity-40`}
+                    >
+                      {settingsSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                      {settingsSyncing ? "Syncing…" : "Re-sync"}
+                    </button>
                   </div>
-                ) : (
-                  <div className="rounded-[5.6px] border border-iron-border bg-slab-elevated px-4 py-2.5 text-sm text-zinc-mute">
-                    Not synced yet. Add your website URL above, save, then click <strong className="text-bone-text">Sync now</strong>.
+                  {webSync ? (
+                    <div className="flex items-center gap-2 text-sm">
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-mint-pulse" />
+                      <span className="text-mint-pulse font-medium">{webSync.settings.chunkCount} settings chunks indexed</span>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-zinc-mute">Save your settings to index them for the AI.</div>
+                  )}
+                </div>
+
+                {/* Source 2 — Website */}
+                <div className="rounded-[5.6px] border border-iron-border bg-slab-elevated p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-cream-text">Source 2 — Hotel Website</p>
+                      <p className="text-xs text-zinc-mute mt-0.5">
+                        Crawls up to 15 pages. Captures content not in settings — tours, blog posts, menus, about pages.{" "}
+                        {!config.contact.website?.trim() && <span className="text-amber-400">Add website URL above first.</span>}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void syncWebsite()}
+                      disabled={webSyncing || !config.contact.website?.trim()}
+                      className="vapi-btn-ember vapi-btn-compact shrink-0 disabled:opacity-40"
+                    >
+                      {webSyncing ? <><Loader2 className="w-4 h-4 animate-spin" /> Crawling…</> : <><RotateCcw className="w-4 h-4" /> Sync website</>}
+                    </button>
+                  </div>
+                  {webSync && webSync.website.chunkCount > 0 ? (
+                    <div className="flex items-center gap-2 text-sm">
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-mint-pulse" />
+                      <span className="text-mint-pulse font-medium">{webSync.website.chunkCount} website chunks indexed</span>
+                      {webSync.website.lastSyncedAt && (
+                        <span className="text-zinc-mute text-xs">
+                          · Last synced {new Date(webSync.website.lastSyncedAt).toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-zinc-mute">Not synced yet. Click <strong className="text-bone-text">Sync website</strong> to crawl your site.</div>
+                  )}
+                </div>
+
+                {/* Total */}
+                {webSync && (webSync.settings.chunkCount > 0 || webSync.website.chunkCount > 0) && (
+                  <div className="flex items-center gap-2 rounded-[5.6px] border border-ember-orange/20 bg-ember-orange/5 px-4 py-2.5 text-sm">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-ember-orange" />
+                    <span className="text-ember-orange font-medium">
+                      {webSync.settings.chunkCount + webSync.website.chunkCount} total chunks active
+                    </span>
+                    <span className="text-zinc-mute text-xs">
+                      — {webSync.settings.chunkCount} from settings · {webSync.website.chunkCount} from website
+                    </span>
                   </div>
                 )}
 
                 <div className="rounded-[5.6px] border border-iron-border bg-slab-elevated p-4 space-y-1.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-mute">How it works</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-mute">How retrieval works</p>
                   <ol className="list-inside list-decimal space-y-1 text-xs text-neutral-400">
-                    <li>Crawls up to 15 pages on your website (stays on same domain).</li>
-                    <li>Strips navigation, ads, and boilerplate — keeps meaningful content.</li>
-                    <li>Splits text into ~350-word chunks and embeds each one with Gemini.</li>
-                    <li>When a guest asks a question, the top matching chunks are injected into the AI prompt.</li>
-                    <li>Re-sync any time your website content changes.</li>
+                    <li>Guest asks a question — query is embedded into a vector.</li>
+                    <li>Top matching chunks from <strong className="text-neutral-300">both settings and website</strong> are retrieved by cosine similarity.</li>
+                    <li>Chunks are labelled <code className="rounded bg-neutral-800 px-1 text-amber-300">[settings]</code> or <code className="rounded bg-neutral-800 px-1 text-amber-300">[website]</code> and injected into the AI prompt.</li>
+                    <li>The AI always sees a compact settings summary regardless of which chunks were retrieved.</li>
+                    <li>Re-sync settings after changing rooms/FAQ. Re-sync website after updating your site.</li>
                   </ol>
                 </div>
               </div>
@@ -845,6 +946,16 @@ export default function SettingsPage() {
               <div><label className={labelCls}>Smoking Policy</label><textarea className={inputCls + " h-16 resize-none"} value={config.policies.smokingPolicy} onChange={e => updatePolicy("smokingPolicy", e.target.value)} /></div>
               <div><label className={labelCls}>Extra Bed Policy</label><textarea className={inputCls + " h-16 resize-none"} value={config.policies.extraBedPolicy} onChange={e => updatePolicy("extraBedPolicy", e.target.value)} /></div>
               <div><label className={labelCls}>Child Policy</label><textarea className={inputCls + " h-16 resize-none"} value={config.policies.childPolicy} onChange={e => updatePolicy("childPolicy", e.target.value)} /></div>
+              <div className="grid grid-cols-2 gap-5">
+                <div>
+                  <label className={labelCls}>Early Check-In</label>
+                  <input className={inputCls} value={config.policies.earlyCheckIn || ""} onChange={e => updatePolicy("earlyCheckIn", e.target.value)} placeholder="e.g. Available from 11 AM for $30 fee" />
+                </div>
+                <div>
+                  <label className={labelCls}>Late Checkout</label>
+                  <input className={inputCls} value={config.policies.lateCheckout || ""} onChange={e => updatePolicy("lateCheckout", e.target.value)} placeholder="e.g. Until 2 PM for $30 fee" />
+                </div>
+              </div>
             </div>
           )}
 
@@ -877,6 +988,20 @@ export default function SettingsPage() {
                   </div>
                   <div><label className={labelCls}>Description</label><input className={inputCls} value={room.description} onChange={e => { const r = [...config.rooms]; r[i] = { ...r[i], description: e.target.value }; setConfig({ ...config, rooms: r }); }} /></div>
                   <div><label className={labelCls}>Image URL</label><input className={inputCls} value={room.imageUrl || ""} onChange={e => { const r = [...config.rooms]; r[i] = { ...r[i], imageUrl: e.target.value }; setConfig({ ...config, rooms: r }); }} placeholder="https://... or /icon.svg" /></div>
+                  <div>
+                    <label className={labelCls}>In-Room Amenities</label>
+                    <input
+                      className={inputCls}
+                      value={(room.amenitiesIncluded ?? []).join(", ")}
+                      onChange={e => {
+                        const r = [...config.rooms];
+                        r[i] = { ...r[i], amenitiesIncluded: e.target.value.split(",").map(s => s.trim()).filter(Boolean) };
+                        setConfig({ ...config, rooms: r });
+                      }}
+                      placeholder="Free WiFi, Safe, Mini-bar, AC, Smart TV"
+                    />
+                    <p className="text-xs text-zinc-mute mt-1">Comma-separated. Guests asking &quot;what&apos;s in the room?&quot; will hear these.</p>
+                  </div>
                 </div>
               ))}
             </div>

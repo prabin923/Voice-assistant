@@ -4,9 +4,11 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { hotels } from "@/lib/db";
 import { getJwtSecretBytes, hasProductionJwtSecret } from "@/lib/jwtSecret";
+import { crossSiteCookieOptions } from "@/lib/cookieOptions";
 
 const SESSION_COOKIE = "session";
 const CSRF_COOKIE = "csrf-token";
+const DAY_SECONDS = 60 * 60 * 24;
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hashSync(password, 10);
@@ -37,22 +39,18 @@ export async function verifyToken(token: string): Promise<{ hotelId: string; ema
 
 export async function setSessionCookie(token: string) {
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    path: "/",
-    maxAge: 60 * 60 * 24, // 24 hours (reduced from 7 days)
-  });
+  cookieStore.set(
+    SESSION_COOKIE,
+    token,
+    crossSiteCookieOptions({ httpOnly: true, maxAge: DAY_SECONDS }), // 24 hours (reduced from 7 days)
+  );
 
   const csrfToken = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
-  cookieStore.set(CSRF_COOKIE, csrfToken, {
-    httpOnly: false,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    path: "/",
-    maxAge: 60 * 60 * 24,
-  });
+  cookieStore.set(
+    CSRF_COOKIE,
+    csrfToken,
+    crossSiteCookieOptions({ httpOnly: false, maxAge: DAY_SECONDS }),
+  );
 }
 
 export async function ensureCsrfCookie() {
@@ -61,13 +59,11 @@ export async function ensureCsrfCookie() {
   if (existing) return;
 
   const csrfToken = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
-  cookieStore.set(CSRF_COOKIE, csrfToken, {
-    httpOnly: false,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    path: "/",
-    maxAge: 60 * 60 * 24,
-  });
+  cookieStore.set(
+    CSRF_COOKIE,
+    csrfToken,
+    crossSiteCookieOptions({ httpOnly: false, maxAge: DAY_SECONDS }),
+  );
 }
 
 export async function getSession(): Promise<{ hotelId: string; email: string; tokenVersion: number } | null> {

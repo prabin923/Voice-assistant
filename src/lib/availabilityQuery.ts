@@ -90,6 +90,53 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Scan the next `daysAhead` days and return the first contiguous window
+ *  where `roomType` has at least `minRooms` free for `stayNights` nights.
+ *  Returns up to `maxResults` such windows. */
+export async function findNextAvailableWindows(
+  config: HotelConfig,
+  roomType: string,
+  stayNights: number,
+  options?: { minRooms?: number; daysAhead?: number; maxResults?: number }
+): Promise<Array<{ checkIn: string; checkOut: string; available: number }>> {
+  const minRooms = options?.minRooms ?? 1;
+  const daysAhead = options?.daysAhead ?? 60;
+  const maxResults = options?.maxResults ?? 3;
+
+  const results: Array<{ checkIn: string; checkOut: string; available: number }> = [];
+  let cursor = todayIso();
+
+  for (let i = 0; i < daysAhead && results.length < maxResults; i++) {
+    const checkIn = cursor;
+    const checkOut = addDays(checkIn, stayNights);
+    const snap = await availability.get(roomType, checkIn, checkOut);
+    if (snap.available >= minRooms) {
+      results.push({ checkIn, checkOut, available: snap.available });
+      // Jump past this window to find non-overlapping alternatives
+      i += stayNights - 1;
+      cursor = addDays(checkOut, 1);
+    } else {
+      cursor = addDays(cursor, 1);
+    }
+  }
+  return results;
+}
+
+/** Format a list of available windows into a natural sentence. */
+export function formatAvailableWindows(
+  roomType: string,
+  windows: Array<{ checkIn: string; checkOut: string; available: number }>,
+  stayNights: number
+): string {
+  if (!windows.length) {
+    return `I checked the next 60 days and the ${roomType} is fully booked for ${stayNights}-night stays. Would you like to try a different room type or a shorter stay?`;
+  }
+  const parts = windows.map(
+    (w) => `${w.checkIn} to ${w.checkOut} (${w.available} room${w.available !== 1 ? "s" : ""} available)`
+  );
+  return `The ${roomType} is available for ${stayNights} night${stayNights !== 1 ? "s" : ""} on: ${parts.join("; ")}. Would you like me to book one of these?`;
+}
+
 export function formatAvailabilityList(rows: RoomAvailabilityRow[], checkIn: string, checkOut: string): string {
   const available = rows.filter((r) => r.available > 0);
   if (!available.length) {

@@ -7,6 +7,7 @@
 
 import { isMinimaxTtsConfigured } from "@/lib/minimaxTts";
 import { isNemotronAsrConfigured } from "@/lib/nemotronTranscribe";
+import { isOpenAiWhisperConfigured } from "@/lib/openaiWhisper";
 import { getSelfHostedSttConfig, isSelfHostedSttConfigured } from "@/lib/selfHostedStt";
 
 export type VoiceStackMode = "free" | "cloud";
@@ -61,7 +62,9 @@ export function describeVoiceStack(): {
   } else {
     if (isMinimaxTtsConfigured()) tts.push("minimax");
     if (isNemotronAsrConfigured()) stt.push("nemotron-asr");
-    stt.push("whisper", "gemini");
+    stt.push("whisper");
+    if (isOpenAiWhisperConfigured()) stt.push("openai-whisper");
+    stt.push("gemini");
     tts.push("nemotron", "openai", "edge");
   }
 

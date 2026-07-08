@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { validateCsrf } from "@/lib/csrf";
+import { validateSameOrigin } from "@/lib/csrf";
 import { getClientIP } from "@/lib/rateLimit";
 import { checkRateLimitAsync } from "@/lib/rateLimitDistributed";
 import {
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Too many login attempts. Please wait." }, { status: 429 });
   }
 
-  const csrfError = await validateCsrf(req);
+  const csrfError = await validateSameOrigin(req);
   if (csrfError) return csrfError;
 
   const body = await req.json().catch(() => ({}));
@@ -43,7 +43,9 @@ export async function POST(req: Request) {
     const { guest, token } = await loginGuest(email, password);
     clearFailedLogin(lockoutKey);
     await setGuestSessionCookie(token);
-    return NextResponse.json({ success: true, guest: publicGuestProfile(guest) });
+    // token is also returned in the body so the cross-site embed can use
+    // Bearer auth (third-party cookies are blocked inside the widget iframe).
+    return NextResponse.json({ success: true, guest: publicGuestProfile(guest), token });
   } catch {
     registerFailedLogin(lockoutKey);
     return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });

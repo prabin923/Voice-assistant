@@ -117,6 +117,7 @@ model DiningReservation {
 model KnowledgeChunk {
   id          String   @id
   chunkKey    String   @unique @map("chunk_key")
+  hotelId     String?  @map("hotel_id")
   category    String
   title       String
   content     String
@@ -126,6 +127,7 @@ model KnowledgeChunk {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@index([category])
+  @@index([hotelId])
   @@map("knowledge_chunks")
 }
 

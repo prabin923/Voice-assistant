@@ -13,7 +13,7 @@ type TenantStore = {
 };
 
 const tenantStorage = new AsyncLocalStorage<TenantStore>();
-const configCache = new Map<string, { config: HotelConfig; loadedAt: number }>();
+const configCache = new Map<string, { hotelId?: string; config: HotelConfig; loadedAt: number }>();
 const CACHE_TTL_MS = 60_000;
 
 function cacheKey(slug?: string, hotelId?: string): string {
@@ -38,7 +38,9 @@ export async function resolveTenantConfig(options?: {
   const key = cacheKey(slug, hotelId);
   const cached = configCache.get(key);
   if (cached && Date.now() - cached.loadedAt < CACHE_TTL_MS) {
-    return { slug, hotelId: cached.config ? hotelId : undefined, config: cached.config };
+    // Return the RESOLVED hotelId from the cache — for slug lookups the local
+    // `hotelId` is undefined, and returning that broke per-tenant RAG scoping.
+    return { slug, hotelId: cached.hotelId, config: cached.config };
   }
 
   await ensureDbReady();
@@ -60,7 +62,7 @@ export async function resolveTenantConfig(options?: {
     hotelId: loaded.hotelId,
     config: loaded.config,
   };
-  configCache.set(key, { config: store.config, loadedAt: Date.now() });
+  configCache.set(key, { hotelId: store.hotelId, config: store.config, loadedAt: Date.now() });
   return store;
 }
 

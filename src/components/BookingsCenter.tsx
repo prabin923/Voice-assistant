@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarCheck, Download, Loader2, RefreshCw, XCircle } from "lucide-react";
+import { CalendarCheck, Download, Loader2, Plus, RefreshCw, XCircle } from "lucide-react";
 import { fetchJsonWithAuth } from "@/lib/clientAuth";
 
 interface BookingRow {
@@ -21,8 +21,19 @@ interface Props {
   isDark: boolean;
   cardCls: string;
   labelCls: string;
+  rooms: { name: string }[];
   onToast: (message: string, type?: "success" | "delete" | "info") => void;
 }
+
+type NewBookingForm = {
+  roomType: string;
+  checkIn: string;
+  checkOut: string;
+  rooms: string;
+  guestName: string;
+  guestPhone: string;
+  guestEmail: string;
+};
 
 function formatDate(value: string): string {
   const d = new Date(`${value}T12:00:00`);
@@ -53,11 +64,26 @@ function toCsv(rows: BookingRow[]): string {
   return lines.join("\n");
 }
 
-export function BookingsCenter({ isDark, cardCls, labelCls, onToast }: Props) {
+function blankForm(rooms: { name: string }[]): NewBookingForm {
+  return {
+    roomType: rooms[0]?.name ?? "",
+    checkIn: "",
+    checkOut: "",
+    rooms: "1",
+    guestName: "",
+    guestPhone: "",
+    guestEmail: "",
+  };
+}
+
+export function BookingsCenter({ isDark, cardCls, labelCls, rooms, onToast }: Props) {
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [mode, setMode] = useState<"all" | "upcoming">("upcoming");
+  const [showForm, setShowForm] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState<NewBookingForm>(() => blankForm(rooms));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,6 +121,44 @@ export function BookingsCenter({ isDark, cardCls, labelCls, onToast }: Props) {
     }
   };
 
+  const createBooking = async () => {
+    if (!form.roomType || !form.checkIn || !form.checkOut || !form.guestName.trim() || !form.guestPhone.trim()) {
+      onToast("Room, dates, guest name and phone are required", "info");
+      return;
+    }
+    if (form.checkIn >= form.checkOut) {
+      onToast("Check-out must be after check-in", "info");
+      return;
+    }
+    setCreating(true);
+    try {
+      // Goes through the same createBookingSafe transaction as AI bookings, so
+      // the availability check prevents any double-booking conflict.
+      await fetchJsonWithAuth<{ success: boolean }>("/api/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomType: form.roomType,
+          checkIn: form.checkIn,
+          checkOut: form.checkOut,
+          rooms: Math.max(1, Number(form.rooms) || 1),
+          guestName: form.guestName.trim(),
+          guestPhone: form.guestPhone.trim(),
+          guestEmail: form.guestEmail.trim() || null,
+        }),
+      });
+      onToast("Booking created", "success");
+      setForm(blankForm(rooms));
+      setShowForm(false);
+      await load();
+    } catch (e) {
+      // Surfaces "Requested room is not available for those dates." on conflict.
+      onToast(e instanceof Error ? e.message : "Failed to create booking", "delete");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const exportCsv = () => {
     if (!bookings.length) {
       onToast("No bookings to export", "info");
@@ -112,6 +176,7 @@ export function BookingsCenter({ isDark, cardCls, labelCls, onToast }: Props) {
 
   const muted = isDark ? "text-neutral-500" : "text-neutral-600";
   const rowCls = isDark ? "border-white/10 bg-white/[0.02]" : "border-neutral-200 bg-white";
+  const inputCls = `w-full mt-1 rounded-xl border px-3 py-2 text-sm ${isDark ? "border-white/10 bg-white/[0.04] text-white" : "border-neutral-200 bg-white text-neutral-900"}`;
 
   return (
     <div className="space-y-4">
@@ -146,6 +211,14 @@ export function BookingsCenter({ isDark, cardCls, labelCls, onToast }: Props) {
             </button>
             <button
               type="button"
+              onClick={() => setShowForm((s) => !s)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold border ${rowCls}`}
+            >
+              <Plus className="w-4 h-4" />
+              New booking
+            </button>
+            <button
+              type="button"
               onClick={exportCsv}
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[#163a5f] text-white"
             >
@@ -154,6 +227,80 @@ export function BookingsCenter({ isDark, cardCls, labelCls, onToast }: Props) {
             </button>
           </div>
         </div>
+
+        {showForm && (
+          <div className={`mt-4 border-t pt-4 ${isDark ? "border-white/10" : "border-neutral-200"}`}>
+            <p className={`text-xs mb-3 ${muted}`}>
+              Manual booking for a walk-in or phone guest. Availability is checked against the
+              same inventory the AI uses, so it can&apos;t double-book.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div>
+                <label className={labelCls}>Room type</label>
+                <select
+                  className={inputCls}
+                  value={form.roomType}
+                  onChange={(e) => setForm({ ...form, roomType: e.target.value })}
+                >
+                  {rooms.length === 0 && <option value="">No rooms configured</option>}
+                  {rooms.map((r) => (
+                    <option key={r.name} value={r.name}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Rooms</label>
+                <input type="number" min={1} className={inputCls} value={form.rooms}
+                  onChange={(e) => setForm({ ...form, rooms: e.target.value })} />
+              </div>
+              <div className="hidden lg:block" />
+              <div>
+                <label className={labelCls}>Check-in</label>
+                <input type="date" className={inputCls} value={form.checkIn}
+                  onChange={(e) => setForm({ ...form, checkIn: e.target.value })} />
+              </div>
+              <div>
+                <label className={labelCls}>Check-out</label>
+                <input type="date" className={inputCls} value={form.checkOut}
+                  onChange={(e) => setForm({ ...form, checkOut: e.target.value })} />
+              </div>
+              <div className="hidden lg:block" />
+              <div>
+                <label className={labelCls}>Guest name</label>
+                <input className={inputCls} value={form.guestName}
+                  onChange={(e) => setForm({ ...form, guestName: e.target.value })} placeholder="Full name" />
+              </div>
+              <div>
+                <label className={labelCls}>Guest phone</label>
+                <input className={inputCls} value={form.guestPhone}
+                  onChange={(e) => setForm({ ...form, guestPhone: e.target.value })} placeholder="+1 555 0100" />
+              </div>
+              <div>
+                <label className={labelCls}>Guest email (optional)</label>
+                <input className={inputCls} value={form.guestEmail}
+                  onChange={(e) => setForm({ ...form, guestEmail: e.target.value })} placeholder="guest@email.com" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => void createBooking()}
+                disabled={creating}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-[#163a5f] text-white disabled:opacity-60"
+              >
+                {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                Create booking
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowForm(false); setForm(blankForm(rooms)); }}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold border ${rowCls}`}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className={cardCls}>

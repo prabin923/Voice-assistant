@@ -1,9 +1,10 @@
 import { SignJWT, jwtVerify } from "jose";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { guests } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth";
 import { getJwtSecretBytes, hasProductionJwtSecret } from "@/lib/jwtSecret";
+import { crossSiteCookieOptions } from "@/lib/cookieOptions";
 
 export const GUEST_SESSION_COOKIE = "guest_session";
 
@@ -42,13 +43,11 @@ export async function verifyGuestToken(token: string): Promise<GuestSession | nu
 
 export async function setGuestSessionCookie(token: string) {
   const cookieStore = await cookies();
-  cookieStore.set(GUEST_SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
+  cookieStore.set(
+    GUEST_SESSION_COOKIE,
+    token,
+    crossSiteCookieOptions({ httpOnly: true, maxAge: 60 * 60 * 24 * 30 }),
+  );
 }
 
 export async function clearGuestSession() {
@@ -56,9 +55,25 @@ export async function clearGuestSession() {
   cookieStore.delete(GUEST_SESSION_COOKIE);
 }
 
-export async function getGuestSession(): Promise<GuestSession | null> {
+/**
+ * Read the guest token from the `Authorization: Bearer` header (used by the
+ * embedded cross-site widget, which cannot rely on third-party cookies) and
+ * fall back to the session cookie (same-origin app).
+ */
+async function readGuestToken(): Promise<string | null> {
+  const headerStore = await headers();
+  const authorization = headerStore.get("authorization");
+  if (authorization && /^Bearer\s+/i.test(authorization)) {
+    const bearer = authorization.replace(/^Bearer\s+/i, "").trim();
+    if (bearer) return bearer;
+  }
+
   const cookieStore = await cookies();
-  const token = cookieStore.get(GUEST_SESSION_COOKIE)?.value;
+  return cookieStore.get(GUEST_SESSION_COOKIE)?.value ?? null;
+}
+
+export async function getGuestSession(): Promise<GuestSession | null> {
+  const token = await readGuestToken();
   if (!token) return null;
 
   const session = await verifyGuestToken(token);

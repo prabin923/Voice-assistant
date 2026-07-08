@@ -11,6 +11,8 @@ import {
   type PendingBooking,
   type PendingDining,
 } from '@/lib/guestServiceFlow';
+import { runBookingAgent, AGENT_PENDING_BOOKING } from '@/lib/bookingAgent';
+import { localizeServiceReply } from '@/lib/replyLocalize';
 import { scheduleChatSideEffects } from '@/lib/chatSideEffects';
 import { getClientIP } from '@/lib/rateLimit';
 import { aiNotConfiguredResponse, isAiConfigured } from '@/lib/ai';
@@ -38,6 +40,7 @@ export async function POST(req: Request) {
       hotel?: string;
       pendingBooking?: PendingBooking | null;
       pendingDining?: PendingDining | null;
+      agentActive?: boolean;
     }>;
 
     const [guestSession, body] = await Promise.all([getGuestSession(), bodyPromise]);
@@ -115,37 +118,61 @@ export async function POST(req: Request) {
         }
       : undefined;
 
-    const runServiceFlow = shouldRunGuestServiceFlow(
-      message,
-      conversationHistory,
-      langCode,
-      config.rooms.map((r) => r.name),
-      pendingBooking,
-      pendingDining
-    );
-
-    if (runServiceFlow) {
-      const serviceFlow = await handleGuestServiceFlow({
+    // Booking/dining is handled by the LLM receptionist agent (tools wrap the
+    // real availability + booking services). Engage it on booking/dining intent
+    // or while a booking conversation is in progress (agentActive round-trip).
+    let agentActive = false;
+    const chatChannelEarly = body.channel === "voice" ? "voice" : "text";
+    const engaged =
+      body.agentActive === true ||
+      shouldRunGuestServiceFlow(
         message,
+        conversationHistory,
         langCode,
-        config,
-        history: conversationHistory,
-        guestProfile,
+        config.rooms.map((r) => r.name),
         pendingBooking,
-        pendingDining,
-      });
+        pendingDining
+      );
 
-      if (serviceFlow.handled) {
-        reply = serviceFlow.reply || "I can help with that.";
-        escalate = Boolean(serviceFlow.escalate);
-        reason = serviceFlow.reason;
-        booking = serviceFlow.booking;
-        dining = serviceFlow.dining;
-        if (serviceFlow.pendingBooking !== undefined) {
-          pendingBooking = serviceFlow.pendingBooking;
-        }
-        if (serviceFlow.pendingDining !== undefined) {
-          pendingDining = serviceFlow.pendingDining;
+    if (engaged) {
+      try {
+        const agent = await runBookingAgent({
+          message,
+          langCode,
+          config,
+          history: conversationHistory,
+          channel: chatChannelEarly,
+          guestProfile,
+        });
+        reply = agent.reply;
+        escalate = agent.escalate;
+        booking = agent.booking;
+        dining = agent.dining;
+        agentActive = agent.active;
+        // Keep the agent engaged on the next turn while a booking is in progress.
+        pendingBooking = agentActive ? AGENT_PENDING_BOOKING : null;
+        pendingDining = null;
+      } catch (err) {
+        // Safety net: if the agent fails, fall back to the deterministic flow
+        // (translated into the guest's language) so a booking still works.
+        console.warn("[bookingAgent] failed, using deterministic flow:", err);
+        const serviceFlow = await handleGuestServiceFlow({
+          message,
+          langCode,
+          config,
+          history: conversationHistory,
+          guestProfile,
+          pendingBooking,
+          pendingDining,
+        });
+        if (serviceFlow.handled) {
+          reply = await localizeServiceReply(serviceFlow.reply || "I can help with that.", langCode);
+          escalate = Boolean(serviceFlow.escalate);
+          reason = serviceFlow.reason;
+          booking = serviceFlow.booking;
+          dining = serviceFlow.dining;
+          if (serviceFlow.pendingBooking !== undefined) pendingBooking = serviceFlow.pendingBooking;
+          if (serviceFlow.pendingDining !== undefined) pendingDining = serviceFlow.pendingDining;
         }
       }
     }
@@ -176,6 +203,7 @@ export async function POST(req: Request) {
       dining,
       pendingBooking: pendingBooking ?? null,
       pendingDining: pendingDining ?? null,
+      agentActive,
       guest: guestRecord
         ? {
             name: guestRecord.name,

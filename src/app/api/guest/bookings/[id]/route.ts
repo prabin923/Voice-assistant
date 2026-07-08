@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireGuestAuth } from "@/lib/guestAuth";
-import { validateCsrf } from "@/lib/csrf";
+import { validateSameOrigin } from "@/lib/csrf";
 import { cancelBookingSafe, modifyBookingSafe, publicBookingRow } from "@/lib/bookingService";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export async function PATCH(req: Request, context: RouteContext) {
   const auth = await requireGuestAuth();
   if (auth.error) return auth.error;
 
-  const csrfError = await validateCsrf(req);
+  const csrfError = await validateSameOrigin(req);
   if (csrfError) return csrfError;
 
   const { id } = await context.params;

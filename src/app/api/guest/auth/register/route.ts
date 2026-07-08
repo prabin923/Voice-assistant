@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { validateCsrf } from "@/lib/csrf";
+import { validateSameOrigin } from "@/lib/csrf";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
 import {
   publicGuestProfile,
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Too many registration attempts. Try again later." }, { status: 429 });
   }
 
-  const csrfError = await validateCsrf(req);
+  const csrfError = await validateSameOrigin(req);
   if (csrfError) return csrfError;
 
   try {
@@ -43,7 +43,8 @@ export async function POST(req: Request) {
     });
 
     await setGuestSessionCookie(token);
-    return NextResponse.json({ success: true, guest: publicGuestProfile(guest) });
+    // token returned for Bearer auth in the cross-site embed (see login route).
+    return NextResponse.json({ success: true, guest: publicGuestProfile(guest), token });
   } catch {
     return NextResponse.json({ error: "Registration failed. Please try signing in or use another email." }, { status: 400 });
   }

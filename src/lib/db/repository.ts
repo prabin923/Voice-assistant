@@ -330,6 +330,12 @@ export const bookings = {
       const status = data.status ?? "confirmed";
 
       if (status === "confirmed") {
+        // Serialize concurrent bookings for this room type so the
+        // availability check and the insert are atomic. Without this, two
+        // bookings racing on the same room (AI + manual, or two AI) can both
+        // read "available" and both insert -> oversell. Transaction-scoped
+        // advisory lock; auto-released on commit/rollback.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(727, hashtext(${data.roomType}))`;
         const avail = await availability.get(data.roomType, data.checkIn, data.checkOut);
         if (avail.available < normalizedRooms) throw new Error("UNAVAILABLE");
       }
@@ -428,6 +434,9 @@ export const bookings = {
       const checkOut = updates.checkOut ?? existing.checkOut;
       const rooms = Math.max(1, Math.floor(updates.rooms ?? existing.rooms));
 
+      // Serialize against concurrent bookings for the target room type (see
+      // createTransactional) so a modify can't oversell either.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(727, hashtext(${roomType}))`;
       await tx.booking.update({ where: { id: bookingId }, data: { status: "cancelled" } });
       const avail = await availability.get(roomType, checkIn, checkOut);
       if (avail.available < rooms) throw new Error("UNAVAILABLE");

@@ -2,9 +2,16 @@ import { randomUUID } from "crypto";
 import prisma from "@/lib/prisma";
 import type { HotelConfig } from "@/lib/hotelConfig";
 import { ensureDbReady } from "@/lib/db";
+import { getTenantStore } from "@/lib/tenantContext";
 import { chunkHotelConfig } from "@/lib/rag/chunkHotelConfig";
 import { activeEmbedModel, contentHash, embedQuery, embedTexts } from "@/lib/rag/embeddings";
 import { cosineSimilarity } from "@/lib/rag/similarity";
+import {
+  adaptiveMinScore,
+  isStrongLexicalMatch,
+  lexicalRetrieve,
+  selectByScore,
+} from "@/lib/rag/lexical";
 
 export type RetrievedChunk = {
   chunkKey: string;
@@ -16,11 +23,19 @@ export type RetrievedChunk = {
 
 type IndexedChunk = {
   chunkKey: string;
+  hotelId: string | null;
   category: string;
   title: string;
   content: string;
   vector: number[];
 };
+
+// Config chunks are namespaced per hotel: `t:<hotelId>:<baseKey>`. Website
+// chunks use their own `web:<hotelId>:…` scheme (managed by websiteCrawler).
+const TENANT_PREFIX = "t:";
+function tenantChunkKey(hotelId: string, baseKey: string): string {
+  return `${TENANT_PREFIX}${hotelId}:${baseKey}`;
+}
 
 const EMBED_BATCH = 12;
 const CHUNK_INDEX_TTL_MS = 120_000;
@@ -48,6 +63,7 @@ async function loadIndexedChunks(): Promise<IndexedChunk[]> {
     const rows = await prisma.knowledgeChunk.findMany({
       select: {
         chunkKey: true,
+        hotelId: true,
         category: true,
         title: true,
         content: true,
@@ -62,6 +78,7 @@ async function loadIndexedChunks(): Promise<IndexedChunk[]> {
         if (!vector?.length) continue;
         indexed.push({
           chunkKey: row.chunkKey,
+          hotelId: row.hotelId,
           category: row.category,
           title: row.title,
           content: row.content,
@@ -82,56 +99,26 @@ async function loadIndexedChunks(): Promise<IndexedChunk[]> {
   }
 }
 
-const STOP_WORDS = new Set([
-  "the", "a", "an", "is", "are", "do", "you", "have", "what", "when", "where", "how",
-  "can", "i", "we", "my", "your", "about", "for", "and", "or", "to", "at", "in", "on",
-]);
-
-function queryTokens(query: string): string[] {
-  return query
-    .toLowerCase()
-    .split(/[^a-z0-9]+/g)
-    .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
-}
-
-/** Fast keyword overlap — skips embedding API on obvious matches (voice latency). */
-function lexicalRetrieve(rows: IndexedChunk[], query: string, topK: number): RetrievedChunk[] {
-  const tokens = queryTokens(query);
-  if (!tokens.length) return [];
-
-  const scored = rows
-    .map((row) => {
-      const haystack = `${row.title} ${row.content}`.toLowerCase();
-      let hits = 0;
-      for (const token of tokens) {
-        if (haystack.includes(token)) hits++;
-      }
-      const score = hits / tokens.length;
-      return {
-        chunkKey: row.chunkKey,
-        category: row.category,
-        title: row.title,
-        content: row.content,
-        score,
-      };
-    })
-    .filter((row) => row.score >= 0.34)
-    .sort((a, b) => b.score - a.score);
-
-  return scored.slice(0, topK);
-}
-
-function isStrongLexicalMatch(chunks: RetrievedChunk[]): boolean {
-  return chunks.length >= 2 && (chunks[0]?.score ?? 0) >= 0.5;
-}
-
-/** Index or refresh all hotel config chunks (skips unchanged content). */
-export async function syncKnowledgeIndex(config: HotelConfig): Promise<void> {
+/** Index or refresh all hotel config chunks (skips unchanged content).
+ *  Only touches config-origin chunks — website chunks (web:* prefix) are
+ *  managed exclusively by syncWebsiteChunks() in websiteCrawler.ts.
+ */
+export async function syncKnowledgeIndex(config: HotelConfig, hotelIdArg?: string): Promise<void> {
   await ensureDbReady();
+  const hotelId = hotelIdArg ?? getTenantStore()?.hotelId;
+  if (!hotelId) {
+    console.warn("[RAG] syncKnowledgeIndex called without a hotelId — skipping (per-tenant scoping requires one).");
+    return;
+  }
+
   const chunks = chunkHotelConfig(config);
   const model = activeEmbedModel();
+  const keyPrefix = tenantChunkKey(hotelId, "");
 
+  // Scope to THIS tenant's config chunks (t:<hotelId>:…) — never touch other
+  // tenants' chunks or web:* chunks.
   const existing = await prisma.knowledgeChunk.findMany({
+    where: { chunkKey: { startsWith: keyPrefix } },
     select: { chunkKey: true, contentHash: true, embedModel: true },
   });
   const existingMap = new Map(existing.map((row) => [row.chunkKey, row]));
@@ -139,7 +126,7 @@ export async function syncKnowledgeIndex(config: HotelConfig): Promise<void> {
   const staleKeys = existing
     .filter((row) => row.embedModel !== model)
     .map((row) => row.chunkKey);
-  const incomingKeys = new Set(chunks.map((c) => c.chunkKey));
+  const incomingKeys = new Set(chunks.map((c) => tenantChunkKey(hotelId, c.chunkKey)));
   const removedKeys = existing
     .map((row) => row.chunkKey)
     .filter((key) => !incomingKeys.has(key));
@@ -152,7 +139,7 @@ export async function syncKnowledgeIndex(config: HotelConfig): Promise<void> {
 
   const toEmbed = chunks.filter((chunk) => {
     const hash = contentHash(embeddingText(chunk));
-    const prev = existingMap.get(chunk.chunkKey);
+    const prev = existingMap.get(tenantChunkKey(hotelId, chunk.chunkKey));
     return !prev || prev.contentHash !== hash || prev.embedModel !== model;
   });
 
@@ -163,15 +150,17 @@ export async function syncKnowledgeIndex(config: HotelConfig): Promise<void> {
 
     for (let j = 0; j < batch.length; j++) {
       const chunk = batch[j];
+      const key = tenantChunkKey(hotelId, chunk.chunkKey);
       const hash = contentHash(texts[j]);
       const vector = vectors[j];
       if (!vector?.length) continue;
 
       await prisma.knowledgeChunk.upsert({
-        where: { chunkKey: chunk.chunkKey },
+        where: { chunkKey: key },
         create: {
           id: randomUUID(),
-          chunkKey: chunk.chunkKey,
+          chunkKey: key,
+          hotelId,
           category: chunk.category,
           title: chunk.title,
           content: chunk.content,
@@ -180,6 +169,7 @@ export async function syncKnowledgeIndex(config: HotelConfig): Promise<void> {
           embedModel: model,
         },
         update: {
+          hotelId,
           category: chunk.category,
           title: chunk.title,
           content: chunk.content,
@@ -193,7 +183,7 @@ export async function syncKnowledgeIndex(config: HotelConfig): Promise<void> {
 
   invalidateChunkIndexCache();
   console.log(
-    `[RAG] Indexed ${chunks.length} chunks (${toEmbed.length} embedded, model=${model})`
+    `[RAG] Indexed ${chunks.length} chunks for hotel ${hotelId} (${toEmbed.length} embedded, model=${model})`
   );
 }
 
@@ -216,6 +206,33 @@ export async function getKnowledgeChunkCount(): Promise<number> {
   return rows.length;
 }
 
+/** Returns chunk counts split by source — useful for the settings UI. */
+export async function getKnowledgeChunkStats(): Promise<{
+  total: number;
+  config: number;
+  website: number;
+}> {
+  const rows = await loadIndexedChunks();
+  const website = rows.filter((r) => r.chunkKey.startsWith("web:")).length;
+  return { total: rows.length, config: rows.length - website, website };
+}
+
+/**
+ * Restrict the global chunk index to the current tenant so one hotel never
+ * retrieves another hotel's content. Config chunks carry a `hotelId` column;
+ * website chunks are keyed `web:<hotelId>:…`. Keep only the current tenant's of
+ * each. Chunks with no owner (legacy/global, pre-migration) are dropped once a
+ * tenant context is active so stale shared content can't leak.
+ */
+function scopeToTenant(rows: IndexedChunk[]): IndexedChunk[] {
+  const hotelId = getTenantStore()?.hotelId;
+  if (!hotelId) return rows; // no tenant context (single-tenant / scripts)
+  return rows.filter((r) => {
+    if (r.chunkKey.startsWith("web:")) return r.chunkKey.split(":")[1] === hotelId;
+    return r.hotelId === hotelId; // config chunks: match the owning hotel
+  });
+}
+
 /** Semantic search over indexed hotel knowledge (cached index + lexical fast path). */
 export async function retrieveRelevantChunks(
   query: string,
@@ -233,7 +250,7 @@ export async function retrieveRelevantChunks(
 
   if (!query.trim()) return [];
 
-  const rows = await loadIndexedChunks();
+  const rows = scopeToTenant(await loadIndexedChunks());
   if (!rows.length) return [];
 
   const lexical = lexicalRetrieve(rows, query, topK);
@@ -251,18 +268,23 @@ export async function retrieveRelevantChunks(
   }
   if (!queryVector.length) return lexical;
 
-  const scored = rows
-    .map((row) => ({
-      chunkKey: row.chunkKey,
-      category: row.category,
-      title: row.title,
-      content: row.content,
-      score: cosineSimilarity(queryVector, row.vector),
-    }))
-    .filter((row) => row.score >= minScore)
-    .sort((a, b) => b.score - a.score);
+  const scored = rows.map((row) => ({
+    chunkKey: row.chunkKey,
+    category: row.category,
+    title: row.title,
+    content: row.content,
+    score: cosineSimilarity(queryVector, row.vector),
+  }));
 
-  const semantic = scored.slice(0, topK);
+  // Relax the threshold for non-Latin (cross-lingual) queries, and apply a soft
+  // floor: rather than returning nothing (which forces the metadata-only
+  // fallback and invites hallucination/repetition), surface the single best
+  // real chunk when one exists. The grounding rule still lets the model decline.
+  const semantic = selectByScore(scored, {
+    minScore: adaptiveMinScore(query, minScore),
+    floor: 0.18,
+    topK,
+  });
   if (semantic.length > 0) return semantic;
 
   return lexical;
