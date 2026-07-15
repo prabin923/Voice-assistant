@@ -15,6 +15,7 @@ async function main() {
   const guestId = randomUUID();
   const bookingId = randomUUID();
 
+  // Hotel 1: Aurelian Grand (existing)
   await prisma.hotel.upsert({
     where: { email: "admin@hotel.com" },
     update: {
@@ -26,6 +27,91 @@ async function main() {
       name: "Aurelian Grand",
       slug: "aurelian-grand",
       email: "admin@hotel.com",
+      password: bcrypt.hashSync("password123", 10),
+      config: "{}",
+    },
+  });
+
+  // Hotel 2: The Sapphire Resort
+  await prisma.hotel.upsert({
+    where: { email: "admin@sapphireresort.com" },
+    update: {
+      name: "The Sapphire Resort",
+      slug: "the-sapphire-resort",
+    },
+    create: {
+      id: randomUUID(),
+      name: "The Sapphire Resort",
+      slug: "the-sapphire-resort",
+      email: "admin@sapphireresort.com",
+      password: bcrypt.hashSync("password123", 10),
+      config: "{}",
+    },
+  });
+
+  // Hotel 3: Evergreen Valley Inn
+  await prisma.hotel.upsert({
+    where: { email: "admin@evergreenvalleyinn.com" },
+    update: {
+      name: "Evergreen Valley Inn",
+      slug: "evergreen-valley-inn",
+    },
+    create: {
+      id: randomUUID(),
+      name: "Evergreen Valley Inn",
+      slug: "evergreen-valley-inn",
+      email: "admin@evergreenvalleyinn.com",
+      password: bcrypt.hashSync("password123", 10),
+      config: "{}",
+    },
+  });
+
+  // Hotel 4: Celestial Boutique Hotel
+  await prisma.hotel.upsert({
+    where: { email: "admin@celestialboutique.com" },
+    update: {
+      name: "Celestial Boutique Hotel",
+      slug: "celestial-boutique-hotel",
+    },
+    create: {
+      id: randomUUID(),
+      name: "Celestial Boutique Hotel",
+      slug: "celestial-boutique-hotel",
+      email: "admin@celestialboutique.com",
+      password: bcrypt.hashSync("password123", 10),
+      config: "{}",
+    },
+  });
+
+  // Hotel 5: Horizon Skyline Suites
+  await prisma.hotel.upsert({
+    where: { email: "admin@horizonskyline.com" },
+    update: {
+      name: "Horizon Skyline Suites",
+      slug: "horizon-skyline-suites",
+    },
+    create: {
+      id: randomUUID(),
+      name: "Horizon Skyline Suites",
+      slug: "horizon-skyline-suites",
+      email: "admin@horizonskyline.com",
+      password: bcrypt.hashSync("password123", 10),
+      config: "{}",
+    },
+  });
+
+  // Hotel 6: Monarch Palace Hotel
+  await prisma.hotel.upsert({
+    where: { email: "admin@monarchpalace.com" },
+    update: {
+      name: "Monarch Palace Hotel",
+      slug: "monarch-palace-hotel",
+    },
+    create: {
+      id: randomUUID(),
+      name: "Monarch Palace Hotel",
+      slug: "monarch-palace-hotel",
+      email: "admin@monarchpalace.com",
       password: bcrypt.hashSync("password123", 10),
       config: "{}",
     },
