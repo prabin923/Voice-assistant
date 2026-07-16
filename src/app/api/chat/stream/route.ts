@@ -6,6 +6,8 @@ import {
   shouldRunGuestServiceFlow,
   type PendingBooking,
   type PendingDining,
+  type PendingSpa,
+  type PendingServiceRequest,
 } from "@/lib/guestServiceFlow";
 import { runBookingAgent, AGENT_PENDING_BOOKING } from "@/lib/bookingAgent";
 import type { EscalationReason } from "@/lib/escalation";
@@ -39,6 +41,8 @@ export async function POST(req: Request) {
       hotel?: string;
       pendingBooking?: PendingBooking | null;
       pendingDining?: PendingDining | null;
+      pendingSpa?: PendingSpa | null;
+      pendingServiceRequest?: PendingServiceRequest | null;
       agentActive?: boolean;
     };
 
@@ -81,12 +85,15 @@ export async function POST(req: Request) {
       const conversationHistory = sanitizeChatHistory(body.history);
       const pendingBooking = body.pendingBooking ?? null;
       const pendingDining = body.pendingDining ?? null;
+      const pendingSpa = body.pendingSpa ?? null;
+      const pendingServiceRequest = body.pendingServiceRequest ?? null;
       const guestProfile = guestRecord
         ? {
             id: guestRecord.id,
             name: guestRecord.name,
             phone: guestRecord.phone,
             email: guestRecord.email,
+            bookingCount: guestRecord.booking_count,
           }
         : undefined;
 
@@ -102,6 +109,8 @@ export async function POST(req: Request) {
           let dining: unknown;
           let nextPending: PendingBooking | null | undefined = pendingBooking;
           let nextDiningPending: PendingDining | null | undefined = pendingDining;
+          let nextSpaPending: PendingSpa | null | undefined = pendingSpa;
+          let nextServiceRequestPending: PendingServiceRequest | null | undefined = pendingServiceRequest;
 
           const engaged =
             body.agentActive === true ||
@@ -111,7 +120,9 @@ export async function POST(req: Request) {
               langCode,
               config.rooms.map((r) => r.name),
               pendingBooking,
-              pendingDining
+              pendingDining,
+              pendingSpa,
+              pendingServiceRequest
             );
 
           if (engaged) {
@@ -135,11 +146,16 @@ export async function POST(req: Request) {
               agentReply = agent.reply;
               agentBooking = agent.booking;
               agentDining = agent.dining;
+              // Spa and Service Request from agent
+              const agentSpa = agent.spa;
+              const agentServiceRequest = agent.serviceRequest;
               agentEscalate = agent.escalate;
               agentActive = agent.active;
               // Keep the agent engaged next turn while a booking is in progress.
               nextPending = agentActive ? AGENT_PENDING_BOOKING : null;
               nextDiningPending = null;
+              nextSpaPending = null;
+              nextServiceRequestPending = null;
               handled = true;
             } catch (err) {
               // Fall back to the deterministic flow (translated) if the agent fails.
@@ -152,6 +168,8 @@ export async function POST(req: Request) {
                 guestProfile,
                 pendingBooking,
                 pendingDining,
+                pendingSpa,
+                pendingServiceRequest,
               });
               if (serviceFlow.handled) {
                 agentReply = await localizeServiceReply(serviceFlow.reply || "", langCode);
@@ -161,6 +179,8 @@ export async function POST(req: Request) {
                 reason = serviceFlow.reason;
                 nextPending = serviceFlow.pendingBooking;
                 nextDiningPending = serviceFlow.pendingDining;
+                nextSpaPending = serviceFlow.pendingSpa;
+                nextServiceRequestPending = serviceFlow.pendingServiceRequest;
                 handled = true;
               }
             }
@@ -180,6 +200,8 @@ export async function POST(req: Request) {
                 dining,
                 pendingBooking: nextPending,
                 pendingDining: nextDiningPending,
+                pendingSpa: nextSpaPending,
+                pendingServiceRequest: nextServiceRequestPending,
                 agentActive,
               });
               scheduleChatSideEffects({
@@ -214,6 +236,8 @@ export async function POST(req: Request) {
                 reason,
                 pendingBooking: nextPending,
                 pendingDining: nextDiningPending,
+                pendingSpa: nextSpaPending,
+                pendingServiceRequest: nextServiceRequestPending,
                 agentActive: false,
               });
             }

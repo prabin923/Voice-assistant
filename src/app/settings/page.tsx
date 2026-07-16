@@ -7,7 +7,7 @@ import {
   Save, RotateCcw, Plus, Trash2, ChevronLeft, CheckCircle2,
   AlertCircle, MessageSquare, LogOut, User, BarChart3, Inbox, X,
   Crown, Sparkles, Bell, CalendarDays, CalendarCheck, Globe2, Copy,
-  Code2, ExternalLink, Loader2,
+  Code2, ExternalLink, Loader2, Download, Activity,
 } from "lucide-react";
 import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
 import { applyHotelBrandTheme, notifyHotelConfigUpdated, syncBrandingOnHotelRename } from "@/lib/hotelBrand";
@@ -30,6 +30,13 @@ interface RoomType {
 interface DiningVenue { name: string; cuisine: string; hours: string; description: string; }
 interface Amenity { name: string; description: string; hours?: string; }
 interface FAQ { question: string; answer: string; }
+interface SpaService {
+  name: string;
+  durationMinutes: number;
+  price: number;
+  currency: string;
+  description: string;
+}
 
 interface HotelConfig {
   branding: { hotelName: string; tagline: string; accentColor: string; welcomeMessage: string; farewellMessage: string; logoUrl?: string; };
@@ -39,6 +46,7 @@ interface HotelConfig {
   rooms: RoomType[];
   dining: DiningVenue[];
   amenities: Amenity[];
+  spa?: SpaService[];
   customFAQ: FAQ[];
   receptionistPersona: string;
   voiceStyle?: "warm" | "professional" | "energetic";
@@ -53,7 +61,7 @@ interface HotelConfig {
   };
 }
 
-type Tab = "notifications" | "calendar" | "bookings" | "branding" | "embed" | "contact" | "policies" | "rooms" | "dining" | "amenities" | "faq" | "persona" | "telephony" | "payment" | "whatsapp";
+type Tab = "notifications" | "calendar" | "bookings" | "branding" | "embed" | "contact" | "policies" | "rooms" | "dining" | "spa" | "serviceRequests" | "amenities" | "faq" | "persona" | "telephony" | "payment" | "whatsapp";
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<HotelConfig | null>(null);
@@ -74,6 +82,42 @@ export default function SettingsPage() {
   const [webSyncing, setWebSyncing] = useState(false);
   const [settingsSyncing, setSettingsSyncing] = useState(false);
   const [slugSaving, setSlugSaving] = useState(false);
+
+  // Live service requests list states
+  const [requestsList, setRequestsList] = useState<
+    { id: string; type: string; description: string; roomNumber?: string | null; guestName: string; status: string; priority: string; createdAt: string }[]
+  >([]);
+  const [requestsLoading, setRequestsLoading] = useState(false);
+
+  const loadServiceRequests = useCallback(() => {
+    setRequestsLoading(true);
+    fetchJsonWithAuth<{ requests: typeof requestsList }>("/api/service-requests")
+      .then((data) => {
+        setRequestsList(data.requests ?? []);
+      })
+      .catch(() => {})
+      .finally(() => setRequestsLoading(false));
+  }, []);
+
+  const updateRequestStatus = async (id: string, status: string) => {
+    try {
+      await fetchJsonWithAuth("/api/service-requests", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status }),
+      });
+      showToast("Service request updated.", "success");
+      loadServiceRequests();
+    } catch {
+      showToast("Failed to update status.", "delete");
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "serviceRequests") {
+      loadServiceRequests();
+    }
+  }, [activeTab, loadServiceRequests]);
 
   const showToast = useCallback((message: string, type: "success" | "delete" | "info" = "success") => {
     setToast({ message, type });
@@ -256,6 +300,8 @@ export default function SettingsPage() {
     { id: "policies", label: "Policies", icon: <Clock className="w-4 h-4" /> },
     { id: "rooms", label: "Rooms", icon: <Hotel className="w-4 h-4" /> },
     { id: "dining", label: "Dining", icon: <Utensils className="w-4 h-4" /> },
+    { id: "spa", label: "Spa Services", icon: <Sparkles className="w-4 h-4" /> },
+    { id: "serviceRequests", label: "Service Requests", icon: <Inbox className="w-4 h-4" />, badge: requestsList.filter(r => r.status === "open").length || undefined },
     { id: "amenities", label: "Amenities", icon: <Dumbbell className="w-4 h-4" /> },
     { id: "faq", label: "Custom FAQ", icon: <MessageSquare className="w-4 h-4" /> },
     { id: "persona", label: "AI Persona", icon: <Settings className="w-4 h-4" /> },
@@ -784,6 +830,43 @@ export default function SettingsPage() {
                   </div>
                 )}
               </div>
+
+              {/* QR Code Card */}
+              {embedInfo?.slug && (
+                <div className={cardCls}>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ember-orange/15 text-sm font-bold text-ember-orange">QR</div>
+                    <div>
+                      <h2 className="text-base font-semibold text-cream-text">Download Assistant QR Code</h2>
+                      <p className="text-sm text-zinc-mute">Scan to chat with the voice assistant. Download and print on guest collaterals.</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center gap-6 p-4 rounded-xl bg-black/10 border border-white/5">
+                    <div className="bg-white p-3 rounded-xl shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/hotel/qr?slug=${embedInfo.slug}`}
+                        alt="Assistant QR Code"
+                        className="w-32 h-32"
+                      />
+                    </div>
+                    <div className="space-y-3 text-center sm:text-left">
+                      <p className="text-xs text-neutral-400 leading-relaxed">
+                        Print this QR code on guest keycards, in-room welcome cards, lobby banners, or dining menus so they can instantly launch the AI receptionist on their mobile phones.
+                      </p>
+                      <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                        <a
+                          href={`/api/hotel/qr?slug=${embedInfo.slug}`}
+                          download={`staynep-${embedInfo.slug}-qr.svg`}
+                          className="vapi-btn-ember vapi-btn-compact inline-flex items-center gap-1.5"
+                        >
+                          <Download className="w-3.5 h-3.5" /> Download SVG
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1033,6 +1116,141 @@ export default function SettingsPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* SPA SERVICES */}
+          {activeTab === "spa" && (
+            <div className={cardCls}>
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-lg font-semibold flex items-center gap-2"><Sparkles className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> Spa Services</h2>
+                  <p className="text-neutral-500 text-sm mt-1">Configure the wellness and spa treatments offered at your hotel.</p>
+                </div>
+                <button
+                  onClick={() => {
+                    const currentSpa = config.spa || [];
+                    setConfig({ ...config, spa: [...currentSpa, { name: "", durationMinutes: 60, price: 100, currency: "USD", description: "" }] });
+                    showToast("New spa treatment added", "success");
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-neutral-800 border border-neutral-700 hover:border-neutral-600 text-neutral-300 hover:text-white transition-all"
+                >
+                  <Plus className="w-4 h-4" /> Add Treatment
+                </button>
+              </div>
+              {(config.spa || []).map((service, i) => (
+                <div key={i} className="bg-neutral-800/30 rounded-xl p-5 border border-neutral-800/50 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-neutral-300">Treatment {i + 1}</span>
+                    <button
+                      onClick={() => {
+                        const currentSpa = config.spa || [];
+                        const name = currentSpa[i].name || `Treatment ${i + 1}`;
+                        setConfig({ ...config, spa: currentSpa.filter((_, j) => j !== i) });
+                        showToast(`"${name}" removed`, "delete");
+                      }}
+                      className="text-red-400/60 hover:text-red-400 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><label className={labelCls}>Name</label><input className={inputCls} value={service.name} onChange={e => { const s = [...(config.spa || [])]; s[i] = { ...s[i], name: e.target.value }; setConfig({ ...config, spa: s }); }} /></div>
+                    <div><label className={labelCls}>Duration (Minutes)</label><input type="number" className={inputCls} value={service.durationMinutes} onChange={e => { const s = [...(config.spa || [])]; s[i] = { ...s[i], durationMinutes: Number(e.target.value) }; setConfig({ ...config, spa: s }); }} /></div>
+                    <div><label className={labelCls}>Price</label><input type="number" className={inputCls} value={service.price} onChange={e => { const s = [...(config.spa || [])]; s[i] = { ...s[i], price: Number(e.target.value) }; setConfig({ ...config, spa: s }); }} /></div>
+                    <div><label className={labelCls}>Currency</label><input className={inputCls} value={service.currency} onChange={e => { const s = [...(config.spa || [])]; s[i] = { ...s[i], currency: e.target.value }; setConfig({ ...config, spa: s }); }} /></div>
+                    <div className="col-span-2"><label className={labelCls}>Description</label><input className={inputCls} value={service.description} onChange={e => { const s = [...(config.spa || [])]; s[i] = { ...s[i], description: e.target.value }; setConfig({ ...config, spa: s }); }} /></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* SERVICE REQUESTS */}
+          {activeTab === "serviceRequests" && (
+            <div className={cardCls}>
+              <div>
+                <h2 className="text-lg font-semibold flex items-center gap-2"><Inbox className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> Service Requests</h2>
+                <p className="text-neutral-500 text-sm mt-1">Live ticketing log for housekeeping, maintenance, and room service.</p>
+              </div>
+
+              {requestsLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-zinc-mute" />
+                </div>
+              ) : requestsList.length === 0 ? (
+                <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-neutral-800 bg-neutral-900/10 text-zinc-mute">
+                  No service requests submitted yet.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {requestsList.map((req) => (
+                    <div
+                      key={req.id}
+                      className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between gap-4 transition-all duration-300 ${
+                        req.status === "completed"
+                          ? "border-neutral-800/60 bg-neutral-900/10 opacity-70"
+                          : req.priority === "high" || req.priority === "urgent"
+                            ? "border-red-500/25 bg-red-500/[0.03]"
+                            : "border-neutral-800 bg-neutral-900/30"
+                      }`}
+                    >
+                      <div className="space-y-1 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
+                            req.status === "completed" ? "bg-neutral-800 text-neutral-400" : "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                          }`}>
+                            {req.type}
+                          </span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            req.priority === "high" || req.priority === "urgent"
+                              ? "bg-red-500/10 text-red-400"
+                              : "bg-neutral-800 text-neutral-400"
+                          }`}>
+                            {req.priority.toUpperCase()}
+                          </span>
+                          <span className={`text-[10px] font-mono text-neutral-500`}>
+                            #{req.id.slice(0, 8).toUpperCase()}
+                          </span>
+                        </div>
+                        <p className="text-sm font-semibold text-neutral-200">
+                          {req.description}
+                        </p>
+                        <p className="text-xs text-neutral-400">
+                          Guest: <strong className="text-neutral-300">{req.guestName}</strong> · Room: <strong className="text-neutral-300">{req.roomNumber || "N/A"}</strong>
+                        </p>
+                        <p className="text-[10px] text-neutral-500">
+                          Created at: {new Date(req.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+
+                      <div className="flex sm:flex-col justify-end gap-2 shrink-0 self-start sm:self-center">
+                        {req.status === "open" && (
+                          <button
+                            onClick={() => updateRequestStatus(req.id, "in_progress")}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-all border border-neutral-700"
+                          >
+                            Mark In Progress
+                          </button>
+                        )}
+                        {req.status !== "completed" && (
+                          <button
+                            onClick={() => updateRequestStatus(req.id, "completed")}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-mint-pulse/15 border border-mint-pulse/30 text-mint-pulse hover:bg-mint-pulse/25 transition-all"
+                          >
+                            Mark Completed
+                          </button>
+                        )}
+                        {req.status === "completed" && (
+                          <span className="text-xs text-mint-pulse font-bold flex items-center gap-1">
+                            ✓ Completed
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

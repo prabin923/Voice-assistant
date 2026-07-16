@@ -6,7 +6,10 @@ import {
   createBookingSafe,
   modifyBookingSafe,
 } from "@/lib/bookingService";
+import { isPaymentEnabled, createDepositCheckoutSession, calculateDeposit } from "@/lib/stripePayment";
+import { getTenantStore } from "@/lib/tenantContext";
 import { notifyBookingComplete } from "@/lib/bookingNotify";
+import { applyLoyaltyDiscount } from "@/lib/loyalty";
 import {
   formatAlternativeSuggestions,
   formatAvailabilityList,
@@ -50,7 +53,7 @@ export type BookingFlowResult = {
   pendingBooking?: PendingBooking | null;
 };
 
-type GuestProfile = { id: string; name: string; phone: string | null; email: string };
+type GuestProfile = { id: string; name: string; phone: string | null; email: string; bookingCount?: number };
 
 /** Guest-authored text only — used for extracting facts the guest provided
  *  (room type, dates, name, phone, room count). Never includes the assistant's
@@ -184,11 +187,66 @@ function extractSpecialRequestNote(message: string): string | null {
   return null;
 }
 
-function buildConfirmationResponse(pending: PendingBooking, config: HotelConfig): BookingFlowResult {
+function calculateStayCost(
+  pending: PendingBooking,
+  config: HotelConfig,
+  guestProfile?: GuestProfile
+): { nights: number; perNight: number; total: number; currency: string; discountPercent?: number; savings?: number } | null {
+  const room = config.rooms.find((r) => r.name === pending.roomType);
+  if (!room || !room.pricePerNight) return null;
+  const nights = Math.max(
+    1,
+    Math.round(
+      (new Date(`${pending.checkOut}T12:00:00`).getTime() -
+        new Date(`${pending.checkIn}T12:00:00`).getTime()) /
+        (1000 * 60 * 60 * 24)
+    )
+  );
+
+  const baseTotal = room.pricePerNight * nights * pending.rooms;
+  const currency = room.currency || "USD";
+
+  if (guestProfile?.bookingCount && guestProfile.bookingCount > 0) {
+    const { discountedPrice, discountPercent, savings } = applyLoyaltyDiscount(baseTotal, guestProfile.bookingCount);
+    return {
+      nights,
+      perNight: room.pricePerNight,
+      total: discountedPrice,
+      currency,
+      discountPercent,
+      savings,
+    };
+  }
+
+  return {
+    nights,
+    perNight: room.pricePerNight,
+    total: baseTotal,
+    currency,
+  };
+}
+
+function formatCost(amount: number, currency: string): string {
+  return `${currency} ${amount.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+function buildConfirmationResponse(
+  pending: PendingBooking,
+  config: HotelConfig,
+  guestProfile?: GuestProfile
+): BookingFlowResult {
   const note = pending.specialRequests ? ` Note: ${pending.specialRequests}.` : "";
+  const cost = calculateStayCost(pending, config, guestProfile);
+  let costLine = "";
+  if (cost) {
+    const loyaltyNote = cost.discountPercent
+      ? ` (includes ${cost.discountPercent}% loyalty discount — saved ${formatCost(cost.savings || 0, cost.currency)})`
+      : "";
+    costLine = ` Total: ${formatCost(cost.total, cost.currency)} (${formatCost(cost.perNight, cost.currency)}/night × ${cost.nights} night${cost.nights !== 1 ? "s" : ""}${pending.rooms > 1 ? ` × ${pending.rooms} rooms` : ""})${loyaltyNote}.`;
+  }
   return {
     handled: true,
-    reply: `Just to confirm: ${pending.rooms} ${pending.roomType} room(s), ${pending.checkIn} to ${pending.checkOut}, for ${pending.guestName} at ${config.branding.hotelName}.${note} Reply yes to book, or tell me what to change.`,
+    reply: `Just to confirm: ${pending.rooms} ${pending.roomType} room(s), ${pending.checkIn} to ${pending.checkOut}, for ${pending.guestName} at ${config.branding.hotelName}.${costLine}${note} Reply yes to book, or tell me what to change.`,
     pendingBooking: pending,
     escalate: false,
   };
@@ -249,6 +307,25 @@ async function handlePendingBookingConfirmation(
       specialRequests: pending.specialRequests,
     });
 
+    if (isPaymentEnabled(config)) {
+      try {
+        const store = getTenantStore();
+        const hotelId = store?.hotelId ?? "default";
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+        const { amount, currency } = calculateDeposit(pending, config);
+        const session = await createDepositCheckoutSession(pending, config, hotelId, appUrl);
+
+        return {
+          handled: true,
+          reply: `I have prepared your booking. To secure your stay, please pay the deposit of ${currency.toUpperCase()} ${(amount / 100).toFixed(2)} using this secure checkout link: ${session.url}`,
+          pendingBooking: null,
+          escalate: false,
+        };
+      } catch (err) {
+        console.error("Failed to generate payment session in flow, falling back to direct booking:", err);
+      }
+    }
+
     if (!bookingResult.ok) {
       if (bookingResult.status === 409) {
         const alternatives = await suggestAlternatives(config, pending.checkIn, pending.checkOut, pending.roomType);
@@ -271,6 +348,9 @@ async function handlePendingBookingConfirmation(
     const booking = bookingResult.booking;
     notifyBookingComplete(booking, "confirmed", message);
 
+    const cost = calculateStayCost(pending, config, guestProfile);
+    const totalCost = cost ? formatCost(cost.total, cost.currency) : undefined;
+
     return {
       handled: true,
       reply: serializeBookingReply({
@@ -281,6 +361,7 @@ async function handlePendingBookingConfirmation(
         rooms: pending.rooms,
         guestName: pending.guestName,
         bookingId: booking.id,
+        totalCost,
       }),
       booking: toSummary(booking),
       pendingBooking: null,
@@ -529,15 +610,17 @@ function serializeBookingReply(input: {
   guestName: string;
   bookingId: string;
   action?: "confirmed" | "cancelled" | "modified";
+  totalCost?: string;
 }): string {
   const shortId = input.bookingId.slice(0, 8).toUpperCase();
+  const costSuffix = input.totalCost ? ` Total: ${input.totalCost}.` : "";
   if (input.action === "cancelled") {
     return `Your booking #${shortId} has been cancelled. We hope to welcome you another time.`;
   }
   if (input.action === "modified") {
-    return `Done — booking #${shortId} is updated: ${input.rooms} ${input.roomType} room(s) from ${input.checkIn} to ${input.checkOut} for ${input.guestName}.`;
+    return `Done — booking #${shortId} is updated: ${input.rooms} ${input.roomType} room(s) from ${input.checkIn} to ${input.checkOut} for ${input.guestName}.${costSuffix}`;
   }
-  return `You're all set! Booking #${shortId} is confirmed at ${input.hotelName}: ${input.rooms} ${input.roomType} room(s) from ${input.checkIn} to ${input.checkOut} for ${input.guestName}. A confirmation has been sent if we have your email.`;
+  return `You're all set! Booking #${shortId} is confirmed at ${input.hotelName}: ${input.rooms} ${input.roomType} room(s) from ${input.checkIn} to ${input.checkOut} for ${input.guestName}.${costSuffix} A confirmation has been sent if we have your email.`;
 }
 
 async function handleFindAvailableDates(
@@ -737,6 +820,18 @@ async function handleModify(
 
   notifyBookingComplete(result.booking, "modified", message);
 
+  const modifiedPending: PendingBooking = {
+    roomType: result.booking.room_type,
+    checkIn: result.booking.check_in,
+    checkOut: result.booking.check_out,
+    rooms: result.booking.rooms,
+    guestName: result.booking.guest_name,
+    guestPhone: result.booking.guest_phone,
+    guestEmail: result.booking.guest_email,
+  };
+  const modCost = calculateStayCost(modifiedPending, config, guestProfile);
+  const modTotalCost = modCost ? formatCost(modCost.total, modCost.currency) : undefined;
+
   return {
     handled: true,
     reply: serializeBookingReply({
@@ -748,6 +843,7 @@ async function handleModify(
       guestName: result.booking.guest_name,
       bookingId: result.booking.id,
       action: "modified",
+      totalCost: modTotalCost,
     }),
     booking: toSummary(result.booking),
     escalate: false,

@@ -32,6 +32,11 @@ import {
 } from "@/lib/availabilityQuery";
 import { createBookingSafe, publicBookingRow } from "@/lib/bookingService";
 import type { BookingSummary, PendingBooking } from "@/lib/bookingFlow";
+import prisma from "@/lib/prisma";
+import { loyaltySystemPromptFragment } from "@/lib/loyalty";
+import { guestPreferencesPromptFragment } from "@/lib/guestPreferences";
+import { isPaymentEnabled, calculateDeposit, createDepositCheckoutSession } from "@/lib/stripePayment";
+import { getTenantStore } from "@/lib/tenantContext";
 
 /**
  * Opaque marker stored in the `pendingBooking` round-trip while the agent is
@@ -48,11 +53,22 @@ export const AGENT_PENDING_BOOKING: PendingBooking = {
   guestName: "",
   guestPhone: "",
 };
+
 import {
   createDiningReservationSafe,
   toDiningSummary,
   type DiningReservationSummary,
 } from "@/lib/diningReservationService";
+
+import {
+  createSpaReservationSafe,
+  toSpaSummary,
+  type SpaReservationSummary,
+} from "@/lib/spaReservationService";
+
+import {
+  createServiceRequestSafe,
+} from "@/lib/serviceRequestService";
 
 export type GuestProfileLite = { id: string; name: string; phone: string | null; email: string };
 
@@ -60,6 +76,8 @@ export type BookingAgentResult = {
   reply: string;
   booking?: BookingSummary;
   dining?: DiningReservationSummary;
+  spa?: SpaReservationSummary;
+  serviceRequest?: { id: string; type: string; description: string; status: string };
   escalate: boolean;
   active: boolean; // keep routing follow-up turns to the agent
 };
@@ -146,12 +164,54 @@ export const TOOLS: FunctionDeclaration[] = [
       required: ["venueName", "reservationDate", "reservationTime", "partySize", "guestName", "guestPhone"],
     },
   },
+  {
+    name: "book_spa_treatment",
+    description:
+      "Create a CONFIRMED spa reservation. Only call with spa service name, date, time, guest name and phone. Returns reservation details on success.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        serviceName: { type: SchemaType.STRING },
+        reservationDate: { type: SchemaType.STRING, description: "YYYY-MM-DD" },
+        reservationTime: { type: SchemaType.STRING, description: "e.g. 11:30" },
+        durationMinutes: { type: SchemaType.NUMBER, description: "Optional duration (minutes)" },
+        guestName: { type: SchemaType.STRING },
+        guestPhone: { type: SchemaType.STRING },
+        guestEmail: { type: SchemaType.STRING },
+        specialRequests: { type: SchemaType.STRING },
+        price: { type: SchemaType.NUMBER },
+        currency: { type: SchemaType.STRING },
+      },
+      required: ["serviceName", "reservationDate", "reservationTime", "guestName", "guestPhone"],
+    },
+  },
+  {
+    name: "create_service_request",
+    description:
+      "Submit a service request for room cleanup, maintenance (fixing broken AC/leak/etc), or room service. Only call once you have request type, description, and guest name.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        type: { type: SchemaType.STRING, description: "housekeeping, maintenance, or roomservice" },
+        description: { type: SchemaType.STRING, description: "Detailed request description e.g. 'AC not blowing cold air'" },
+        roomNumber: { type: SchemaType.STRING, description: "Optional room number" },
+        guestName: { type: SchemaType.STRING },
+        priority: { type: SchemaType.STRING, description: "Optional: low, medium, high, urgent" },
+      },
+      required: ["type", "description", "guestName"],
+    },
+  },
 ];
 
 type ToolCtx = {
   config: HotelConfig;
   guestProfile?: GuestProfileLite;
-  out: { booking?: BookingSummary; dining?: DiningReservationSummary };
+  out: {
+    booking?: BookingSummary;
+    dining?: DiningReservationSummary;
+    spa?: SpaReservationSummary;
+    serviceRequest?: { id: string; type: string; description: string; status: string };
+  };
 };
 
 async function execTool(name: string, args: Record<string, unknown>, ctx: ToolCtx): Promise<object> {
@@ -184,7 +244,7 @@ async function execTool(name: string, args: Record<string, unknown>, ctx: ToolCt
         return { roomType: s(args.roomType), windows };
       }
       case "book_room": {
-        const res = await createBookingSafe({
+        const pending: PendingBooking = {
           roomType: s(args.roomType),
           checkIn: s(args.checkIn),
           checkOut: s(args.checkOut),
@@ -192,8 +252,32 @@ async function execTool(name: string, args: Record<string, unknown>, ctx: ToolCt
           guestName: s(args.guestName) || ctx.guestProfile?.name || "",
           guestPhone: s(args.guestPhone) || ctx.guestProfile?.phone || "",
           guestEmail: s(args.guestEmail) || ctx.guestProfile?.email || null,
-          guestId: ctx.guestProfile?.id ?? null,
           specialRequests: s(args.specialRequests) || null,
+        };
+
+        if (isPaymentEnabled(ctx.config)) {
+          try {
+            const store = getTenantStore();
+            const hotelId = store?.hotelId ?? "default";
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+            const { amount, currency } = calculateDeposit(pending, ctx.config);
+            const session = await createDepositCheckoutSession(pending, ctx.config, hotelId, appUrl);
+
+            return {
+              ok: true,
+              requiresPayment: true,
+              checkoutUrl: session.url,
+              depositAmount: amount / 100,
+              currency: currency.toUpperCase(),
+            };
+          } catch (err) {
+            console.error("Failed to generate payment session in booking agent tool:", err);
+          }
+        }
+
+        const res = await createBookingSafe({
+          ...pending,
+          guestId: ctx.guestProfile?.id ?? null,
         });
         if (res.ok) {
           ctx.out.booking = publicBookingRow(res.booking);
@@ -219,6 +303,46 @@ async function execTool(name: string, args: Record<string, unknown>, ctx: ToolCt
         }
         return { ok: false, error: res.error };
       }
+      case "book_spa_treatment": {
+        const res = await createSpaReservationSafe({
+          serviceName: s(args.serviceName),
+          reservationDate: s(args.reservationDate),
+          reservationTime: s(args.reservationTime),
+          durationMinutes: args.durationMinutes != null ? n(args.durationMinutes) : undefined,
+          guestName: s(args.guestName) || ctx.guestProfile?.name || "",
+          guestPhone: s(args.guestPhone) || ctx.guestProfile?.phone || "",
+          guestEmail: s(args.guestEmail) || ctx.guestProfile?.email || null,
+          guestId: ctx.guestProfile?.id ?? null,
+          specialRequests: s(args.specialRequests) || null,
+          price: args.price != null ? n(args.price) : undefined,
+          currency: s(args.currency) || undefined,
+        });
+        if (res.ok) {
+          ctx.out.spa = toSpaSummary(res.reservation);
+          return { ok: true, reservationId: res.reservation.id, reservation: ctx.out.spa };
+        }
+        return { ok: false, error: res.error };
+      }
+      case "create_service_request": {
+        const res = await createServiceRequestSafe({
+          type: s(args.type),
+          description: s(args.description),
+          roomNumber: s(args.roomNumber) || undefined,
+          guestName: s(args.guestName) || ctx.guestProfile?.name || "",
+          guestId: ctx.guestProfile?.id ?? undefined,
+          priority: s(args.priority) || undefined,
+        });
+        if (res.ok) {
+          ctx.out.serviceRequest = {
+            id: res.request.id,
+            type: res.request.type,
+            description: res.request.description,
+            status: res.request.status,
+          };
+          return { ok: true, requestId: res.request.id, request: ctx.out.serviceRequest };
+        }
+        return { ok: false, error: res.error };
+      }
       default:
         return { error: `Unknown tool: ${name}` };
     }
@@ -231,7 +355,8 @@ function buildSystemPrompt(
   config: HotelConfig,
   langCode: string,
   channel: "voice" | "text",
-  guestProfile?: GuestProfileLite
+  guestProfile?: GuestProfileLite,
+  profileContext?: string
 ): string {
   const widgetLang = getLanguageByCode(langCode)?.name || "English";
   const langLine =
@@ -241,7 +366,7 @@ function buildSystemPrompt(
     `(Nepali/Hindi → Devanagari), keeping room names and other proper nouns as-is. Do not switch to English just because the ` +
     `guest mixed in English words. Only if the guest's language is genuinely unclear, default to ${widgetLang}.`;
   const guestLine = guestProfile
-    ? `\nThe guest is signed in as ${guestProfile.name}${guestProfile.phone ? ` (phone ${guestProfile.phone})` : ""}. Use these details for bookings instead of re-asking.`
+    ? `\nThe guest is signed in as ${guestProfile.name}${guestProfile.phone ? ` (phone ${guestProfile.phone})` : ""}. Use these details for bookings instead of re-asking.${profileContext || ""}`
     : "\nThe guest is not signed in — collect their name and phone before booking.";
   const voiceLine = channel === "voice"
     ? "\nThis is a VOICE call: reply in 1-2 short, warm spoken sentences. No lists or markup."
@@ -254,13 +379,13 @@ Today's date is ${todayIsoDate()}. Resolve relative dates ("tonight", "this week
 YOUR GOAL: genuinely help the guest AND gently guide them toward booking, the way a great receptionist does — recommend the room that fits their needs, highlight real value (views, amenities, dining, location), suggest a sensible upgrade when it makes sense, reassure on hesitation, and make booking feel easy. Be persuasive but honest and never pushy.
 
 GROUNDING RULES (critical):
-- Use tools for all facts. NEVER state availability, room counts, or prices without first calling check_room_availability. NEVER say a booking or table is confirmed unless book_room / book_dining_table returned ok:true — read back the real booking id.
+- Use tools for all facts. NEVER state availability, room counts, or prices without first calling check_room_availability. NEVER say a booking or table is confirmed unless book_room / book_dining_table / book_spa_treatment / create_service_request returned ok:true — read back the real confirmation id.
 - If a tool reports limited availability ("1 left"), you may use honest urgency. Never invent scarcity.
-- For amenities, policies, directions, dining details, or anything you're unsure of, call search_hotel_info. If it isn't in the results, say you'll check with the front desk — do not make it up.
-- Collect missing booking details (room type, dates, guest name, phone) naturally in conversation; don't dump a form.
+- For amenities, policies, directions, dining details, spa details, or anything you're unsure of, call search_hotel_info. If it isn't in the results, say you'll check with the front desk — do not make it up.
+- Collect missing booking details naturally in conversation; don't dump a form.
 - NEVER re-ask for something the guest already told you earlier in this conversation. Before asking, re-read the history and reuse any room type, dates, name, or phone already given. Only ask for what is still genuinely missing.
 - When the guest asks what rooms/options are available WITHOUT giving dates, first briefly name the room types we offer (from HOTEL REFERENCE) with their nightly price, THEN ask for their check-in/check-out dates to confirm live availability. Never reply with only "what dates?" — always give them something useful first.
-- After a successful booking, confirm the key details warmly and offer one relevant add-on (e.g. dining, airport pickup) without pressure.${guestLine}${langLine}${voiceLine}
+- After a successful booking, confirm the key details warmly and offer one relevant add-on (e.g. dining, spa, airport pickup) without pressure.${guestLine}${langLine}${voiceLine}
 
 HOTEL REFERENCE (static; still verify live availability with tools):
 ${buildHotelDataBlock(config, false)}`;
@@ -286,9 +411,24 @@ export async function runBookingAgent(params: {
 }): Promise<BookingAgentResult> {
   const { message, langCode, config, history, channel, guestProfile } = params;
 
+  let profileContext = "";
+  if (guestProfile) {
+    try {
+      const [prefsFragment, guestRecord] = await Promise.all([
+        guestPreferencesPromptFragment(guestProfile.id),
+        prisma.guest.findUnique({ where: { id: guestProfile.id }, select: { bookingCount: true } })
+      ]);
+      const bookingCount = guestRecord?.bookingCount ?? 0;
+      const loyaltyFragment = loyaltySystemPromptFragment(bookingCount, guestProfile.name);
+      profileContext = `\n${loyaltyFragment}\n${prefsFragment}`;
+    } catch (e) {
+      console.warn("Failed to load guest preferences/loyalty context for LLM receptionist:", e);
+    }
+  }
+
   const model = gemini().getGenerativeModel({
     model: GEMINI_MODEL,
-    systemInstruction: buildSystemPrompt(config, langCode, channel, guestProfile),
+    systemInstruction: buildSystemPrompt(config, langCode, channel, guestProfile, profileContext),
     tools: [{ functionDeclarations: TOOLS }],
     generationConfig: {
       temperature: 0.6,
@@ -315,7 +455,7 @@ export async function runBookingAgent(params: {
   }
 
   const reply = (result.response.text() || "").trim();
-  const confirmed = Boolean(ctx.out.booking || ctx.out.dining);
+  const confirmed = Boolean(ctx.out.booking || ctx.out.dining || ctx.out.spa || ctx.out.serviceRequest);
   // Stay engaged while gathering info / presenting options; release once a
   // booking is confirmed, or when the agent gave a plain answer with no tools.
   const active = !confirmed && (toolCalled || /[?？]\s*$/.test(reply));
@@ -324,6 +464,8 @@ export async function runBookingAgent(params: {
     reply: reply || "How can I help you with your stay?",
     booking: ctx.out.booking,
     dining: ctx.out.dining,
+    spa: ctx.out.spa,
+    serviceRequest: ctx.out.serviceRequest,
     escalate: false,
     active,
   };

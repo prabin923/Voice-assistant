@@ -8,6 +8,9 @@ import {
   mapGuest,
   mapHotel,
   mapInteraction,
+  mapReview,
+  mapServiceRequest,
+  mapSpaReservation,
   mapSupportTicket,
 } from "@/lib/db/mappers";
 import type {
@@ -17,6 +20,9 @@ import type {
   Guest,
   Hotel,
   Interaction,
+  Review,
+  ServiceRequest,
+  SpaReservation,
   SupportTicket,
 } from "@/lib/db/types";
 
@@ -795,5 +801,214 @@ export const feedback = {
       take: limit,
     });
     return rows.map(mapFeedback);
+  },
+};
+
+export const serviceRequests = {
+  async create(data: {
+    type: string;
+    description: string;
+    roomNumber?: string;
+    guestName: string;
+    guestId?: string;
+    priority?: string;
+  }): Promise<ServiceRequest> {
+    const row = await prisma.serviceRequest.create({
+      data: {
+        id: id(),
+        type: data.type,
+        description: data.description,
+        roomNumber: data.roomNumber ?? null,
+        guestName: data.guestName,
+        guestId: data.guestId ?? null,
+        priority: data.priority ?? "medium",
+      },
+    });
+    return mapServiceRequest(row);
+  },
+
+  async updateStatus(requestId: string, status: string, staffNotes?: string): Promise<ServiceRequest | null> {
+    try {
+      const row = await prisma.serviceRequest.update({
+        where: { id: requestId },
+        data: {
+          status,
+          staffNotes: staffNotes ?? undefined,
+          resolvedAt: status === "completed" ? new Date() : undefined,
+        },
+      });
+      return mapServiceRequest(row);
+    } catch {
+      return null;
+    }
+  },
+
+  async listOpen(limit = 50): Promise<ServiceRequest[]> {
+    const rows = await prisma.serviceRequest.findMany({
+      where: { status: { in: ["open", "in_progress"] } },
+      orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+      take: limit,
+    });
+    return rows.map(mapServiceRequest);
+  },
+
+  async listRecent(limit = 50): Promise<ServiceRequest[]> {
+    const rows = await prisma.serviceRequest.findMany({
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+    return rows.map(mapServiceRequest);
+  },
+
+  async totalCount(): Promise<number> {
+    return prisma.serviceRequest.count();
+  },
+
+  async countByStatus(): Promise<{ open: number; in_progress: number; completed: number }> {
+    const [open, inProgress, completed] = await Promise.all([
+      prisma.serviceRequest.count({ where: { status: "open" } }),
+      prisma.serviceRequest.count({ where: { status: "in_progress" } }),
+      prisma.serviceRequest.count({ where: { status: "completed" } }),
+    ]);
+    return { open, in_progress: inProgress, completed };
+  },
+};
+
+export const spaReservations = {
+  async create(data: {
+    serviceName: string;
+    reservationDate: string;
+    reservationTime: string;
+    durationMinutes?: number;
+    guestName: string;
+    guestPhone: string;
+    guestEmail?: string;
+    guestId?: string;
+    therapistPreference?: string;
+    specialRequests?: string;
+    price?: number;
+    currency?: string;
+  }): Promise<SpaReservation> {
+    const row = await prisma.spaReservation.create({
+      data: {
+        id: id(),
+        serviceName: data.serviceName,
+        reservationDate: data.reservationDate,
+        reservationTime: data.reservationTime,
+        durationMinutes: data.durationMinutes ?? 60,
+        guestName: data.guestName,
+        guestPhone: data.guestPhone,
+        guestEmail: data.guestEmail ?? null,
+        guestId: data.guestId ?? null,
+        therapistPreference: data.therapistPreference ?? null,
+        specialRequests: data.specialRequests ?? null,
+        price: data.price ?? 0,
+        currency: data.currency ?? "USD",
+      },
+    });
+    return mapSpaReservation(row);
+  },
+
+  async cancel(reservationId: string): Promise<SpaReservation | null> {
+    try {
+      const row = await prisma.spaReservation.update({
+        where: { id: reservationId },
+        data: { status: "cancelled" },
+      });
+      return mapSpaReservation(row);
+    } catch {
+      return null;
+    }
+  },
+
+  async listByGuestId(guestId: string, limit = 10): Promise<SpaReservation[]> {
+    const rows = await prisma.spaReservation.findMany({
+      where: { guestId },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+    return rows.map(mapSpaReservation);
+  },
+
+  async listRecent(limit = 50): Promise<SpaReservation[]> {
+    const rows = await prisma.spaReservation.findMany({
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+    return rows.map(mapSpaReservation);
+  },
+};
+
+export const reviews = {
+  async create(data: {
+    guestId?: string;
+    guestName: string;
+    bookingId?: string;
+    hotelId?: string;
+    rating: number;
+    title?: string;
+    comment?: string;
+  }): Promise<Review> {
+    const row = await prisma.review.create({
+      data: {
+        id: id(),
+        guestId: data.guestId ?? null,
+        guestName: data.guestName,
+        bookingId: data.bookingId ?? null,
+        hotelId: data.hotelId ?? null,
+        rating: Math.max(1, Math.min(5, data.rating)),
+        title: data.title ?? null,
+        comment: data.comment ?? null,
+      },
+    });
+    return mapReview(row);
+  },
+
+  async moderate(reviewId: string, status: string, staffResponse?: string): Promise<Review | null> {
+    try {
+      const row = await prisma.review.update({
+        where: { id: reviewId },
+        data: { status, staffResponse: staffResponse ?? undefined },
+      });
+      return mapReview(row);
+    } catch {
+      return null;
+    }
+  },
+
+  async listApproved(hotelId?: string, limit = 50): Promise<Review[]> {
+    const rows = await prisma.review.findMany({
+      where: { status: "approved", ...(hotelId ? { hotelId } : {}) },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+    return rows.map(mapReview);
+  },
+
+  async listAll(limit = 50): Promise<Review[]> {
+    const rows = await prisma.review.findMany({
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+    return rows.map(mapReview);
+  },
+
+  async stats(hotelId?: string): Promise<{ total: number; avgRating: number; distribution: Record<number, number> }> {
+    const where = { status: "approved", ...(hotelId ? { hotelId } : {}) };
+    const rows = await prisma.review.findMany({ where, select: { rating: true } });
+    const total = rows.length;
+    const avgRating = total > 0 ? rows.reduce((sum, r) => sum + r.rating, 0) / total : 0;
+    const distribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    rows.forEach((r) => { distribution[r.rating] = (distribution[r.rating] ?? 0) + 1; });
+    return { total, avgRating: Math.round(avgRating * 10) / 10, distribution };
+  },
+
+  async listByGuestId(guestId: string, limit = 10): Promise<Review[]> {
+    const rows = await prisma.review.findMany({
+      where: { guestId },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+    return rows.map(mapReview);
   },
 };

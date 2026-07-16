@@ -10,6 +10,9 @@ import {
   type DiningSummary,
   type PendingBooking,
   type PendingDining,
+  type SpaSummary,
+  type PendingSpa,
+  type PendingServiceRequest,
 } from '@/lib/guestServiceFlow';
 import { runBookingAgent, AGENT_PENDING_BOOKING } from '@/lib/bookingAgent';
 import { localizeServiceReply } from '@/lib/replyLocalize';
@@ -40,6 +43,8 @@ export async function POST(req: Request) {
       hotel?: string;
       pendingBooking?: PendingBooking | null;
       pendingDining?: PendingDining | null;
+      pendingSpa?: PendingSpa | null;
+      pendingServiceRequest?: PendingServiceRequest | null;
       agentActive?: boolean;
     }>;
 
@@ -108,6 +113,8 @@ export async function POST(req: Request) {
     let dining: DiningSummary | undefined;
     let pendingBooking: PendingBooking | null | undefined = body.pendingBooking ?? null;
     let pendingDining: PendingDining | null | undefined = body.pendingDining ?? null;
+    let pendingSpa: PendingSpa | null | undefined = body.pendingSpa ?? null;
+    let pendingServiceRequest: PendingServiceRequest | null | undefined = body.pendingServiceRequest ?? null;
 
     const guestProfile = guestRecord
       ? {
@@ -115,6 +122,7 @@ export async function POST(req: Request) {
           name: guestRecord.name,
           phone: guestRecord.phone,
           email: guestRecord.email,
+          bookingCount: guestRecord.booking_count,
         }
       : undefined;
 
@@ -131,7 +139,9 @@ export async function POST(req: Request) {
         langCode,
         config.rooms.map((r) => r.name),
         pendingBooking,
-        pendingDining
+        pendingDining,
+        pendingSpa,
+        pendingServiceRequest
       );
 
     if (engaged) {
@@ -148,10 +158,15 @@ export async function POST(req: Request) {
         escalate = agent.escalate;
         booking = agent.booking;
         dining = agent.dining;
+        // Map agent.spa and agent.serviceRequest (for returning them in response)
+        const agentSpa = agent.spa;
+        const agentServiceRequest = agent.serviceRequest;
         agentActive = agent.active;
         // Keep the agent engaged on the next turn while a booking is in progress.
         pendingBooking = agentActive ? AGENT_PENDING_BOOKING : null;
         pendingDining = null;
+        pendingSpa = null;
+        pendingServiceRequest = null;
       } catch (err) {
         // Safety net: if the agent fails, fall back to the deterministic flow
         // (translated into the guest's language) so a booking still works.
@@ -164,6 +179,8 @@ export async function POST(req: Request) {
           guestProfile,
           pendingBooking,
           pendingDining,
+          pendingSpa,
+          pendingServiceRequest,
         });
         if (serviceFlow.handled) {
           reply = await localizeServiceReply(serviceFlow.reply || "I can help with that.", langCode);
@@ -173,6 +190,8 @@ export async function POST(req: Request) {
           dining = serviceFlow.dining;
           if (serviceFlow.pendingBooking !== undefined) pendingBooking = serviceFlow.pendingBooking;
           if (serviceFlow.pendingDining !== undefined) pendingDining = serviceFlow.pendingDining;
+          if (serviceFlow.pendingSpa !== undefined) pendingSpa = serviceFlow.pendingSpa;
+          if (serviceFlow.pendingServiceRequest !== undefined) pendingServiceRequest = serviceFlow.pendingServiceRequest;
         }
       }
     }
@@ -203,6 +222,8 @@ export async function POST(req: Request) {
       dining,
       pendingBooking: pendingBooking ?? null,
       pendingDining: pendingDining ?? null,
+      pendingSpa: pendingSpa ?? null,
+      pendingServiceRequest: pendingServiceRequest ?? null,
       agentActive,
       guest: guestRecord
         ? {

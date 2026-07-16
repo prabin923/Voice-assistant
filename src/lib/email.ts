@@ -1,4 +1,6 @@
 import nodemailer from "nodemailer";
+import { generateIcsFile } from "@/lib/bookingReminders";
+import type { Booking } from "@/lib/db/types";
 
 interface EscalationEmailData {
   ticketId: string;
@@ -276,6 +278,107 @@ export async function sendStaffDiningReservationEmail(data: {
   });
 }
 
+export async function sendStaffSpaReservationEmail(data: {
+  staffEmail: string;
+  hotelName: string;
+  reservation: {
+    id: string;
+    serviceName: string;
+    reservationDate: string;
+    reservationTime: string;
+    durationMinutes: number;
+    guestName: string;
+    guestPhone: string;
+    guestEmail?: string | null;
+    specialRequests?: string | null;
+    price: number;
+    currency: string;
+  };
+}): Promise<void> {
+  const transporter = getTransporter();
+  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || "ai-receptionist@hotel.local";
+  const shortId = data.reservation.id.slice(0, 8).toUpperCase();
+  const subject = `💆 Spa reservation — ${data.hotelName} (#${shortId})`;
+  const html = `
+    <div style="font-family: -apple-system, system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 20px;">
+      <h2 style="margin: 0 0 8px;">New Spa reservation</h2>
+      <p style="color: #666;">${escapeHtml(data.hotelName)} AI Concierge</p>
+      <ul style="line-height: 1.8;">
+        <li><strong>Guest:</strong> ${escapeHtml(data.reservation.guestName)}</li>
+        <li><strong>Service:</strong> ${escapeHtml(data.reservation.serviceName)}</li>
+        <li><strong>Date:</strong> ${escapeHtml(data.reservation.reservationDate)}</li>
+        <li><strong>Time:</strong> ${escapeHtml(data.reservation.reservationTime)}</li>
+        <li><strong>Duration:</strong> ${data.reservation.durationMinutes} min</li>
+        <li><strong>Price:</strong> ${data.reservation.currency} ${data.reservation.price}</li>
+        <li><strong>Phone:</strong> ${escapeHtml(data.reservation.guestPhone)}</li>
+        ${data.reservation.guestEmail ? `<li><strong>Email:</strong> ${escapeHtml(data.reservation.guestEmail)}</li>` : ""}
+        ${data.reservation.specialRequests ? `<li><strong>Notes:</strong> ${escapeHtml(data.reservation.specialRequests)}</li>` : ""}
+      </ul>
+      <p style="color: #888; font-size: 12px;">Informational only — no ticket created.</p>
+    </div>
+  `;
+
+  if (!transporter) {
+    console.log("[EMAIL] Spa reservation FYI (SMTP not configured):");
+    console.log(`  To: ${data.staffEmail}`);
+    console.log(`  Subject: ${subject}`);
+    return;
+  }
+
+  await transporter.sendMail({
+    from: `"${data.hotelName} AI" <${fromEmail}>`,
+    to: data.staffEmail,
+    subject,
+    html,
+  });
+}
+
+export async function sendStaffServiceRequestEmail(data: {
+  staffEmail: string;
+  hotelName: string;
+  request: {
+    id: string;
+    type: string;
+    description: string;
+    roomNumber?: string | null;
+    guestName: string;
+    priority: string;
+  };
+}): Promise<void> {
+  const transporter = getTransporter();
+  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || "ai-receptionist@hotel.local";
+  const shortId = data.request.id.slice(0, 8).toUpperCase();
+  const subject = `🛠️ Service Request [${data.request.priority.toUpperCase()}] — ${data.hotelName} (#${shortId})`;
+  const html = `
+    <div style="font-family: -apple-system, system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 20px;">
+      <h2 style="margin: 0 0 8px;">New Service Request (${data.request.type})</h2>
+      <p style="color: #666;">${escapeHtml(data.hotelName)} AI Concierge</p>
+      <ul style="line-height: 1.8;">
+        <li><strong>Guest:</strong> ${escapeHtml(data.request.guestName)}</li>
+        <li><strong>Room:</strong> ${data.request.roomNumber ? escapeHtml(data.request.roomNumber) : "Not specified"}</li>
+        <li><strong>Priority:</strong> ${escapeHtml(data.request.priority)}</li>
+        <li><strong>Description:</strong> ${escapeHtml(data.request.description)}</li>
+      </ul>
+      <p style="color: #888; font-size: 12px;">Action required by department staff.</p>
+    </div>
+  `;
+
+  if (!transporter) {
+    console.log("[EMAIL] Service Request FYI (SMTP not configured):");
+    console.log(`  To: ${data.staffEmail}`);
+    console.log(`  Subject: ${subject}`);
+    return;
+  }
+
+  await transporter.sendMail({
+    from: `"${data.hotelName} AI" <${fromEmail}>`,
+    to: data.staffEmail,
+    subject,
+    html,
+  });
+}
+
+
 export async function sendBookingConfirmationEmail(data: BookingConfirmationEmailData): Promise<void> {
   const transporter = getTransporter();
   const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || "ai-receptionist@hotel.local";
@@ -306,6 +409,22 @@ export async function sendBookingConfirmationEmail(data: BookingConfirmationEmai
     </div>
   `;
 
+  const icsBooking: Booking = {
+    id: data.booking.id,
+    room_type: data.booking.roomType,
+    check_in: data.booking.checkIn,
+    check_out: data.booking.checkOut,
+    rooms: data.booking.rooms,
+    guest_name: data.booking.guestName,
+    guest_phone: "",
+    guest_email: data.toEmail,
+    guest_id: null,
+    status: data.booking.status,
+    special_requests: null,
+    created_at: new Date().toISOString(),
+  };
+  const icsContent = generateIcsFile(icsBooking);
+
   if (!transporter) {
     console.log("[EMAIL] Booking confirmation (SMTP not configured):");
     console.log(`  To: ${data.toEmail}`);
@@ -318,6 +437,87 @@ export async function sendBookingConfirmationEmail(data: BookingConfirmationEmai
     to: data.toEmail,
     subject,
     html,
+    attachments: [
+      {
+        filename: `booking-${shortId.toLowerCase()}.ics`,
+        content: icsContent,
+        contentType: "text/calendar",
+      },
+    ],
+  });
+}
+
+export async function sendBookingReminderEmail(data: {
+  toEmail: string;
+  hotelName: string;
+  booking: {
+    id: string;
+    roomType: string;
+    checkIn: string;
+    checkOut: string;
+    rooms: number;
+    guestName: string;
+  };
+}): Promise<void> {
+  const transporter = getTransporter();
+  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || "ai-receptionist@hotel.local";
+  const shortId = data.booking.id.slice(0, 8).toUpperCase();
+  const subject = `⏰ Reminder: Your stay at ${data.hotelName} starts tomorrow! (#${shortId})`;
+  
+  const icsBooking: Booking = {
+    id: data.booking.id,
+    room_type: data.booking.roomType,
+    check_in: data.booking.checkIn,
+    check_out: data.booking.checkOut,
+    rooms: data.booking.rooms,
+    guest_name: data.booking.guestName,
+    guest_phone: "",
+    guest_email: data.toEmail,
+    guest_id: null,
+    status: "confirmed",
+    special_requests: null,
+    created_at: new Date().toISOString(),
+  };
+  const icsContent = generateIcsFile(icsBooking);
+
+  const html = `
+    <div style="font-family: -apple-system, system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 20px;">
+      <div style="background: linear-gradient(135deg, #163a5f, #c9a227); padding: 18px 22px; border-radius: 14px 14px 0 0;">
+        <h2 style="color: #fff; margin: 0; font-size: 18px;">Stay Reminder</h2>
+        <p style="color: rgba(255,255,255,0.85); margin: 4px 0 0; font-size: 13px;">We look forward to welcoming you tomorrow!</p>
+      </div>
+      <div style="background: #1a1a1a; border-radius: 0 0 14px 14px; padding: 22px; color: #e5e5e5;">
+        <p style="margin-top: 0;">Hi ${escapeHtml(data.booking.guestName)}, this is a reminder that your stay starts tomorrow.</p>
+        <ul style="line-height: 1.8; padding-left: 18px;">
+          <li><strong>Room Type:</strong> ${escapeHtml(data.booking.roomType)}</li>
+          <li><strong>Rooms:</strong> ${data.booking.rooms}</li>
+          <li><strong>Check-in Date:</strong> ${escapeHtml(data.booking.checkIn)}</li>
+          <li><strong>Check-out Date:</strong> ${escapeHtml(data.booking.checkOut)}</li>
+        </ul>
+        <p style="color: #a3a3a3; font-size: 12px;">We've attached your calendar event to this email for your convenience.</p>
+      </div>
+    </div>
+  `;
+
+  if (!transporter) {
+    console.log("[EMAIL] Booking reminder (SMTP not configured):");
+    console.log(`  To: ${data.toEmail}`);
+    console.log(`  Subject: ${subject}`);
+    return;
+  }
+
+  await transporter.sendMail({
+    from: `"${data.hotelName}" <${fromEmail}>`,
+    to: data.toEmail,
+    subject,
+    html,
+    attachments: [
+      {
+        filename: `booking-${shortId.toLowerCase()}.ics`,
+        content: icsContent,
+        contentType: "text/calendar",
+      },
+    ],
   });
 }
 

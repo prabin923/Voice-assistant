@@ -10,6 +10,9 @@ export {
   authAuditLogs,
   passwordResetTokens,
   feedback,
+  serviceRequests,
+  spaReservations,
+  reviews,
   initDb,
 } from "@/lib/db/repository";
 

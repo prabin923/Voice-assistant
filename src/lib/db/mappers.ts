@@ -5,6 +5,9 @@ import type {
   Guest,
   Hotel,
   Interaction,
+  ServiceRequest,
+  SpaReservation,
+  Review,
   SupportTicket,
 } from "@/lib/db/types";
 import type {
@@ -15,6 +18,9 @@ import type {
   Guest as PrismaGuest,
   Hotel as PrismaHotel,
   Interaction as PrismaInteraction,
+  ServiceRequest as PrismaServiceRequest,
+  SpaReservation as PrismaSpaReservation,
+  Review as PrismaReview,
   SupportTicket as PrismaSupportTicket,
 } from "../../../generated/prisma/client";
 
@@ -135,6 +141,58 @@ export function mapFeedback(row: PrismaFeedback) {
     rating: row.rating,
     comment: row.comment,
     guest_id: row.guestId,
+    created_at: row.createdAt.toISOString(),
+  };
+}
+
+export function mapServiceRequest(row: PrismaServiceRequest): ServiceRequest {
+  return {
+    id: row.id,
+    type: row.type,
+    description: row.description,
+    room_number: row.roomNumber,
+    guest_name: row.guestName,
+    guest_id: row.guestId,
+    status: row.status,
+    priority: row.priority,
+    staff_notes: row.staffNotes,
+    created_at: row.createdAt.toISOString(),
+    resolved_at: toIso(row.resolvedAt),
+  };
+}
+
+export function mapSpaReservation(row: PrismaSpaReservation): SpaReservation {
+  return {
+    id: row.id,
+    service_name: row.serviceName,
+    reservation_date: row.reservationDate,
+    reservation_time: row.reservationTime,
+    duration_minutes: row.durationMinutes,
+    guest_name: row.guestName,
+    guest_phone: row.guestPhone,
+    guest_email: row.guestEmail,
+    guest_id: row.guestId,
+    therapist_preference: row.therapistPreference,
+    status: row.status,
+    special_requests: row.specialRequests ?? null,
+    price: row.price,
+    currency: row.currency,
+    created_at: row.createdAt.toISOString(),
+  };
+}
+
+export function mapReview(row: PrismaReview): Review {
+  return {
+    id: row.id,
+    guest_id: row.guestId,
+    guest_name: row.guestName,
+    booking_id: row.bookingId,
+    hotel_id: row.hotelId,
+    rating: row.rating,
+    title: row.title,
+    comment: row.comment,
+    status: row.status,
+    staff_response: row.staffResponse,
     created_at: row.createdAt.toISOString(),
   };
 }

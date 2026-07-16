@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Hotel, LogOut, RefreshCw, Trash2, ExternalLink, Copy,
   Check, ShieldCheck, Plus, AlertCircle, CheckCircle2, Loader2,
-  Users, Settings,
+  Users, Settings, ShieldAlert, Ticket, Star, CheckSquare, FileText, Inbox,
 } from "lucide-react";
 import { SiteShellBackdrop } from "@/components/SiteShellBackdrop";
 import { vapiCardCls, vapiGhostBtn } from "@/lib/vapiUi";
@@ -44,6 +44,35 @@ export default function SuperAdminDashboard() {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const [analytics, setAnalytics] = useState<{
+    totalHotels: number;
+    totalBookings: number;
+    confirmedBookings: number;
+    cancelledBookings: number;
+    recentBookings: number;
+    totalInteractions: number;
+    totalGuests: number;
+    totalTickets: number;
+    openTickets: number;
+    totalReviews: number;
+    avgRating: number;
+    totalServiceRequests: number;
+    openServiceRequests: number;
+    escalationRate: number;
+  } | null>(null);
+
+  const loadAnalytics = useCallback(async () => {
+    try {
+      const res = await fetch("/api/superadmin/analytics", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setAnalytics(data);
+      }
+    } catch (err) {
+      console.error("Failed to load analytics:", err);
+    }
+  }, []);
+
   const loadHotels = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -60,7 +89,10 @@ export default function SuperAdminDashboard() {
     }
   }, [router]);
 
-  useEffect(() => { void loadHotels(); }, [loadHotels]);
+  useEffect(() => {
+    void loadHotels();
+    void loadAnalytics();
+  }, [loadHotels, loadAnalytics]);
 
   const handleLogout = async () => {
     await fetch("/api/superadmin/auth", { method: "DELETE", credentials: "include" });
@@ -163,14 +195,15 @@ export default function SuperAdminDashboard() {
           )}
 
           {/* Stats */}
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <StatCard label="Total hotels" value={hotels.length} />
-            <StatCard label="Configured" value={configuredCount} sub="custom rooms set" />
-            <StatCard
-              label="Pending setup"
-              value={hotels.length - configuredCount}
-              sub="using demo defaults"
-            />
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <StatCard label="Total Hotels" value={analytics?.totalHotels ?? hotels.length} sub={`${configuredCount} configured`} />
+            <StatCard label="Total Bookings" value={analytics?.totalBookings ?? "—"} sub={`${analytics?.recentBookings ?? 0} in last 30d`} />
+            <StatCard label="AI Interactions" value={analytics?.totalInteractions ?? "—"} sub={`${analytics?.totalGuests ?? 0} unique guests`} />
+            <StatCard label="Review Rating" value={analytics?.avgRating ? `⭐ ${analytics.avgRating}` : "—"} sub={`${analytics?.totalReviews ?? 0} reviews`} />
+            <StatCard label="Escalation Rate" value={analytics?.escalationRate ? `${analytics.escalationRate}%` : "—"} sub={`${analytics?.openTickets ?? 0} open tickets`} />
+            <StatCard label="Service Requests" value={analytics?.totalServiceRequests ?? "—"} sub={`${analytics?.openServiceRequests ?? 0} open/active`} />
+            <StatCard label="Confirmed Stays" value={analytics?.confirmedBookings ?? "—"} sub="bookings confirmed" />
+            <StatCard label="Cancellation Rate" value={analytics?.totalBookings ? `${Math.round((analytics.cancelledBookings / analytics.totalBookings) * 100)}%` : "—"} sub={`${analytics?.cancelledBookings ?? 0} cancelled`} />
           </div>
 
           {/* Invite link generator */}

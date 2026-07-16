@@ -88,6 +88,14 @@ export interface HotelOperations {
   roomServiceHours?: string;  // e.g. "6 AM – midnight"
 }
 
+export interface SpaService {
+  name: string;
+  durationMinutes: number;
+  price: number;
+  currency: string;
+  description: string;
+}
+
 export interface HotelConfig {
   branding: BrandingConfig;
   contact: ContactInfo;
@@ -106,6 +114,7 @@ export interface HotelConfig {
   rooms: RoomType[];
   dining: DiningVenue[];
   amenities: Amenity[];
+  spa?: SpaService[];
   customFAQ: { question: string; answer: string }[];
   receptionistPersona: string; // System prompt personality
   voiceStyle?: "warm" | "professional" | "energetic";
@@ -199,11 +208,18 @@ export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
     { name: "Parking", description: "Valet and self-parking options available." },
     { name: "Business Center", description: "Meeting rooms and business facilities available for corporate guests." },
   ],
+  spa: [
+    { name: "Swedish Massage", durationMinutes: 60, price: 120, currency: "USD", description: "Classic relaxation massage with gentle, flowing strokes." },
+    { name: "Deep Tissue Massage", durationMinutes: 60, price: 150, currency: "USD", description: "Targeted pressure to release deep-set muscle tension." },
+    { name: "Aromatherapy Facial", durationMinutes: 45, price: 95, currency: "USD", description: "Revitalizing facial with essential oils and natural botanicals." },
+    { name: "Hot Stone Therapy", durationMinutes: 90, price: 180, currency: "USD", description: "Warm basalt stones combined with therapeutic massage." },
+    { name: "Couples Spa Package", durationMinutes: 120, price: 350, currency: "USD", description: "Side-by-side massage, facial, and champagne for two." },
+  ],
   customFAQ: [
     { question: "airport shuttle", answer: "We offer complimentary airport shuttle service. Please contact the front desk to arrange your pickup." },
     { question: "laundry", answer: "Laundry and dry cleaning services are available. Please check the in-room menu card for pricing and pickup times." },
   ],
-  receptionistPersona: "You are Alex, the front-desk concierge — warm, calm, and fully autonomous. You know everything about this hotel and can complete room bookings and restaurant reservations without transferring to staff. You speak in natural, conversational sentences (never robotic lists). You answer any guest question from hotel facts, and you never say you cannot help with bookings or dining.",
+  receptionistPersona: "You are Alex, the front-desk concierge — warm, calm, and fully autonomous. You know everything about this hotel and can complete room bookings, restaurant reservations, spa appointments, and handle housekeeping/maintenance requests without transferring to staff. You speak in natural, conversational sentences (never robotic lists). You answer any guest question from hotel facts, and you never say you cannot help with bookings, dining, spa, or service requests.",
   voiceStyle: "warm",
   language: "en-US",
   supportedLanguages: ["en-US", "es-ES", "fr-FR", "de-DE", "ja-JP", "zh-CN", "hi-IN", "ne-NP", "ko-KR", "ar-SA", "pt-BR", "ru-RU", "it-IT", "tr-TR", "th-TH", "vi-VN", "id-ID", "nl-NL", "pl-PL", "sv-SE"],

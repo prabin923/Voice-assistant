@@ -102,3 +102,58 @@ export type BookingModifyInput = {
   checkOut?: string;
   rooms?: number;
 };
+
+export interface ServiceRequest {
+  id: string;
+  type: string;
+  description: string;
+  room_number: string | null;
+  guest_name: string;
+  guest_id: string | null;
+  status: string;
+  priority: string;
+  staff_notes: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface SpaReservation {
+  id: string;
+  service_name: string;
+  reservation_date: string;
+  reservation_time: string;
+  duration_minutes: number;
+  guest_name: string;
+  guest_phone: string;
+  guest_email: string | null;
+  guest_id: string | null;
+  therapist_preference: string | null;
+  status: string;
+  special_requests: string | null;
+  price: number;
+  currency: string;
+  created_at: string;
+}
+
+export interface Review {
+  id: string;
+  guest_id: string | null;
+  guest_name: string;
+  booking_id: string | null;
+  hotel_id: string | null;
+  rating: number;
+  title: string | null;
+  comment: string | null;
+  status: string;
+  staff_response: string | null;
+  created_at: string;
+}
+
+export interface GuestPreferences {
+  roomTemperature?: string;
+  pillowType?: string;
+  dietaryNeeds?: string;
+  minibarPreferences?: string;
+  floorPreference?: string;
+  specialNotes?: string;
+}

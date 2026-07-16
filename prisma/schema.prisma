@@ -178,8 +178,69 @@ model Guest {
   messageCount      Int       @default(0) @map("message_count")
   bookingCount      Int       @default(0) @map("booking_count")
   lastVisitAt       DateTime? @map("last_visit_at")
+  preferences       String    @default("{}") @map("preferences")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
   @@map("guests")
+}
+
+model ServiceRequest {
+  id             String    @id
+  type           String
+  description    String
+  roomNumber     String?   @map("room_number")
+  guestName      String    @map("guest_name")
+  guestId        String?   @map("guest_id")
+  status         String    @default("open")
+  priority       String    @default("medium")
+  staffNotes     String?   @map("staff_notes")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  resolvedAt     DateTime? @map("resolved_at")
+
+  @@index([status])
+  @@index([guestId])
+  @@index([priority, status])
+  @@map("service_requests")
+}
+
+model SpaReservation {
+  id                  String   @id
+  serviceName         String   @map("service_name")
+  reservationDate     String   @map("reservation_date")
+  reservationTime     String   @map("reservation_time")
+  durationMinutes     Int      @default(60) @map("duration_minutes")
+  guestName           String   @map("guest_name")
+  guestPhone          String   @map("guest_phone")
+  guestEmail          String?  @map("guest_email")
+  guestId             String?  @map("guest_id")
+  therapistPreference String?  @map("therapist_preference")
+  status              String   @default("confirmed")
+  specialRequests     String?  @map("special_requests")
+  price               Int      @default(0)
+  currency            String   @default("USD")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@index([guestId])
+  @@index([status, reservationDate])
+  @@map("spa_reservations")
+}
+
+model Review {
+  id            String    @id
+  guestId       String?   @map("guest_id")
+  guestName     String    @map("guest_name")
+  bookingId     String?   @map("booking_id")
+  hotelId       String?   @map("hotel_id")
+  rating        Int
+  title         String?
+  comment       String?
+  status        String    @default("pending")
+  staffResponse String?   @map("staff_response")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([hotelId])
+  @@index([status])
+  @@index([guestId])
+  @@map("reviews")
 }

@@ -17,6 +17,8 @@ export interface BookingSummary {
   checkoutUrl?: string;
   depositAmount?: number;
   depositCurrency?: string;
+  pricePerNight?: number;
+  currency?: string;
 }
 
 export type PendingBooking = {
@@ -124,6 +126,18 @@ export function BookingSummaryCard({ booking, hotelName, isDark, checkoutUrl: ch
         <p className={isDark ? "text-neutral-300" : "text-neutral-700"}>
           {formatStayDate(booking.checkIn)} → {formatStayDate(booking.checkOut)}
         </p>
+        {booking.pricePerNight != null && booking.pricePerNight > 0 && (
+          <div className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 ${
+            isDark ? "bg-white/[0.04]" : "bg-emerald-100/60"
+          }`}>
+            <span className={`text-[12px] ${isDark ? "text-neutral-400" : "text-neutral-600"}`}>
+              {booking.currency ?? "USD"} {booking.pricePerNight}/night × {nights} night{nights !== 1 ? "s" : ""}{booking.rooms > 1 ? ` × ${booking.rooms}` : ""}
+            </span>
+            <span className={`text-[13px] font-bold ${isDark ? "text-emerald-300" : "text-emerald-700"}`}>
+              {booking.currency ?? "USD"} {(booking.pricePerNight * nights * booking.rooms).toLocaleString()}
+            </span>
+          </div>
+        )}
         <p className={`flex items-center gap-1.5 ${isDark ? "text-neutral-400" : "text-neutral-600"}`}>
           <User className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">{booking.guestName}</span>
@@ -177,16 +191,27 @@ export function BookingSummaryCard({ booking, hotelName, isDark, checkoutUrl: ch
           {copied ? "Copied" : "Copy ID"}
         </button>
         {!isPendingPayment && (
-          <a
-            href={buildCalendarUrl(booking, hotelName)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold ${
-              isDark ? "bg-white/10 text-neutral-300 hover:bg-white/15" : "bg-white border border-neutral-200 text-neutral-700"
-            }`}
-          >
-            Add to calendar
-          </a>
+          <>
+            <a
+              href={buildCalendarUrl(booking, hotelName)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold ${
+                isDark ? "bg-white/10 text-neutral-300 hover:bg-white/15" : "bg-white border border-neutral-200 text-neutral-700"
+              }`}
+            >
+              Google Calendar
+            </a>
+            <a
+              href={`/api/bookings/${booking.id}/calendar`}
+              download
+              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold ${
+                isDark ? "bg-white/10 text-neutral-300 hover:bg-white/15" : "bg-white border border-neutral-200 text-neutral-700"
+              }`}
+            >
+              Download iCal
+            </a>
+          </>
         )}
       </div>
     </div>
