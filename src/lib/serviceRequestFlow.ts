@@ -1,8 +1,8 @@
 import type { EscalationReason } from "@/lib/escalation";
 import type { HotelConfig } from "@/lib/hotelConfig";
 import type { ChatHistoryMessage } from "@/lib/dateParsing";
-import { serviceRequests } from "@/lib/db";
 import { extractGuestDetails } from "@/lib/bookingFlow";
+import { createServiceRequestSafe } from "@/lib/serviceRequestService";
 
 export type PendingServiceRequest = {
   type: string;
@@ -55,8 +55,8 @@ function classifyType(description: string): string {
 
 function classifyPriority(description: string): string {
   const lower = description.toLowerCase();
-  if (URGENT_KEYWORDS.some((kw) => lower.includes(kw))) return "high";
   if (/\b(emergency|urgent|immediately|asap)\b/.test(lower)) return "urgent";
+  if (URGENT_KEYWORDS.some((kw) => lower.includes(kw))) return "high";
   return "medium";
 }
 
@@ -107,7 +107,7 @@ export async function handleServiceRequestFlow(params: {
     const roomNumber = extractRoomNumber(message, history) || updated.roomNumber;
 
     // Create the request
-    const req = await serviceRequests.create({
+    const saved = await createServiceRequestSafe({
       type: updated.type,
       description: updated.description,
       roomNumber,
@@ -116,8 +116,19 @@ export async function handleServiceRequestFlow(params: {
       priority: classifyPriority(updated.description),
     });
 
+    if (!saved.ok) {
+      return {
+        handled: true,
+        reply: "I could not submit that service request right now. I have alerted the front desk to follow up.",
+        escalate: true,
+        reason: "ai_error",
+        pendingServiceRequest: null,
+      };
+    }
+
     const typeLabel = updated.type === "maintenance" ? "maintenance" : updated.type === "roomservice" ? "room service" : "housekeeping";
     const eta = updated.type === "maintenance" ? "as soon as possible" : "within 15-30 minutes";
+    const req = saved.request;
 
     return {
       handled: true,
@@ -142,7 +153,7 @@ export async function handleServiceRequestFlow(params: {
   }
 
   // Have everything — create immediately
-  const req = await serviceRequests.create({
+  const saved = await createServiceRequestSafe({
     type,
     description,
     roomNumber,
@@ -151,10 +162,21 @@ export async function handleServiceRequestFlow(params: {
     priority: classifyPriority(description),
   });
 
+  if (!saved.ok) {
+    return {
+      handled: true,
+      reply: "I could not submit that service request right now. I have alerted the front desk to follow up.",
+      escalate: true,
+      reason: "ai_error",
+      pendingServiceRequest: null,
+    };
+  }
+
   const typeLabel = type === "maintenance" ? "maintenance" : type === "roomservice" ? "room service" : "housekeeping";
   const eta = type === "maintenance" ? "as soon as possible" : "within 15-30 minutes";
   const ops = config.operations;
   const hours = type === "maintenance" ? "" : ops?.housekeepingHours ? ` (hours: ${ops.housekeepingHours})` : "";
+  const req = saved.request;
 
   return {
     handled: true,

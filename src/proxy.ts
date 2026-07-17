@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { getJwtSecretBytes, hasProductionJwtSecret } from "@/lib/jwtSecret";
 
-const protectedRoutes = ["/settings", "/admin/analytics", "/admin/support"];
-const protectedApiRoutes = ["/api/analytics", "/api/support"];
+const protectedRoutes = ["/settings", "/admin/analytics", "/admin/support", "/admin/operations"];
+const protectedApiRoutes = ["/api/analytics", "/api/support", "/api/service-requests", "/api/hms"];
 const authRoutes = ["/admin/login", "/admin/register", "/admin/forgot-password", "/admin/reset-password"];
 
 function matchesRoute(path: string, route: string): boolean {
@@ -54,5 +54,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/settings/:path*", "/api/config", "/api/analytics/:path*", "/api/support/:path*", "/admin/:path*"],
+  matcher: ["/settings/:path*", "/api/config", "/api/analytics/:path*", "/api/support/:path*", "/api/service-requests/:path*", "/api/hms/:path*", "/admin/:path*"],
 };

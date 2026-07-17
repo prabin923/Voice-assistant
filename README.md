@@ -21,6 +21,9 @@ Built as the foundation for **StayNep** — a comprehensive hotel management pla
 | **Tiered Staff Alerts** | FYI emails on completed bookings; escalation tickets only when critical |
 | **SMS Confirmations** | Optional TingTing SMS after booking (alongside email) |
 | **My Stay Panel** | Signed-in guests see upcoming bookings, ask about them, or cancel from the assistant sidebar |
+| **Operations Queue** | Mobile-friendly staff view for housekeeping, maintenance, and room-service tasks |
+| **Task Dispatch** | Staff can create tasks manually; guest-created service requests notify staff automatically |
+| **HMS Integration** | Import hotel profile, rooms, amenities, dining, spa, policies, and decision FAQs from any JSON-based hotel system |
 | **Quick Actions** | Sticky shortcuts in chat — book, directions, dining, my booking |
 | **Service Health** | Live AI / DB / STT / SMS / Email readiness indicators in the assistant UI |
 | **FAQ Gap Reporter** | Unanswered guest questions logged on escalation; review and add to FAQ in Settings |
@@ -341,6 +344,12 @@ Branding, contact, policies, rooms, dining, amenities, custom FAQ (with **FAQ ga
 ### Support Inbox (`/admin/support`)
 Priority-sorted **escalation** tickets only — not routine bookings.
 
+### Operations Queue (`/admin/operations`)
+Mobile-first queue for housekeeping, maintenance, and room-service requests. Staff can dispatch manual tasks and move work from open to in progress to completed.
+
+### HMS Integration (`/settings` → HMS Integration)
+Sync any hotel management system that exposes JSON. Imported room, facility, dining, spa, policy, and FAQ data updates assistant settings and helps guests choose hotels, rooms, and facilities.
+
 ### Analytics (`/admin/analytics`)
 Interaction volume, escalation rate, language distribution, guest satisfaction.
 
@@ -350,7 +359,7 @@ Interaction volume, escalation rate, language distribution, guest satisfaction.
 
 1. Hotel admin registers at `/admin/register`
 2. Login at `/admin/login`
-3. Authenticated users access `/settings`, analytics, and support
+3. Authenticated users access `/settings`, operations, analytics, and support
 4. Guest sign-in on the assistant pre-fills booking details
 
 ---

@@ -7,7 +7,7 @@ import {
   Save, RotateCcw, Plus, Trash2, ChevronLeft, CheckCircle2,
   AlertCircle, MessageSquare, LogOut, User, BarChart3, Inbox, X,
   Crown, Sparkles, Bell, CalendarDays, CalendarCheck, Globe2, Copy,
-  Code2, ExternalLink, Loader2, Download, Activity,
+  Code2, ExternalLink, Loader2, Download, ClipboardList, Database,
 } from "lucide-react";
 import { fetchJsonWithAuth, isUnauthorizedError } from "@/lib/clientAuth";
 import { applyHotelBrandTheme, notifyHotelConfigUpdated, syncBrandingOnHotelRename } from "@/lib/hotelBrand";
@@ -61,7 +61,7 @@ interface HotelConfig {
   };
 }
 
-type Tab = "notifications" | "calendar" | "bookings" | "branding" | "embed" | "contact" | "policies" | "rooms" | "dining" | "spa" | "serviceRequests" | "amenities" | "faq" | "persona" | "telephony" | "payment" | "whatsapp";
+type Tab = "notifications" | "calendar" | "bookings" | "branding" | "embed" | "integrations" | "contact" | "policies" | "rooms" | "dining" | "spa" | "serviceRequests" | "amenities" | "faq" | "persona" | "telephony" | "payment" | "whatsapp";
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<HotelConfig | null>(null);
@@ -82,6 +82,12 @@ export default function SettingsPage() {
   const [webSyncing, setWebSyncing] = useState(false);
   const [settingsSyncing, setSettingsSyncing] = useState(false);
   const [slugSaving, setSlugSaving] = useState(false);
+  const [hmsEndpointUrl, setHmsEndpointUrl] = useState("");
+  const [hmsAuthHeader, setHmsAuthHeader] = useState("Authorization");
+  const [hmsApiKey, setHmsApiKey] = useState("");
+  const [hmsPayload, setHmsPayload] = useState("");
+  const [hmsSyncing, setHmsSyncing] = useState(false);
+  const [hmsLastSync, setHmsLastSync] = useState<{ rooms: number; amenities: number; dining: number; spa: number; faq: number } | null>(null);
 
   // Live service requests list states
   const [requestsList, setRequestsList] = useState<
@@ -273,6 +279,49 @@ export default function SettingsPage() {
     }
   };
 
+  const syncHms = async () => {
+    if (!hmsEndpointUrl.trim() && !hmsPayload.trim()) {
+      showToast("Add an HMS endpoint or paste a JSON payload.", "info");
+      return;
+    }
+
+    let payload: unknown | undefined;
+    if (hmsPayload.trim()) {
+      try {
+        payload = JSON.parse(hmsPayload);
+      } catch {
+        showToast("The pasted HMS payload is not valid JSON.", "delete");
+        return;
+      }
+    }
+
+    setHmsSyncing(true);
+    try {
+      const data = await fetchJsonWithAuth<{
+        counts: { rooms: number; amenities: number; dining: number; spa: number; faq: number };
+        config: HotelConfig;
+      }>("/api/hms/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          endpointUrl: hmsEndpointUrl.trim() || undefined,
+          authHeader: hmsAuthHeader.trim() || "Authorization",
+          apiKey: hmsApiKey.trim() || undefined,
+          payload,
+        }),
+      });
+      setConfig(data.config);
+      setHmsLastSync(data.counts);
+      setHmsApiKey("");
+      showToast(`HMS synced · ${data.counts.rooms} rooms · ${data.counts.amenities} amenities · ${data.counts.faq} decision FAQs.`);
+      await refreshRagStats();
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "HMS sync failed.", "delete");
+    } finally {
+      setHmsSyncing(false);
+    }
+  };
+
   if (!config) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-void-canvas">
@@ -296,6 +345,7 @@ export default function SettingsPage() {
     { id: "bookings", label: "Bookings", icon: <CalendarCheck className="w-4 h-4" /> },
     { id: "branding", label: "Branding", icon: <Hotel className="w-4 h-4" /> },
     { id: "embed", label: "Embed & Share", icon: <Code2 className="w-4 h-4" /> },
+    { id: "integrations", label: "HMS Integration", icon: <Database className="w-4 h-4" /> },
     { id: "contact", label: "Contact", icon: <Phone className="w-4 h-4" /> },
     { id: "policies", label: "Policies", icon: <Clock className="w-4 h-4" /> },
     { id: "rooms", label: "Rooms", icon: <Hotel className="w-4 h-4" /> },
@@ -384,6 +434,9 @@ export default function SettingsPage() {
                   {openHandoffCount > 9 ? "9+" : openHandoffCount}
                 </span>
               )}
+            </Link>
+            <Link href="/admin/operations" className={`${vapiGhostBtn} text-xs`}>
+              <ClipboardList className="w-4 h-4" strokeWidth={1.5} /><span className="hidden sm:inline">Operations</span>
             </Link>
             <Link href="/admin/analytics" className={`${vapiGhostBtn} text-xs`}>
               <BarChart3 className="w-4 h-4" strokeWidth={1.5} /><span className="hidden sm:inline">Analytics</span>
@@ -867,6 +920,121 @@ export default function SettingsPage() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* HMS INTEGRATION */}
+          {activeTab === "integrations" && (
+            <div className="space-y-5">
+              <div className={cardCls}>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-semibold flex items-center gap-2">
+                      <Database className="w-5 h-5 text-[#163a5f] dark:text-[#e4c449]" /> Hotel Management System
+                    </h2>
+                    <p className="text-neutral-500 text-sm mt-1">
+                      Import hotel profile, rooms, amenities, dining, spa, policies, and decision-support FAQs from any PMS/HMS that can expose JSON.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void syncHms()}
+                    disabled={hmsSyncing}
+                    className="vapi-btn-ember vapi-btn-compact shrink-0 disabled:opacity-50"
+                  >
+                    {hmsSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                    {hmsSyncing ? "Syncing..." : "Sync HMS"}
+                  </button>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-3">
+                  <div className="lg:col-span-2">
+                    <label className={labelCls}>HMS JSON endpoint</label>
+                    <input
+                      className={inputCls}
+                      value={hmsEndpointUrl}
+                      onChange={(e) => setHmsEndpointUrl(e.target.value)}
+                      placeholder="https://pms.example.com/api/hotel-profile"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Auth header</label>
+                    <input
+                      className={inputCls}
+                      value={hmsAuthHeader}
+                      onChange={(e) => setHmsAuthHeader(e.target.value)}
+                      placeholder="Authorization"
+                    />
+                  </div>
+                  <div className="lg:col-span-3">
+                    <label className={labelCls}>API key or bearer token</label>
+                    <input
+                      className={inputCls}
+                      type="password"
+                      value={hmsApiKey}
+                      onChange={(e) => setHmsApiKey(e.target.value)}
+                      placeholder="Only sent to the sync endpoint; not saved in hotel config"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelCls}>Paste JSON payload instead</label>
+                  <textarea
+                    className={`${inputCls} h-64 resize-y font-mono text-xs leading-relaxed`}
+                    value={hmsPayload}
+                    onChange={(e) => setHmsPayload(e.target.value)}
+                    placeholder={`{
+  "property": { "name": "Your Hotel", "city": "Kathmandu", "country": "Nepal" },
+  "roomTypes": [{ "typeName": "Deluxe King", "baseRate": 120, "currency": "USD", "maxGuests": 2 }],
+  "facilities": [{ "name": "Pool", "hours": "6 AM - 10 PM" }],
+  "restaurants": [{ "name": "Terrace Cafe", "cuisine": "Nepali", "openingHours": "7 AM - 10 PM" }]
+}`}
+                  />
+                  <p className="text-xs text-zinc-mute mt-2">
+                    Supported keys include hotel/property, rooms/roomTypes, amenities/facilities, dining/restaurants, spa/spaServices, policies, operations, and FAQ/knowledgeBase.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className={cardCls}>
+                  <h3 className="text-base font-semibold text-cream-text">Imported into assistant knowledge</h3>
+                  <p className="text-sm text-zinc-mute">
+                    Sync updates Settings, refreshes room inventory from imported room types, and schedules a RAG settings sync so the assistant can answer guest questions from the HMS data.
+                  </p>
+                  {hmsLastSync ? (
+                    <div className="grid grid-cols-5 gap-2 pt-2">
+                      {[
+                        ["Rooms", hmsLastSync.rooms],
+                        ["Amenities", hmsLastSync.amenities],
+                        ["Dining", hmsLastSync.dining],
+                        ["Spa", hmsLastSync.spa],
+                        ["FAQs", hmsLastSync.faq],
+                      ].map(([label, value]) => (
+                        <div key={label} className="rounded-[5.6px] border border-iron-border bg-slab-elevated p-3 text-center">
+                          <p className="text-lg font-semibold text-mint-pulse">{value}</p>
+                          <p className="vapi-nav-label text-[10px] text-zinc-mute">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-[5.6px] border border-iron-border bg-slab-elevated p-4 text-sm text-zinc-mute">
+                      No HMS sync in this browser session yet.
+                    </div>
+                  )}
+                </div>
+
+                <div className={cardCls}>
+                  <h3 className="text-base font-semibold text-cream-text">Decision support for guests</h3>
+                  <p className="text-sm text-zinc-mute">
+                    The mapper creates FAQ entries that teach the assistant how to help guests choose rooms and facilities by budget, party size, family needs, business travel, wellness, dining, and convenience.
+                  </p>
+                  <div className="rounded-[5.6px] border border-ember-orange/20 bg-ember-orange/5 p-4 text-xs text-bone-text">
+                    Example: “Which room should I choose?” or “Do you have facilities for kids?” will use imported rooms, amenities, dining, and spa data instead of generic answers.
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
