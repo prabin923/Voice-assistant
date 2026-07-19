@@ -1,12 +1,8 @@
-"use client";
-
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
   Building2,
   Check,
-  MapPin,
   Mic,
   Volume2,
   Globe2,
@@ -27,20 +23,6 @@ import { Reveal } from "@/components/Reveal";
 import { GsapLandingAnimations } from "@/components/GsapLandingAnimations";
 import { SiteShellBackdrop, siteHeaderChrome } from "@/components/SiteShellBackdrop";
 import { SpectrogramWaveform } from "@/components/SpectrogramWaveform";
-
-type PublicHotel = {
-  id: string;
-  slug: string;
-  hotelName: string;
-  tagline: string | null;
-  accentColor: string | null;
-  city: string | null;
-  country: string | null;
-  roomCount: number;
-  startingPrice: number | null;
-  currency: string;
-  amenities: string[];
-};
 
 const STATS = [
   { value: "40+", label: "Languages" },
@@ -118,8 +100,8 @@ const HOTEL_FEATURES = [
 const HOW_IT_WORKS = [
   {
     step: "01",
-    title: "Browse",
-    body: "Explore all hotels registered on StayNep. Each one has a fully configured voice concierge — ready to answer questions about rooms, pricing, and policies.",
+    title: "Compare",
+    body: "Tell StayNep what you need. The platform assistant can help compare hotel options, facilities, rooms, pricing, and policies from connected hotel data.",
     icon: Building2,
   },
   {
@@ -147,109 +129,6 @@ const VOICE_CAPABILITIES = [
   "Telephony mode: full duplex voice call via Telnyx",
 ];
 
-function HotelCard({ hotel }: { hotel: PublicHotel }) {
-  const href = hotel.slug ? `/embed/${hotel.slug}` : "/demo";
-
-  return (
-    <article className="flex h-full flex-col rounded-[5.6px] border border-iron-border bg-carbon-surface transition-colors hover:border-steel-border">
-      <div className="h-1 rounded-t-[5.6px]" style={{ background: hotel.accentColor ?? "#e96b34" }} />
-      <div className="flex flex-1 flex-col p-5">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h3 className="text-lg font-medium text-cream-text leading-tight">{hotel.hotelName}</h3>
-            {(hotel.city || hotel.country) && (
-              <p className="mt-1 flex items-center gap-1 text-xs text-zinc-mute">
-                <MapPin className="h-3 w-3 shrink-0" strokeWidth={1.5} />
-                {[hotel.city, hotel.country].filter(Boolean).join(", ")}
-              </p>
-            )}
-          </div>
-          {hotel.startingPrice != null && (
-            <div className="shrink-0 text-right">
-              <p className="text-xs text-zinc-mute">from</p>
-              <p className="text-lg font-semibold text-cream-text">
-                {hotel.startingPrice}{" "}
-                <span className="text-sm font-normal text-zinc-mute">{hotel.currency}</span>
-              </p>
-              <p className="text-xs text-zinc-mute">/night</p>
-            </div>
-          )}
-        </div>
-
-        {hotel.tagline && (
-          <p className="mt-3 text-sm leading-relaxed text-zinc-mute">{hotel.tagline}</p>
-        )}
-
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {hotel.amenities.slice(0, 3).map((a) => (
-            <span key={a} className="rounded border border-iron-border px-2 py-0.5 text-xs text-bone-text/70">
-              {a}
-            </span>
-          ))}
-          {hotel.roomCount > 0 && (
-            <span className="rounded border border-iron-border px-2 py-0.5 text-xs text-bone-text/70">
-              {hotel.roomCount} room {hotel.roomCount === 1 ? "type" : "types"}
-            </span>
-          )}
-        </div>
-
-        <div className="mt-auto pt-4">
-          <Link href={href} className="vapi-btn-ember vapi-btn-compact w-full justify-center">
-            <Mic className="h-3.5 w-3.5" strokeWidth={2} />
-            Talk to concierge
-          </Link>
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function HotelGrid() {
-  const [hotels, setHotels] = useState<PublicHotel[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/hotels")
-      .then((r) => r.json())
-      .then((d) => setHotels(d.hotels ?? []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="mt-12 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="h-64 animate-pulse rounded-[5.6px] border border-iron-border bg-carbon-surface" />
-        ))}
-      </div>
-    );
-  }
-
-  if (hotels.length === 0) {
-    return (
-      <div className="mt-12 rounded-[5.6px] border border-iron-border bg-carbon-surface p-10 text-center">
-        <Building2 className="mx-auto h-8 w-8 text-zinc-mute" strokeWidth={1.5} />
-        <p className="mt-4 text-zinc-mute">No hotels listed yet. Be the first!</p>
-        <Link href="/admin/register" className="vapi-btn-ember mt-6 inline-flex">
-          Register your hotel
-          <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} />
-        </Link>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-12 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {hotels.map((hotel, index) => (
-        <Reveal key={hotel.id} delayMs={index * 70}>
-          <HotelCard hotel={hotel} />
-        </Reveal>
-      ))}
-    </div>
-  );
-}
-
 export default function HomePage() {
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-void-canvas text-cream-text">
@@ -264,7 +143,6 @@ export default function HomePage() {
           </Link>
           <nav className="hidden items-center gap-8 md:flex">
             {[
-              { id: "hotels", label: "Hotels" },
               { id: "features", label: "Features" },
               { id: "how-it-works", label: "How it works" },
               { id: "for-hotels", label: "For Hotels" },
@@ -301,15 +179,15 @@ export default function HomePage() {
               for every hotel
             </h1>
             <p className="mx-auto mt-6 max-w-xl text-lg leading-[1.43] text-bone-text">
-              Browse hotels on StayNep and talk directly to their AI concierge — ask about rooms,
-              availability, and policies, or book your stay entirely by voice.
+              Ask StayNep to compare hotels, rooms, facilities, availability, and policies, or
+              complete your stay planning entirely by voice.
             </p>
 
             <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <a href="#hotels" className="vapi-btn-ember">
-                Browse hotels
+              <Link href="/staynep-assistant" className="vapi-btn-ember">
+                Ask StayNep
                 <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} />
-              </a>
+              </Link>
               <Link href="/staynep-assistant" className="vapi-btn-mint">
                 <Mic className="h-4 w-4" strokeWidth={2} />
                 Try voice assistant
@@ -343,22 +221,6 @@ export default function HomePage() {
               </div>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* ── Hotel listing ── */}
-      <section id="hotels" data-gsap-section className="scroll-mt-24 vapi-hairline py-16 sm:py-20">
-        <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
-          <Reveal className="max-w-2xl">
-            <h2 className="vapi-section-heading text-[clamp(2rem,4vw,2.5rem)]">
-              Hotels on StayNep
-            </h2>
-            <p className="mt-5 text-base leading-[1.43] text-zinc-mute">
-              Every hotel below has a voice concierge ready to answer questions and take bookings
-              — available 24/7 in 40+ languages. Tap the orb and start talking.
-            </p>
-          </Reveal>
-          <HotelGrid />
         </div>
       </section>
 
@@ -458,7 +320,7 @@ export default function HomePage() {
 
           <div className="mt-12 grid gap-4 sm:grid-cols-3">
             {HOW_IT_WORKS.map((step, index) => (
-              <Reveal key={step.title} delayMs={index * 70}>
+              <Reveal key={step.step} delayMs={index * 70}>
                 <article
                   data-gsap-card
                   className="flex h-full flex-col rounded-[5.6px] border border-iron-border bg-carbon-surface p-6 transition-colors hover:border-steel-border"
@@ -486,12 +348,12 @@ export default function HomePage() {
           <Reveal className="max-w-2xl">
             <p className="vapi-nav-label mb-3 text-mint-pulse">For guests</p>
             <h2 className="vapi-section-heading text-[clamp(2rem,4vw,2.5rem)]">
-              Everything you'd ask
+              Everything you&apos;d ask
               <br />
               a real concierge
             </h2>
             <p className="mt-5 text-base leading-[1.43] text-zinc-mute">
-              Each hotel's AI concierge is trained on their specific rooms, policies, dining, and
+              Each hotel&apos;s AI concierge is trained on their specific rooms, policies, dining, and
               amenities. You get real answers, not generic filler.
             </p>
           </Reveal>
@@ -526,7 +388,7 @@ export default function HomePage() {
                   a voice concierge built in
                 </h2>
                 <p className="mt-5 text-base leading-relaxed text-zinc-mute">
-                  When you visit a hotel's page on StayNep — or scan their QR code — you land
+                  When you visit a hotel&apos;s page on StayNep — or scan their QR code — you land
                   directly in a full-screen voice assistant configured for that property. No
                   downloads, no sign-ups.
                 </p>
@@ -562,10 +424,10 @@ export default function HomePage() {
                 </div>
 
                 <div className="mt-8">
-                  <a href="#hotels" className="inline-flex items-center gap-1.5 text-sm font-medium text-ember-orange hover:text-ember-orange/80 transition-colors">
-                    See hotels with embedded concierge
+                  <Link href="/staynep-assistant" className="inline-flex items-center gap-1.5 text-sm font-medium text-ember-orange hover:text-ember-orange/80 transition-colors">
+                    Open StayNep assistant
                     <ChevronRight className="h-4 w-4" strokeWidth={2} />
-                  </a>
+                  </Link>
                 </div>
               </div>
 
@@ -675,7 +537,6 @@ export default function HomePage() {
         <div className="mx-auto flex max-w-[1200px] flex-col gap-5 px-4 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <span className="font-semibold text-cream-text">STAYNEP</span>
           <div className="flex flex-wrap gap-x-6 gap-y-2">
-            <a href="#hotels" className="vapi-nav-label text-zinc-mute hover:text-cream-text">Hotels</a>
             <a href="#features" className="vapi-nav-label text-zinc-mute hover:text-cream-text">Features</a>
             <a href="#how-it-works" className="vapi-nav-label text-zinc-mute hover:text-cream-text">How it works</a>
             <Link href="/staynep-assistant" className="vapi-nav-label text-zinc-mute hover:text-cream-text">Voice assistant</Link>

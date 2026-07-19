@@ -8,6 +8,18 @@ Built as the foundation for **StayNep** — a comprehensive hotel management pla
 
 ---
 
+## Poster Summary
+
+**StayNep: Your Hotel, Now With a Voice**
+
+StayNep is an AI-powered voice concierge platform for modern hotels. Guests can speak naturally in 40+ languages to compare rooms and facilities, ask about pricing and policies, check availability, make bookings, reserve dining or spa services, and request help during their stay.
+
+Hotels can embed the assistant on their website, share it through QR codes, connect it to hotel management systems, and use it to automate front-desk support, guest operations, staff handoff, and analytics.
+
+**Poster copy:** AI voice concierge for hotels — answer guest questions, recommend rooms and facilities, take bookings, manage service requests, and support guests 24/7 in 40+ languages.
+
+---
+
 ## Features
 
 | Feature | Description |
