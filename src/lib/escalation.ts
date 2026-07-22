@@ -2,6 +2,7 @@ import { getHotelConfig } from "@/lib/hotelConfig";
 import { supportTickets } from "@/lib/db";
 import { sendEscalationEmail } from "@/lib/email";
 import { knowledgeGaps } from "@/lib/knowledgeGaps";
+import { resolveSupportedLanguageCode } from "@/lib/languages";
 
 export type EscalationReason =
   | "ai_flagged"
@@ -77,7 +78,10 @@ export interface StaffHandoffInput {
 
 export async function notifyHotelStaff(input: StaffHandoffInput): Promise<string | undefined> {
   const config = getHotelConfig();
-  const langCode = input.language || config.language || "en-US";
+  const langCode =
+    resolveSupportedLanguageCode(input.language) ??
+    resolveSupportedLanguageCode(config.language) ??
+    "en-US";
 
   try {
     const ticket = await supportTickets.create({

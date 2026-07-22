@@ -22,6 +22,7 @@ import { aiNotConfiguredResponse, isAiConfigured } from '@/lib/ai';
 import { getGuestSession } from '@/lib/guestAuth';
 import { checkGuestChatRateLimit } from '@/lib/guestRateLimit';
 import { sanitizeChatHistory, sanitizeChatMessage } from '@/lib/chatValidation';
+import { resolveSupportedLanguageCode } from '@/lib/languages';
 import { normalizeHotelSlug } from '@/lib/slug';
 import {
   runWithTenant,
@@ -102,7 +103,10 @@ export async function POST(req: Request) {
       return NextResponse.json(aiNotConfiguredResponse(), { status: 501 });
     }
 
-    const langCode = body.language || config.language || 'en-US';
+    const langCode =
+      resolveSupportedLanguageCode(body.language) ??
+      resolveSupportedLanguageCode(config.language) ??
+      'en-US';
     const conversationHistory = sanitizeChatHistory(body.history);
 
     const startTime = Date.now();

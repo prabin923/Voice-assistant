@@ -23,7 +23,7 @@ import { GEMINI_MODEL } from "@/lib/geminiModel";
 import type { HotelConfig } from "@/lib/hotelConfig";
 import type { ChatHistoryMessage } from "@/lib/dateParsing";
 import { todayIsoDate } from "@/lib/dateParsing";
-import { getLanguageByCode } from "@/lib/languages";
+import { getLanguageByCode, resolveSupportedLanguageCode } from "@/lib/languages";
 import { buildHotelDataBlock } from "@/lib/rag/augmentMessage";
 import { retrieveRelevantChunks } from "@/lib/rag/knowledgeIndex";
 import {
@@ -205,6 +205,7 @@ export const TOOLS: FunctionDeclaration[] = [
 
 type ToolCtx = {
   config: HotelConfig;
+  langCode: string;
   guestProfile?: GuestProfileLite;
   out: {
     booking?: BookingSummary;
@@ -220,7 +221,11 @@ async function execTool(name: string, args: Record<string, unknown>, ctx: ToolCt
   try {
     switch (name) {
       case "search_hotel_info": {
-        const chunks = await retrieveRelevantChunks(s(args.query), { topK: 5, minScore: 0.2 });
+        const chunks = await retrieveRelevantChunks(s(args.query), {
+          topK: 5,
+          minScore: 0.2,
+          languageCode: ctx.langCode,
+        });
         return { results: chunks.map((c) => ({ title: c.title, content: c.content })) };
       }
       case "check_room_availability": {
@@ -361,10 +366,9 @@ function buildSystemPrompt(
   const widgetLang = getLanguageByCode(langCode)?.name || "English";
   const langLine =
     `\nLANGUAGE: Reply in the SAME language the guest is actually writing in — this INCLUDES romanized/transliterated languages. ` +
-    `If the guest types Nepali or Hindi in Latin letters (e.g. "kun kun room available xa" = "which rooms are available?", ` +
-    `"malai room book garnu cha" = "I want to book a room"), understand it and reply in that language using its native script ` +
-    `(Nepali/Hindi → Devanagari), keeping room names and other proper nouns as-is. Do not switch to English just because the ` +
-    `guest mixed in English words. Only if the guest's language is genuinely unclear, default to ${widgetLang}.`;
+    `If a guest uses Latin transliteration for any supported language, understand it and reply in that language's customary script unless asked otherwise, ` +
+    `keeping room names and other proper nouns as-is. Do not switch to English just because the guest mixed in English words. ` +
+    `Only if the guest's language is genuinely unclear, default to ${widgetLang}.`;
   const guestLine = guestProfile
     ? `\nThe guest is signed in as ${guestProfile.name}${guestProfile.phone ? ` (phone ${guestProfile.phone})` : ""}. Use these details for bookings instead of re-asking.${profileContext || ""}`
     : "\nThe guest is not signed in — collect their name and phone before booking.";
@@ -409,7 +413,8 @@ export async function runBookingAgent(params: {
   channel: "voice" | "text";
   guestProfile?: GuestProfileLite;
 }): Promise<BookingAgentResult> {
-  const { message, langCode, config, history, channel, guestProfile } = params;
+  const { message, config, history, channel, guestProfile } = params;
+  const langCode = resolveSupportedLanguageCode(params.langCode) ?? "en-US";
 
   let profileContext = "";
   if (guestProfile) {
@@ -437,7 +442,7 @@ export async function runBookingAgent(params: {
   });
 
   const chat = model.startChat({ history: toGeminiHistory(history) });
-  const ctx: ToolCtx = { config, guestProfile, out: {} };
+  const ctx: ToolCtx = { config, langCode, guestProfile, out: {} };
 
   let result = await chat.sendMessage(message);
   let toolCalled = false;

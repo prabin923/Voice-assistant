@@ -7,6 +7,7 @@ import { getOpenAiApiKey } from "@/lib/openai";
 import { resolveEscalation, type EscalationReason } from "@/lib/escalation";
 import { augmentUserMessageWithHotelContext } from "@/lib/rag/augmentMessage";
 import { buildHotelDataBlock } from "@/lib/rag/augmentMessage";
+import { resolveSupportedLanguageCode } from "@/lib/languages";
 import { getHotelConfig, type HotelConfig } from "./hotelConfig";
 
 let genAiSingleton: GoogleGenerativeAI | null = null;
@@ -226,7 +227,10 @@ export async function getAssistantResponse(
   channel: "voice" | "text" = "text"
 ): Promise<{ reply: string; escalate: boolean; reason?: EscalationReason }> {
   const config = getHotelConfig();
-  const langCode = language || config.language || "en-US";
+  const langCode =
+    resolveSupportedLanguageCode(language) ??
+    resolveSupportedLanguageCode(config.language) ??
+    "en-US";
   const provider = getActiveAiProvider();
 
   // Voice turns should fail fast instead of waiting on retry backoff.
@@ -276,7 +280,10 @@ export async function* streamAssistantResponse(
   channel: "voice" | "text" = "voice"
 ): AsyncGenerator<StreamChunk> {
   const config = getHotelConfig();
-  const langCode = language || config.language || "en-US";
+  const langCode =
+    resolveSupportedLanguageCode(language) ??
+    resolveSupportedLanguageCode(config.language) ??
+    "en-US";
   const provider = getActiveAiProvider();
 
   if (provider !== "gemini") {

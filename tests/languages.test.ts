@@ -6,12 +6,16 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { SUPPORTED_LANGUAGES, getLanguageByCode } from '@/lib/languages';
+import {
+  SUPPORTED_LANGUAGES,
+  getLanguageByCode,
+  resolveSupportedLanguageCode,
+} from '@/lib/languages';
 
 describe('Languages — Data Structure', () => {
 
-  it('should have at least 10 languages', () => {
-    expect(SUPPORTED_LANGUAGES.length).toBeGreaterThanOrEqual(10);
+  it('should have at least 40 languages', () => {
+    expect(SUPPORTED_LANGUAGES.length).toBeGreaterThanOrEqual(40);
   });
 
   it('every language should have required fields', () => {
@@ -78,5 +82,10 @@ describe('Languages — Lookup Functions', () => {
   it('getLanguageByCode should find Nepali', () => {
     const lang = getLanguageByCode('ne-NP');
     expect(lang).toBeDefined();
+  });
+
+  it('resolves supported language tags case-insensitively and by primary tag', () => {
+    expect(resolveSupportedLanguageCode('ES_es')).toBe('es-ES');
+    expect(resolveSupportedLanguageCode('fr')).toBe('fr-FR');
   });
 });

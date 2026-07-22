@@ -15,11 +15,11 @@ import { getActiveAiProvider } from "@/lib/ai";
 import { getGeminiApiKey } from "@/lib/gemini";
 import { getOpenAiApiKey } from "@/lib/openai";
 import { GEMINI_MODEL } from "@/lib/geminiModel";
-import { getLanguageByCode } from "@/lib/languages";
+import { getLanguageByCode, isEnglishLanguageCode } from "@/lib/languages";
 
 /** English target language name for a BCP-47 code, or null if English/unknown. */
 function targetLanguageName(langCode?: string): string | null {
-  if (!langCode || langCode.toLowerCase().startsWith("en")) return null;
+  if (!langCode || isEnglishLanguageCode(langCode)) return null;
   return getLanguageByCode(langCode)?.name ?? null;
 }
 

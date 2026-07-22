@@ -444,8 +444,29 @@ export function getTemplatesForLanguage(langCode: string): ResponseTemplates {
   return TEMPLATES[primary] || TEMPLATES["default"];
 }
 
-export function getLanguageByCode(code: string): LanguageDefinition | undefined {
-  return SUPPORTED_LANGUAGES.find(l => l.code === code);
+/** Resolve an exact locale or a primary BCP-47 language tag to a supported language. */
+export function getLanguageByCode(code?: string | null): LanguageDefinition | undefined {
+  const normalized = code?.trim().replace(/_/g, "-").toLowerCase();
+  if (!normalized) return undefined;
+
+  const exact = SUPPORTED_LANGUAGES.find((language) => language.code.toLowerCase() === normalized);
+  if (exact) return exact;
+
+  const primary = normalized.split("-")[0];
+  return SUPPORTED_LANGUAGES.find((language) => language.code.split("-")[0].toLowerCase() === primary);
+}
+
+/** Canonical BCP-47 code used by the assistant, or undefined for an unsupported language. */
+export function resolveSupportedLanguageCode(code?: string | null): string | undefined {
+  return getLanguageByCode(code)?.code;
+}
+
+export function isEnglishLanguageCode(code?: string | null): boolean {
+  const normalized = (resolveSupportedLanguageCode(code) ?? code ?? "")
+    .trim()
+    .replace(/_/g, "-")
+    .toLowerCase();
+  return normalized.split("-")[0] === "en";
 }
 
 // ============================================================

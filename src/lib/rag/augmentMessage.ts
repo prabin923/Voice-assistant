@@ -5,7 +5,8 @@ import {
   retrieveRelevantChunks,
   type RetrievedChunk,
 } from "@/lib/rag/knowledgeIndex";
-import { hasNonLatinScript } from "@/lib/rag/lexical";
+import { getLanguageByCode } from "@/lib/languages";
+import { requiresMultilingualSemanticSearch } from "@/lib/rag/lexical";
 
 export type ChatTurn = { role: string; content: string };
 
@@ -47,23 +48,6 @@ export function buildHotelDataBlock(config: HotelConfig, compact: boolean): stri
     .join("; ")}`;
 }
 
-// BCP-47 → readable name (English variants intentionally absent — no instruction needed)
-const LANG_NAMES: Record<string, string> = {
-  "ar-SA": "Arabic",          "bn-BD": "Bengali",        "bg-BG": "Bulgarian",
-  "zh-CN": "Chinese",         "zh-TW": "Chinese (Traditional)", "hr-HR": "Croatian",
-  "cs-CZ": "Czech",           "da-DK": "Danish",         "nl-NL": "Dutch",
-  "et-EE": "Estonian",        "fi-FI": "Finnish",        "fr-FR": "French",
-  "de-DE": "German",          "el-GR": "Greek",          "he-IL": "Hebrew",
-  "hi-IN": "Hindi",           "hu-HU": "Hungarian",      "id-ID": "Indonesian",
-  "it-IT": "Italian",         "ja-JP": "Japanese",       "ko-KR": "Korean",
-  "lt-LT": "Lithuanian",      "ms-MY": "Malay",          "ne-NP": "Nepali",
-  "no-NO": "Norwegian",       "pl-PL": "Polish",         "pt-BR": "Portuguese",
-  "ro-RO": "Romanian",        "ru-RU": "Russian",        "es-ES": "Spanish",
-  "sw-KE": "Swahili",         "sv-SE": "Swedish",        "ta-IN": "Tamil",
-  "te-IN": "Telugu",          "th-TH": "Thai",           "tr-TR": "Turkish",
-  "uk-UA": "Ukrainian",       "vi-VN": "Vietnamese",     "fil-PH": "Filipino",
-};
-
 /** Grounding footnote appended to every context block. */
 function groundingFootnote(phone: string): string {
   return `\nONLY answer from the HOTEL FACTS above. If the answer is not listed, say: "I don't have that detail — our front desk can help at ${phone}."`;
@@ -71,12 +55,12 @@ function groundingFootnote(phone: string): string {
 
 /**
  * Language instruction: mirror the language the guest is actually writing in —
- * including romanized/transliterated languages (e.g. Nepali/Hindi typed in Latin
- * letters) — rather than rigidly following the widget's language selector.
+ * including romanized/transliterated languages — rather than rigidly following
+ * the widget's language selector.
  */
 function langLine(langCode?: string): string {
-  const widget = (langCode && LANG_NAMES[langCode]) || "English";
-  return `\nReply in the SAME language the guest is writing in, including romanized/transliterated languages: if they type Nepali or Hindi in Latin letters (e.g. "kun kun room available xa"), understand it and reply in that language using its native script. Only default to ${widget} if the guest's language is genuinely unclear.`;
+  const widget = getLanguageByCode(langCode)?.name || "English";
+  return `\nReply in the SAME language the guest is writing in, including romanized/transliterated forms. When a guest writes a supported language in Latin transliteration, understand it and reply in that language's customary script unless they ask otherwise. Keep room names and other proper nouns unchanged. Only default to ${widget} if the guest's language is genuinely unclear.`;
 }
 
 function fullContextMessage(
@@ -129,12 +113,12 @@ export async function augmentUserMessageWithHotelContext(
     const topK = channel === "voice" ? 3 : 10;
     const query = buildRetrievalQuery(message, history);
 
-    // Non-Latin (e.g. Nepali) queries can't use the lexical fast path against an
-    // English knowledge base, so they MUST embed — give them the longer text
-    // budget instead of the 180ms voice budget, or they always time out into the
-    // metadata-only fallback.
+    // Cross-language questions need semantic search against knowledge that may
+    // have been authored in another language. Give every supported non-English
+    // language the text budget, including Latin-script languages.
+    const multilingualSearch = requiresMultilingualSemanticSearch(query, langCode);
     const timeoutMs =
-      channel === "voice" && hasNonLatinScript(query)
+      channel === "voice" && multilingualSearch
         ? ragTimeoutMs("text")
         : ragTimeoutMs(channel);
 
@@ -142,10 +126,11 @@ export async function augmentUserMessageWithHotelContext(
       retrieveRelevantChunks(query, {
         topK,
         minScore: channel === "voice" ? 0.28 : 0.32,
-        // Voice: prefer fast keyword match first; fall back to semantic only
-        // when nothing strong is found (covers website prose chunks too).
-        preferFastLexical: channel === "voice",
+        // For English voice turns, return obvious keyword matches quickly. Other
+        // supported languages always wait for multilingual semantic retrieval.
+        preferFastLexical: channel === "voice" && !multilingualSearch,
         lexicalOnly: false,
+        languageCode: langCode,
       }),
       new Promise<RetrievedChunk[]>((resolve) =>
         setTimeout(() => resolve([]), timeoutMs)

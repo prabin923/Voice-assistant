@@ -4,9 +4,17 @@ import {
   lexicalRetrieve,
   hasNonLatinScript,
   adaptiveMinScore,
+  enrichMultilingualRetrievalQuery,
+  mergeSemanticAndLexical,
+  requiresMultilingualSemanticSearch,
   selectByScore,
   type ScorableChunk,
 } from "../src/lib/rag/lexical";
+import {
+  getKeywordsForLanguage,
+  resolveSupportedLanguageCode,
+  SUPPORTED_LANGUAGES,
+} from "../src/lib/languages";
 
 const rows: ScorableChunk[] = [
   { chunkKey: "amenity:wifi", category: "amenity", title: "WiFi", content: "Complimentary high-speed WiFi in all rooms." },
@@ -46,9 +54,10 @@ describe("lexical retrieval is script-agnostic", () => {
 });
 
 describe("adaptive threshold + soft floor (anti metadata-only)", () => {
-  it("relaxes the threshold for non-Latin queries only", () => {
+  it("relaxes the threshold for multilingual queries", () => {
     expect(adaptiveMinScore("वाइफाइ", 0.32)).toBeLessThanOrEqual(0.2);
     expect(adaptiveMinScore("wifi", 0.32)).toBe(0.32);
+    expect(adaptiveMinScore("tienen piscina", 0.32, "es-ES")).toBeLessThanOrEqual(0.2);
   });
   it("returns the best real chunk when nothing clears the bar but a candidate is above the floor", () => {
     const scored = rows.map((r, i) => ({ ...r, score: [0.22, 0.19, 0.1][i] }));
@@ -65,5 +74,39 @@ describe("adaptive threshold + soft floor (anti metadata-only)", () => {
     const got = selectByScore(scored, { minScore: 0.32, floor: 0.18, topK: 3 });
     expect(got).toHaveLength(3);
     expect(got[0].score).toBe(0.5);
+  });
+});
+
+describe("supported-language retrieval policy", () => {
+  it("resolves and applies multilingual retrieval to every configured language", () => {
+    expect(SUPPORTED_LANGUAGES.length).toBeGreaterThanOrEqual(40);
+
+    for (const language of SUPPORTED_LANGUAGES) {
+      expect(resolveSupportedLanguageCode(language.code.toLowerCase())).toBe(language.code);
+
+      const amenityKeyword = getKeywordsForLanguage(language.code).amenities[0];
+      const enriched = enrichMultilingualRetrievalQuery(amenityKeyword, language.code);
+      expect(enriched).toContain("Hotel knowledge topics:");
+      expect(enriched).toContain("hotel amenities");
+
+      const isEnglish = language.code.startsWith("en-");
+      expect(requiresMultilingualSemanticSearch("plain Latin text", language.code)).toBe(!isEnglish);
+      expect(adaptiveMinScore("plain Latin text", 0.32, language.code)).toBe(
+        isEnglish ? 0.32 : 0.2
+      );
+    }
+  });
+});
+
+describe("hybrid semantic and lexical ranking", () => {
+  it("keeps an exact lexical match ahead of a weaker semantic alternative", () => {
+    const semantic = [
+      { ...rows[0], score: 0.4 },
+      { ...rows[1], score: 0.39 },
+    ];
+    const lexical = [{ ...rows[1], score: 1 }];
+
+    const merged = mergeSemanticAndLexical(semantic, lexical, 2);
+    expect(merged[0]?.chunkKey).toBe("faq:airport");
   });
 });

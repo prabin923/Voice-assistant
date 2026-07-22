@@ -2,7 +2,7 @@
 
 > **An intelligent, multilingual voice assistant for hotel guest services — powered by Next.js 16, Google Gemini, and autonomous booking.**
 
-A production-ready AI voice receptionist that provides 24/7 multilingual guest support for hotels. Guests speak in any of 34 supported languages and receive instant, spoken responses with hotel-specific knowledge. The assistant handles **live availability checks**, **end-to-end bookings**, **modifications**, and **cancellations** on its own — staff are notified only when a booking is completed (FYI) or when a situation truly needs a human.
+A production-ready AI voice receptionist that provides 24/7 multilingual guest support for hotels. Guests speak in any configured language and receive instant, spoken responses with hotel-specific knowledge. The assistant handles **live availability checks**, **end-to-end bookings**, **modifications**, and **cancellations** on its own — staff are notified only when a booking is completed (FYI) or when a situation truly needs a human.
 
 Built as the foundation for **StayNep** — a comprehensive hotel management platform for Nepal's hospitality industry.
 
@@ -41,7 +41,7 @@ Hotels can embed the assistant on their website, share it through QR codes, conn
 | **FAQ Gap Reporter** | Unanswered guest questions logged on escalation; review and add to FAQ in Settings |
 | **Rich Hotel Context** | Dining, FAQ, full policies, amenities, and room details in AI prompt |
 | **Conversation Memory** | Multi-turn booking — collect dates, room, name, and phone across messages |
-| **34 Languages** | Full multilingual support via Gemini — Arabic to Vietnamese |
+| **40+ Languages** | Language-neutral RAG and response support across every configured locale |
 | **MAI-Voice TTS** | Azure MAI-Voice with browser fallback |
 | **Guest Accounts** | Sign-in pre-fills name, phone, and links bookings |
 | **Admin Dashboard** | Settings, analytics, calendar inventory, support inbox |

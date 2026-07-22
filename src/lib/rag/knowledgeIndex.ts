@@ -8,8 +8,10 @@ import { activeEmbedModel, contentHash, embedQuery, embedTexts } from "@/lib/rag
 import { cosineSimilarity } from "@/lib/rag/similarity";
 import {
   adaptiveMinScore,
+  enrichMultilingualRetrievalQuery,
   isStrongLexicalMatch,
   lexicalRetrieve,
+  mergeSemanticAndLexical,
   selectByScore,
 } from "@/lib/rag/lexical";
 
@@ -241,19 +243,22 @@ export async function retrieveRelevantChunks(
     minScore?: number;
     preferFastLexical?: boolean;
     lexicalOnly?: boolean;
+    languageCode?: string;
   }
 ): Promise<RetrievedChunk[]> {
   const topK = options?.topK ?? 8;
   const minScore = options?.minScore ?? 0.32;
   const preferFastLexical = options?.preferFastLexical ?? false;
   const lexicalOnly = options?.lexicalOnly ?? false;
+  const languageCode = options?.languageCode;
 
   if (!query.trim()) return [];
 
   const rows = scopeToTenant(await loadIndexedChunks());
   if (!rows.length) return [];
 
-  const lexical = lexicalRetrieve(rows, query, topK);
+  const retrievalQuery = enrichMultilingualRetrievalQuery(query, languageCode);
+  const lexical = lexicalRetrieve(rows, retrievalQuery, topK);
   if (lexicalOnly) return lexical;
   if (preferFastLexical && isStrongLexicalMatch(lexical)) {
     return lexical;
@@ -261,7 +266,7 @@ export async function retrieveRelevantChunks(
 
   let queryVector: number[];
   try {
-    queryVector = await embedQuery(query.trim());
+    queryVector = await embedQuery(retrievalQuery);
   } catch (err) {
     console.warn("[RAG] Query embedding failed:", err);
     return lexical;
@@ -276,16 +281,16 @@ export async function retrieveRelevantChunks(
     score: cosineSimilarity(queryVector, row.vector),
   }));
 
-  // Relax the threshold for non-Latin (cross-lingual) queries, and apply a soft
-  // floor: rather than returning nothing (which forces the metadata-only
-  // fallback and invites hallucination/repetition), surface the single best
-  // real chunk when one exists. The grounding rule still lets the model decline.
+  // Relax the threshold for multilingual queries, and apply a soft floor:
+  // rather than returning nothing (which forces the metadata-only fallback and
+  // invites hallucination/repetition), surface the single best real chunk when
+  // one exists. The grounding rule still lets the model decline.
   const semantic = selectByScore(scored, {
-    minScore: adaptiveMinScore(query, minScore),
+    minScore: adaptiveMinScore(query, minScore, languageCode),
     floor: 0.18,
     topK,
   });
-  if (semantic.length > 0) return semantic;
+  if (semantic.length > 0) return mergeSemanticAndLexical(semantic, lexical, topK);
 
   return lexical;
 }
