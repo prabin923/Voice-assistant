@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="title description">
+  <title id="title">StayNep AI voice concierge project card</title>
+  <desc id="description">A dark blue hospitality technology project card featuring a voice concierge phone interface.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#082744" />
+      <stop offset="0.55" stop-color="#0d365d" />
+      <stop offset="1" stop-color="#061a31" />
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f5d67a" />
+      <stop offset="0.55" stop-color="#d2a11e" />
+      <stop offset="1" stop-color="#a96f0d" />
+    </linearGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbfdff" />
+      <stop offset="1" stop-color="#e7f0f8" />
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#e5b42f" stop-opacity="0.52" />
+      <stop offset="1" stop-color="#e5b42f" stop-opacity="0" />
+    </radialGradient>
+    <pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse">
+      <path d="M34 0H0V34" fill="none" stroke="#b8d6ed" stroke-opacity="0.12" stroke-width="1" />
+    </pattern>
+    <filter id="shadow" x="-40%" y="-20%" width="180%" height="150%">
+      <feDropShadow dx="0" dy="26" stdDeviation="24" flood-color="#000814" flood-opacity="0.46" />
+    </filter>
+    <clipPath id="card">
+      <rect width="1600" height="900" rx="56" />
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#card)">
+    <rect width="1600" height="900" fill="url(#background)" />
+    <rect x="905" width="695" height="900" fill="url(#grid)" />
+    <circle cx="1220" cy="452" r="405" fill="url(#glow)" />
+    <circle cx="1330" cy="108" r="162" fill="none" stroke="#c9ddeb" stroke-opacity="0.16" stroke-width="2" />
+    <circle cx="1330" cy="108" r="224" fill="none" stroke="#c9ddeb" stroke-opacity="0.09" stroke-width="2" />
+    <path d="M0 790C264 710 424 940 756 842C1010 767 1114 757 1600 824V900H0Z" fill="#051a30" fill-opacity="0.55" />
+
+    <g transform="translate(110 102)">
+      <rect width="60" height="60" rx="18" fill="#f5f9fd" />
+      <path d="M19 18H41V42H19Z" fill="#0b3156" />
+      <path d="M23 30H37M30 23V37" stroke="#d2a11e" stroke-width="4" stroke-linecap="round" />
+      <text x="84" y="28" fill="#f7fbff" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" letter-spacing="1.5">STAY<tspan fill="#e0ad2a">NEP</tspan></text>
+      <text x="85" y="53" fill="#a9c0d4" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" letter-spacing="3.1">AI VOICE CONCIERGE</text>
+    </g>
+
+    <g transform="translate(110 250)">
+      <rect width="292" height="38" rx="19" fill="#c99719" fill-opacity="0.18" stroke="#efc956" stroke-opacity="0.55" />
+      <circle cx="20" cy="19" r="5" fill="#efc956" />
+      <text x="38" y="24" fill="#f3d172" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" letter-spacing="2.5">HOSPITALITY AI</text>
+      <text x="0" y="133" fill="#f7fbff" font-family="Arial, Helvetica, sans-serif" font-size="82" font-weight="700" letter-spacing="-3">Your hotel,</text>
+      <text x="0" y="222" fill="#f7fbff" font-family="Arial, Helvetica, sans-serif" font-size="82" font-weight="700" letter-spacing="-3">now with a</text>
+      <text x="0" y="311" fill="url(#gold)" font-family="Arial, Helvetica, sans-serif" font-size="82" font-weight="700" letter-spacing="-3">voice.</text>
+      <text x="0" y="376" fill="#c5d7e7" font-family="Arial, Helvetica, sans-serif" font-size="26">A multilingual concierge that answers, books,</text>
+      <text x="0" y="413" fill="#c5d7e7" font-family="Arial, Helvetica, sans-serif" font-size="26">and hands off to hotel teams when needed.</text>
+    </g>
+
+    <g transform="translate(110 730)">
+      <g>
+        <rect width="180" height="58" rx="18" fill="#ffffff" fill-opacity="0.09" stroke="#c9ddeb" stroke-opacity="0.25" />
+        <circle cx="29" cy="29" r="13" fill="#d2a11e" fill-opacity="0.2" stroke="#e9c35a" stroke-width="1.5" />
+        <path d="M29 20V38M22 28H36" stroke="#e9c35a" stroke-width="2.5" stroke-linecap="round" />
+        <text x="54" y="24" fill="#f7fbff" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="1.4">40+ LANGUAGES</text>
+        <text x="54" y="43" fill="#a9c0d4" font-family="Arial, Helvetica, sans-serif" font-size="12">Natural voice support</text>
+      </g>
+      <g transform="translate(196)">
+        <rect width="180" height="58" rx="18" fill="#ffffff" fill-opacity="0.09" stroke="#c9ddeb" stroke-opacity="0.25" />
+        <circle cx="29" cy="29" r="13" fill="#83badc" fill-opacity="0.18" stroke="#b8dced" stroke-width="1.5" />
+        <path d="M22 30L27 35L37 23" fill="none" stroke="#b8dced" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+        <text x="54" y="24" fill="#f7fbff" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="1.4">LIVE BOOKINGS</text>
+        <text x="54" y="43" fill="#a9c0d4" font-family="Arial, Helvetica, sans-serif" font-size="12">Confirmation first</text>
+      </g>
+      <g transform="translate(392)">
+        <rect width="180" height="58" rx="18" fill="#ffffff" fill-opacity="0.09" stroke="#c9ddeb" stroke-opacity="0.25" />
+        <circle cx="29" cy="29" r="13" fill="#d2a11e" fill-opacity="0.2" stroke="#e9c35a" stroke-width="1.5" />
+        <path d="M29 19V29L35 33" fill="none" stroke="#e9c35a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+        <text x="54" y="24" fill="#f7fbff" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="1.4">24 / 7 SERVICE</text>
+        <text x="54" y="43" fill="#a9c0d4" font-family="Arial, Helvetica, sans-serif" font-size="12">Always available</text>
+      </g>
+    </g>
+
+    <g transform="translate(1098 92)" filter="url(#shadow)">
+      <rect width="365" height="718" rx="53" fill="#061425" stroke="#224d73" stroke-width="8" />
+      <rect x="16" y="16" width="333" height="686" rx="40" fill="url(#screen)" />
+      <rect x="130" y="34" width="105" height="12" rx="6" fill="#b7c5d3" />
+      <text x="53" y="103" fill="#0c345c" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" letter-spacing="1.4">STAY<tspan fill="#c89117">NEP</tspan></text>
+      <text x="53" y="131" fill="#617487" font-family="Arial, Helvetica, sans-serif" font-size="14">Voice concierge</text>
+
+      <rect x="46" y="173" width="253" height="91" rx="22" fill="#e7eef5" />
+      <text x="68" y="211" fill="#1c3148" font-family="Arial, Helvetica, sans-serif" font-size="18">Can I book a room</text>
+      <text x="68" y="236" fill="#1c3148" font-family="Arial, Helvetica, sans-serif" font-size="18">for Friday?</text>
+
+      <rect x="62" y="290" width="237" height="112" rx="22" fill="#f8ebc7" />
+      <text x="84" y="330" fill="#26394e" font-family="Arial, Helvetica, sans-serif" font-size="17">I found available rooms.</text>
+      <text x="84" y="355" fill="#26394e" font-family="Arial, Helvetica, sans-serif" font-size="17">Shall I confirm?</text>
+      <text x="84" y="382" fill="#91711f" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="1.2">VOICE RESPONSE READY</text>
+
+      <g transform="translate(93 492)">
+        <rect x="0" y="26" width="6" height="18" rx="3" fill="#d2a11e" />
+        <rect x="20" y="15" width="6" height="40" rx="3" fill="#d2a11e" />
+        <rect x="40" y="0" width="6" height="70" rx="3" fill="#d2a11e" />
+        <rect x="60" y="20" width="6" height="30" rx="3" fill="#d2a11e" />
+        <rect x="80" y="9" width="6" height="52" rx="3" fill="#d2a11e" />
+        <rect x="100" y="21" width="6" height="28" rx="3" fill="#d2a11e" />
+        <rect x="120" y="3" width="6" height="64" rx="3" fill="#d2a11e" />
+        <rect x="140" y="18" width="6" height="34" rx="3" fill="#d2a11e" />
+      </g>
+      <text x="111" y="604" fill="#617487" font-family="Arial, Helvetica, sans-serif" font-size="14">Listening securely</text>
+      <rect x="54" y="631" width="257" height="42" rx="21" fill="#0c345c" />
+      <circle cx="78" cy="652" r="9" fill="#e0ad2a" />
+      <path d="M78 646V658M72 652H84" stroke="#0c345c" stroke-width="2" stroke-linecap="round" />
+      <text x="99" y="657" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700">Tap to speak</text>
+    </g>
+
+    <text x="1432" y="856" text-anchor="end" fill="#a9c0d4" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="2.3">STAYNEP · HOSPITALITY INTELLIGENCE</text>
+  </g>
+</svg>

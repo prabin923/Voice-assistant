@@ -20,6 +20,24 @@ Hotels can embed the assistant on their website, share it through QR codes, conn
 
 ---
 
+## Project Card Asset
+
+The responsive StayNep project-card cover is available at
+[`public/project-templates/staynep-voice-concierge-card.svg`](public/project-templates/staynep-voice-concierge-card.svg).
+It is a lightweight 16:9 SVG designed for portfolio, case-study, and website project cards.
+
+Use the public path directly in an image card:
+
+```tsx
+<img
+  src="/project-templates/staynep-voice-concierge-card.svg"
+  alt="StayNep AI voice concierge"
+  className="aspect-video w-full object-cover"
+/>
+```
+
+---
+
 ## Features
 
 | Feature | Description |
