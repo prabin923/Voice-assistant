@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAssistantResponse } from '@/lib/responseEngine';
 import { handleGuestBookingFlow } from '@/lib/bookingFlow';
-import { ensureHotelConfigLoaded } from '@/lib/hotelConfig';
+import { ensureHotelConfigLoaded, findHotelByPhoneNumber, runWithTenant } from '@/lib/hotelConfig';
 import { notifyHotelStaff, type EscalationReason } from '@/lib/escalation';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 
@@ -65,42 +65,48 @@ export async function POST(req: Request) {
       return NextResponse.json({ action: 'speak', text: 'I didn\'t catch that. Could you repeat?' });
     }
 
-    const config = await ensureHotelConfigLoaded();
-    const bookingFlow = await handleGuestBookingFlow({
-      message: sanitizedInput,
-      langCode: language,
-      config,
-      history: [],
-    });
+    const to = data.to || data.recipient || "";
+    const hotel = await findHotelByPhoneNumber(to);
+    const hotelId = hotel ? hotel.id : undefined;
 
-    let aiReply: string;
-    let escalate = false;
-    let reason: EscalationReason | undefined;
-
-    if (bookingFlow.handled) {
-      aiReply = bookingFlow.reply || "I can help with that booking.";
-      escalate = Boolean(bookingFlow.escalate);
-      reason = bookingFlow.reason;
-    } else {
-      const result = await getAssistantResponse(sanitizedInput, language, [], "voice");
-      aiReply = result.reply;
-      escalate = result.escalate;
-      reason = result.reason;
-    }
-
-    if (escalate) {
-      await notifyHotelStaff({
-        guestMessage: sanitizedInput,
-        aiResponse: aiReply,
-        language,
-        reason,
+    return runWithTenant({ hotelId }, async () => {
+      const config = await ensureHotelConfigLoaded();
+      const bookingFlow = await handleGuestBookingFlow({
+        message: sanitizedInput,
+        langCode: language,
+        config,
+        history: [],
       });
-    }
 
-    return NextResponse.json({
-      action: 'speak',
-      text: aiReply,
-      call_id: callId
+      let aiReply: string;
+      let escalate = false;
+      let reason: EscalationReason | undefined;
+
+      if (bookingFlow.handled) {
+        aiReply = bookingFlow.reply || "I can help with that booking.";
+        escalate = Boolean(bookingFlow.escalate);
+        reason = bookingFlow.reason;
+      } else {
+        const result = await getAssistantResponse(sanitizedInput, language, [], "voice");
+        aiReply = result.reply;
+        escalate = result.escalate;
+        reason = result.reason;
+      }
+
+      if (escalate) {
+        await notifyHotelStaff({
+          guestMessage: sanitizedInput,
+          aiResponse: aiReply,
+          language,
+          reason,
+        });
+      }
+
+      return NextResponse.json({
+        action: 'speak',
+        text: aiReply,
+        call_id: callId
+      });
     });
 
   } catch (error: unknown) {

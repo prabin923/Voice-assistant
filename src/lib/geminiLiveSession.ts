@@ -18,7 +18,7 @@ export class GeminiLiveSession {
   private session: LiveSession | null = null;
   private micStream: MediaStream | null = null;
   private captureContext: AudioContext | null = null;
-  private processor: ScriptProcessorNode | null = null;
+  private workletNode: AudioWorkletNode | null = null;
   private playbackContext: AudioContext | null = null;
   private nextPlayTime = 0;
 
@@ -128,19 +128,37 @@ export class GeminiLiveSession {
     }
 
     const source = this.captureContext.createMediaStreamSource(this.micStream);
-    const processor = this.captureContext.createScriptProcessor(4096, 1, 1);
+
+    const workletCode = `
+      class PcmProcessor extends AudioWorkletProcessor {
+        process(inputs) {
+          const input = inputs[0];
+          if (input.length > 0) {
+            const channelData = input[0];
+            const pcm = new Int16Array(channelData.length);
+            for (let i = 0; i < channelData.length; i++) {
+              const sample = Math.max(-1, Math.min(1, channelData[i]));
+              pcm[i] = sample < 0 ? sample * 32768 : sample * 32767;
+            }
+            this.port.postMessage(pcm.buffer, [pcm.buffer]);
+          }
+          return true;
+        }
+      }
+      registerProcessor('pcm-processor', PcmProcessor);
+    `;
+    const blob = new Blob([workletCode], { type: 'application/javascript' });
+    const url = URL.createObjectURL(blob);
+
+    await this.captureContext.audioWorklet.addModule(url);
+    const workletNode = new AudioWorkletNode(this.captureContext, 'pcm-processor');
     const silentGain = this.captureContext.createGain();
     silentGain.gain.value = 0;
 
-    processor.onaudioprocess = (event) => {
+    workletNode.port.onmessage = (event) => {
       if (!this.session) return;
-      const input = event.inputBuffer.getChannelData(0);
-      const pcm = new Int16Array(input.length);
-      for (let i = 0; i < input.length; i++) {
-        const sample = Math.max(-1, Math.min(1, input[i]));
-        pcm[i] = sample < 0 ? sample * 32768 : sample * 32767;
-      }
-      const bytes = new Uint8Array(pcm.buffer);
+      const buffer = event.data;
+      const bytes = new Uint8Array(buffer);
       let binary = "";
       for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
 
@@ -152,10 +170,10 @@ export class GeminiLiveSession {
       });
     };
 
-    source.connect(processor);
-    processor.connect(silentGain);
+    source.connect(workletNode);
+    workletNode.connect(silentGain);
     silentGain.connect(this.captureContext.destination);
-    this.processor = processor;
+    this.workletNode = workletNode;
   }
 
   sendGreeting(text: string): void {
@@ -166,13 +184,13 @@ export class GeminiLiveSession {
   }
 
   disconnect(): void {
-    this.processor?.disconnect();
+    this.workletNode?.disconnect();
     this.captureContext?.close().catch(() => {});
     this.micStream?.getTracks().forEach((t) => t.stop());
     this.playbackContext?.close().catch(() => {});
     this.session?.close();
     this.session = null;
-    this.processor = null;
+    this.workletNode = null;
     this.captureContext = null;
     this.micStream = null;
     this.playbackContext = null;

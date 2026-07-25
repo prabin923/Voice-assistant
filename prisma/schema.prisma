@@ -291,3 +291,12 @@ model Review {
   @@index([guestId])
   @@map("reviews")
 }
+
+model WhatsAppSession {
+  id        String   @id
+  hotelId   String?  @map("hotel_id")
+  history   String   @default("[]")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("whatsapp_sessions")
+}
