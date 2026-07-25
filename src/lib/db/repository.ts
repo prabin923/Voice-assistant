@@ -1,5 +1,7 @@
 import { randomUUID } from "crypto";
 import prisma from "@/lib/prisma";
+import { tenantPrisma } from "@/lib/prisma-tenant";
+
 import {
   mapAuthAuditLog,
   mapBooking,
@@ -92,7 +94,7 @@ export const interactions = {
     language: string;
     guestId?: string | null;
   }) {
-    await prisma.interaction.create({
+    await tenantPrisma().interaction.create({
       data: {
         id: id(),
         guestMessage: data.guestMessage,
@@ -104,12 +106,12 @@ export const interactions = {
   },
 
   async totalCount(): Promise<number> {
-    return prisma.interaction.count();
+    return tenantPrisma().interaction.count();
   },
 
   async dailyCounts(days = 30): Promise<{ date: string; count: number }[]> {
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-    const rows = await prisma.interaction.findMany({
+    const rows = await tenantPrisma().interaction.findMany({
       where: { createdAt: { gte: since } },
       select: { createdAt: true },
     });
@@ -124,7 +126,7 @@ export const interactions = {
   },
 
   async languageDistribution(): Promise<{ language: string; count: number }[]> {
-    const rows = await prisma.interaction.groupBy({
+    const rows = await tenantPrisma().interaction.groupBy({
       by: ["language"],
       _count: { _all: true },
       orderBy: { _count: { language: "desc" } },
@@ -133,7 +135,7 @@ export const interactions = {
   },
 
   async peakHours(): Promise<{ hour: number; count: number }[]> {
-    const rows = await prisma.interaction.findMany({ select: { createdAt: true } });
+    const rows = await tenantPrisma().interaction.findMany({ select: { createdAt: true } });
     const counts = new Map<number, number>();
     for (const row of rows) {
       const hour = row.createdAt.getUTCHours();
@@ -145,7 +147,7 @@ export const interactions = {
   },
 
   async recent(limit = 20): Promise<Interaction[]> {
-    const rows = await prisma.interaction.findMany({
+    const rows = await tenantPrisma().interaction.findMany({
       orderBy: { createdAt: "desc" },
       take: limit,
     });
@@ -157,14 +159,14 @@ export const interactions = {
     start.setUTCHours(0, 0, 0, 0);
     const end = new Date(start);
     end.setUTCDate(end.getUTCDate() + 1);
-    return prisma.interaction.count({
+    return tenantPrisma().interaction.count({
       where: { createdAt: { gte: start, lt: end } },
     });
   },
 
   async avgPerDay(days = 30): Promise<number> {
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-    const rows = await prisma.interaction.findMany({
+    const rows = await tenantPrisma().interaction.findMany({
       where: { createdAt: { gte: since } },
       select: { createdAt: true },
     });
@@ -179,7 +181,7 @@ export const interactions = {
   },
 
   async topGuestMessages(limit = 8): Promise<{ message: string; count: number }[]> {
-    const rows = await prisma.interaction.groupBy({
+    const rows = await tenantPrisma().interaction.groupBy({
       by: ["guestMessage"],
       _count: { _all: true },
       orderBy: { _count: { guestMessage: "desc" } },
@@ -197,7 +199,7 @@ export const supportTickets = {
     escalationReason?: string;
   }): Promise<SupportTicket> {
     const ticketId = id();
-    await prisma.supportTicket.create({
+    await tenantPrisma().supportTicket.create({
       data: {
         id: ticketId,
         guestMessage: data.guestMessage,
@@ -206,12 +208,12 @@ export const supportTickets = {
         escalationReason: data.escalationReason ?? null,
       },
     });
-    const row = await prisma.supportTicket.findUniqueOrThrow({ where: { id: ticketId } });
+    const row = await tenantPrisma().supportTicket.findUniqueOrThrow({ where: { id: ticketId } });
     return mapSupportTicket(row);
   },
 
   async list(status?: string): Promise<SupportTicket[]> {
-    const rows = await prisma.supportTicket.findMany({
+    const rows = await tenantPrisma().supportTicket.findMany({
       where: status ? { status } : undefined,
       orderBy: { createdAt: "desc" },
     });
@@ -219,19 +221,19 @@ export const supportTickets = {
   },
 
   async getById(ticketId: string): Promise<SupportTicket | undefined> {
-    const row = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
+    const row = await tenantPrisma().supportTicket.findUnique({ where: { id: ticketId } });
     return row ? mapSupportTicket(row) : undefined;
   },
 
   async reply(ticketId: string, staffReply: string) {
-    await prisma.supportTicket.update({
+    await tenantPrisma().supportTicket.update({
       where: { id: ticketId },
       data: { staffReply, status: "resolved", resolvedAt: new Date() },
     });
   },
 
   async openCount(): Promise<number> {
-    return prisma.supportTicket.count({ where: { status: "open" } });
+    return tenantPrisma().supportTicket.count({ where: { status: "open" } });
   },
 };
 
@@ -240,7 +242,7 @@ export const availability = {
     const defaultInventory = await this.getDefault(roomType);
     const override = await this.getOverride(roomType, date);
     const capacity = override ?? defaultInventory;
-    const agg = await prisma.booking.aggregate({
+    const agg = await tenantPrisma().booking.aggregate({
       where: {
         roomType,
         status: "confirmed",
@@ -255,17 +257,17 @@ export const availability = {
   },
 
   async hasDefault(roomType: string): Promise<boolean> {
-    const row = await prisma.roomInventoryDefault.findUnique({ where: { roomType } });
+    const row = await tenantPrisma().roomInventoryDefault.findUnique({ where: { roomType } });
     return Boolean(row);
   },
 
   async getDefault(roomType: string): Promise<number> {
-    const row = await prisma.roomInventoryDefault.findUnique({ where: { roomType } });
+    const row = await tenantPrisma().roomInventoryDefault.findUnique({ where: { roomType } });
     return row?.count ?? 1;
   },
 
   async setDefault(roomType: string, count: number) {
-    await prisma.roomInventoryDefault.upsert({
+    await tenantPrisma().roomInventoryDefault.upsert({
       where: { roomType },
       create: { roomType, count: Math.max(0, Math.floor(count)) },
       update: { count: Math.max(0, Math.floor(count)) },
@@ -273,14 +275,14 @@ export const availability = {
   },
 
   async getOverride(roomType: string, date: string): Promise<number | null> {
-    const row = await prisma.roomInventoryOverride.findUnique({
+    const row = await tenantPrisma().roomInventoryOverride.findUnique({
       where: { roomType_date: { roomType, date } },
     });
     return row?.count ?? null;
   },
 
   async setOverride(roomType: string, date: string, count: number) {
-    await prisma.roomInventoryOverride.upsert({
+    await tenantPrisma().roomInventoryOverride.upsert({
       where: { roomType_date: { roomType, date } },
       create: { roomType, date, count: Math.max(0, Math.floor(count)) },
       update: { count: Math.max(0, Math.floor(count)) },
@@ -288,7 +290,7 @@ export const availability = {
   },
 
   async clearOverride(roomType: string, date: string) {
-    await prisma.roomInventoryOverride.deleteMany({ where: { roomType, date } });
+    await tenantPrisma().roomInventoryOverride.deleteMany({ where: { roomType, date } });
   },
 
   async get(roomType: string, checkIn: string, checkOut: string) {
@@ -376,14 +378,14 @@ export const bookings = {
   },
 
   async getById(bookingId: string): Promise<Booking | undefined> {
-    const row = await prisma.booking.findUnique({ where: { id: bookingId } });
+    const row = await tenantPrisma().booking.findUnique({ where: { id: bookingId } });
     return row ? mapBooking(row) : undefined;
   },
 
   async findByIdPrefix(prefix: string): Promise<Booking | undefined> {
     const normalized = prefix.trim().toLowerCase();
     if (normalized.length < 4) return undefined;
-    const row = await prisma.booking.findFirst({
+    const row = await tenantPrisma().booking.findFirst({
       where: { id: { startsWith: normalized }, status: "confirmed" },
       orderBy: { createdAt: "desc" },
     });
@@ -394,15 +396,15 @@ export const bookings = {
     const existing = await this.getById(bookingId);
     if (!existing || existing.status === "cancelled") return null;
 
-    await prisma.booking.update({
+    await tenantPrisma().booking.update({
       where: { id: bookingId },
       data: { status: "cancelled" },
     });
 
     if (existing.guest_id) {
-      const guest = await prisma.guest.findUnique({ where: { id: existing.guest_id } });
+      const guest = await tenantPrisma().guest.findUnique({ where: { id: existing.guest_id } });
       if (guest && guest.bookingCount > 0) {
-        await prisma.guest.update({
+        await tenantPrisma().guest.update({
           where: { id: existing.guest_id },
           data: { bookingCount: { decrement: 1 } },
         });
@@ -420,7 +422,7 @@ export const bookings = {
     const merged = existing.special_requests
       ? `${existing.special_requests}; ${trimmed}`
       : trimmed;
-    await prisma.booking.update({
+    await tenantPrisma().booking.update({
       where: { id: bookingId },
       data: { specialRequests: merged.slice(0, 2000) },
     });
@@ -456,7 +458,7 @@ export const bookings = {
   },
 
   async listByGuestId(guestId: string, limit = 50): Promise<Booking[]> {
-    const rows = await prisma.booking.findMany({
+    const rows = await tenantPrisma().booking.findMany({
       where: { guestId },
       orderBy: { createdAt: "desc" },
       take: Math.max(1, Math.floor(limit)),
@@ -466,11 +468,11 @@ export const bookings = {
 
   async stats() {
     const [total, confirmed, cancelled, upcoming, createdLast30Days] = await Promise.all([
-      prisma.booking.count(),
-      prisma.booking.count({ where: { status: "confirmed" } }),
-      prisma.booking.count({ where: { status: "cancelled" } }),
-      prisma.booking.count({ where: { status: "confirmed", checkOut: { gt: todayIsoDate() } } }),
-      prisma.booking.count({
+      tenantPrisma().booking.count(),
+      tenantPrisma().booking.count({ where: { status: "confirmed" } }),
+      tenantPrisma().booking.count({ where: { status: "cancelled" } }),
+      tenantPrisma().booking.count({ where: { status: "confirmed", checkOut: { gt: todayIsoDate() } } }),
+      tenantPrisma().booking.count({
         where: { createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
       }),
     ]);
@@ -478,7 +480,7 @@ export const bookings = {
   },
 
   async list(limit = 100): Promise<Booking[]> {
-    const rows = await prisma.booking.findMany({
+    const rows = await tenantPrisma().booking.findMany({
       orderBy: { createdAt: "desc" },
       take: Math.max(1, Math.floor(limit)),
     });
@@ -486,7 +488,7 @@ export const bookings = {
   },
 
   async upcoming(limit = 100): Promise<Booking[]> {
-    const rows = await prisma.booking.findMany({
+    const rows = await tenantPrisma().booking.findMany({
       where: { status: "confirmed", checkOut: { gt: todayIsoDate() } },
       orderBy: { checkIn: "asc" },
       take: Math.max(1, Math.floor(limit)),
@@ -497,14 +499,14 @@ export const bookings = {
 
 export const guests = {
   async findByEmail(email: string): Promise<Guest | undefined> {
-    const row = await prisma.guest.findUnique({
+    const row = await tenantPrisma().guest.findUnique({
       where: { email: email.trim().toLowerCase() },
     });
     return row ? mapGuest(row) : undefined;
   },
 
   async findById(guestId: string): Promise<Guest | undefined> {
-    const row = await prisma.guest.findUnique({ where: { id: guestId } });
+    const row = await tenantPrisma().guest.findUnique({ where: { id: guestId } });
     return row ? mapGuest(row) : undefined;
   },
 
@@ -516,7 +518,7 @@ export const guests = {
     preferredLanguage?: string;
   }): Promise<Guest> {
     const guestId = id();
-    await prisma.guest.create({
+    await tenantPrisma().guest.create({
       data: {
         id: guestId,
         name: data.name.trim(),
@@ -532,14 +534,14 @@ export const guests = {
   },
 
   async recordVisit(guestId: string) {
-    await prisma.guest.update({
+    await tenantPrisma().guest.update({
       where: { id: guestId },
       data: { visitCount: { increment: 1 }, lastVisitAt: new Date() },
     });
   },
 
   async recordMessage(guestId: string) {
-    await prisma.guest.update({
+    await tenantPrisma().guest.update({
       where: { id: guestId },
       data: { messageCount: { increment: 1 } },
     });
@@ -550,13 +552,13 @@ export const guests = {
     start.setUTCHours(0, 0, 0, 0);
     const end = new Date(start);
     end.setUTCDate(end.getUTCDate() + 1);
-    return prisma.interaction.count({
+    return tenantPrisma().interaction.count({
       where: { guestId, createdAt: { gte: start, lt: end } },
     });
   },
 
   async listLoyal(limit = 50) {
-    const rows = await prisma.guest.findMany({
+    const rows = await tenantPrisma().guest.findMany({
       select: {
         id: true,
         name: true,
@@ -727,7 +729,7 @@ export const diningReservations = {
     guestId?: string | null;
     specialRequests?: string | null;
   }): Promise<DiningReservation> {
-    const row = await prisma.diningReservation.create({
+    const row = await tenantPrisma().diningReservation.create({
       data: {
         id: data.id,
         venueName: data.venueName,
@@ -746,12 +748,12 @@ export const diningReservations = {
   },
 
   async getById(reservationId: string): Promise<DiningReservation | undefined> {
-    const row = await prisma.diningReservation.findUnique({ where: { id: reservationId } });
+    const row = await tenantPrisma().diningReservation.findUnique({ where: { id: reservationId } });
     return row ? mapDiningReservation(row) : undefined;
   },
 
   async listByGuestId(guestId: string, limit = 50): Promise<DiningReservation[]> {
-    const rows = await prisma.diningReservation.findMany({
+    const rows = await tenantPrisma().diningReservation.findMany({
       where: { guestId },
       orderBy: { createdAt: "desc" },
       take: Math.max(1, Math.floor(limit)),
@@ -760,7 +762,7 @@ export const diningReservations = {
   },
 
   async listRecent(limit = 50): Promise<DiningReservation[]> {
-    const rows = await prisma.diningReservation.findMany({
+    const rows = await tenantPrisma().diningReservation.findMany({
       orderBy: { createdAt: "desc" },
       take: Math.max(1, Math.floor(limit)),
     });
@@ -776,7 +778,7 @@ export const feedback = {
     guestId?: string | null;
   }) {
     const feedbackId = id();
-    await prisma.feedback.create({
+    await tenantPrisma().feedback.create({
       data: {
         id: feedbackId,
         messageContent: data.messageContent,
@@ -789,14 +791,14 @@ export const feedback = {
   },
 
   async stats() {
-    const total = await prisma.feedback.count();
-    const up = await prisma.feedback.count({ where: { rating: "up" } });
+    const total = await tenantPrisma().feedback.count();
+    const up = await tenantPrisma().feedback.count({ where: { rating: "up" } });
     const down = total - up;
     return { total, up, down, satisfaction: total > 0 ? Math.round((up / total) * 100) : 100 };
   },
 
   async recent(limit = 20) {
-    const rows = await prisma.feedback.findMany({
+    const rows = await tenantPrisma().feedback.findMany({
       orderBy: { createdAt: "desc" },
       take: limit,
     });
@@ -813,7 +815,7 @@ export const serviceRequests = {
     guestId?: string;
     priority?: string;
   }): Promise<ServiceRequest> {
-    const row = await prisma.serviceRequest.create({
+    const row = await tenantPrisma().serviceRequest.create({
       data: {
         id: id(),
         type: data.type,
@@ -829,7 +831,7 @@ export const serviceRequests = {
 
   async updateStatus(requestId: string, status: string, staffNotes?: string): Promise<ServiceRequest | null> {
     try {
-      const row = await prisma.serviceRequest.update({
+      const row = await tenantPrisma().serviceRequest.update({
         where: { id: requestId },
         data: {
           status,
@@ -844,7 +846,7 @@ export const serviceRequests = {
   },
 
   async listOpen(limit = 50): Promise<ServiceRequest[]> {
-    const rows = await prisma.serviceRequest.findMany({
+    const rows = await tenantPrisma().serviceRequest.findMany({
       where: { status: { in: ["open", "in_progress"] } },
       orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
       take: limit,
@@ -853,7 +855,7 @@ export const serviceRequests = {
   },
 
   async listRecent(limit = 50): Promise<ServiceRequest[]> {
-    const rows = await prisma.serviceRequest.findMany({
+    const rows = await tenantPrisma().serviceRequest.findMany({
       orderBy: { createdAt: "desc" },
       take: limit,
     });
@@ -861,14 +863,14 @@ export const serviceRequests = {
   },
 
   async totalCount(): Promise<number> {
-    return prisma.serviceRequest.count();
+    return tenantPrisma().serviceRequest.count();
   },
 
   async countByStatus(): Promise<{ open: number; in_progress: number; completed: number }> {
     const [open, inProgress, completed] = await Promise.all([
-      prisma.serviceRequest.count({ where: { status: "open" } }),
-      prisma.serviceRequest.count({ where: { status: "in_progress" } }),
-      prisma.serviceRequest.count({ where: { status: "completed" } }),
+      tenantPrisma().serviceRequest.count({ where: { status: "open" } }),
+      tenantPrisma().serviceRequest.count({ where: { status: "in_progress" } }),
+      tenantPrisma().serviceRequest.count({ where: { status: "completed" } }),
     ]);
     return { open, in_progress: inProgress, completed };
   },
@@ -889,7 +891,7 @@ export const spaReservations = {
     price?: number;
     currency?: string;
   }): Promise<SpaReservation> {
-    const row = await prisma.spaReservation.create({
+    const row = await tenantPrisma().spaReservation.create({
       data: {
         id: id(),
         serviceName: data.serviceName,
@@ -911,7 +913,7 @@ export const spaReservations = {
 
   async cancel(reservationId: string): Promise<SpaReservation | null> {
     try {
-      const row = await prisma.spaReservation.update({
+      const row = await tenantPrisma().spaReservation.update({
         where: { id: reservationId },
         data: { status: "cancelled" },
       });
@@ -922,7 +924,7 @@ export const spaReservations = {
   },
 
   async listByGuestId(guestId: string, limit = 10): Promise<SpaReservation[]> {
-    const rows = await prisma.spaReservation.findMany({
+    const rows = await tenantPrisma().spaReservation.findMany({
       where: { guestId },
       orderBy: { createdAt: "desc" },
       take: limit,
@@ -931,7 +933,7 @@ export const spaReservations = {
   },
 
   async listRecent(limit = 50): Promise<SpaReservation[]> {
-    const rows = await prisma.spaReservation.findMany({
+    const rows = await tenantPrisma().spaReservation.findMany({
       orderBy: { createdAt: "desc" },
       take: limit,
     });
@@ -949,7 +951,7 @@ export const reviews = {
     title?: string;
     comment?: string;
   }): Promise<Review> {
-    const row = await prisma.review.create({
+    const row = await tenantPrisma().review.create({
       data: {
         id: id(),
         guestId: data.guestId ?? null,
@@ -966,7 +968,7 @@ export const reviews = {
 
   async moderate(reviewId: string, status: string, staffResponse?: string): Promise<Review | null> {
     try {
-      const row = await prisma.review.update({
+      const row = await tenantPrisma().review.update({
         where: { id: reviewId },
         data: { status, staffResponse: staffResponse ?? undefined },
       });
@@ -977,7 +979,7 @@ export const reviews = {
   },
 
   async listApproved(hotelId?: string, limit = 50): Promise<Review[]> {
-    const rows = await prisma.review.findMany({
+    const rows = await tenantPrisma().review.findMany({
       where: { status: "approved", ...(hotelId ? { hotelId } : {}) },
       orderBy: { createdAt: "desc" },
       take: limit,
@@ -986,7 +988,7 @@ export const reviews = {
   },
 
   async listAll(limit = 50): Promise<Review[]> {
-    const rows = await prisma.review.findMany({
+    const rows = await tenantPrisma().review.findMany({
       orderBy: { createdAt: "desc" },
       take: limit,
     });
@@ -995,7 +997,7 @@ export const reviews = {
 
   async stats(hotelId?: string): Promise<{ total: number; avgRating: number; distribution: Record<number, number> }> {
     const where = { status: "approved", ...(hotelId ? { hotelId } : {}) };
-    const rows = await prisma.review.findMany({ where, select: { rating: true } });
+    const rows = await tenantPrisma().review.findMany({ where, select: { rating: true } });
     const total = rows.length;
     const avgRating = total > 0 ? rows.reduce((sum, r) => sum + r.rating, 0) / total : 0;
     const distribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -1004,7 +1006,7 @@ export const reviews = {
   },
 
   async listByGuestId(guestId: string, limit = 10): Promise<Review[]> {
-    const rows = await prisma.review.findMany({
+    const rows = await tenantPrisma().review.findMany({
       where: { guestId },
       orderBy: { createdAt: "desc" },
       take: limit,

@@ -70,16 +70,16 @@ function normalizeRoom(value: unknown): RoomType | null {
   const name = firstString(record, ["name", "roomType", "typeName", "title", "code"]);
   if (!name) return null;
 
-  const imageUrl = firstString(record, ["imageUrl", "image", "photoUrl"]);
-  const photos = firstArray(record, ["images", "photos"]);
+  const imageUrl = firstString(record, ["imageUrl", "image", "photoUrl", "featuredImage"]);
+  const photos = firstArray(record, ["images", "photos", "galleryImages"]);
   const firstPhoto = typeof photos[0] === "string" ? photos[0] : firstString(asRecord(photos[0]), ["url", "src"]);
 
   return {
     name,
     pricePerNight: firstNumber(record, ["pricePerNight", "baseRate", "rate", "price", "amount"], 0),
     currency: firstString(record, ["currency", "currencyCode"], "USD").toUpperCase(),
-    description: firstString(record, ["description", "summary", "details"], `${name} at the hotel.`),
-    maxOccupancy: Math.max(1, firstNumber(record, ["maxOccupancy", "occupancy", "maxGuests", "capacity"], 2)),
+    description: firstString(record, ["description", "summary", "details", "desc", "stayInfo"], `${name} at the hotel.`),
+    maxOccupancy: Math.max(1, firstNumber(record, ["maxOccupancy", "occupancy", "maxGuests", "capacity", "guests"], 2)),
     category: firstString(record, ["category", "class", "roomClass"]) || undefined,
     imageUrl: imageUrl || firstPhoto || undefined,
     amenitiesIncluded: textList(record.amenitiesIncluded ?? record.amenities ?? record.features),
@@ -106,7 +106,7 @@ function normalizeDining(value: unknown): DiningVenue | null {
   if (!name) return null;
   return {
     name,
-    cuisine: firstString(record, ["cuisine", "type", "category"], "Dining"),
+    cuisine: firstString(record, ["cuisine", "type"], firstString(asRecord(record.category), ["name"], "Dining")),
     hours: firstString(record, ["hours", "openingHours", "schedule"], "Ask the front desk for current hours."),
     description: firstString(record, ["description", "summary", "details"], `${name} is available for hotel guests.`),
   };
@@ -169,8 +169,22 @@ export function normalizeHmsPayload(payload: unknown, current: HotelConfig): Hms
   const dining = firstArray(root, ["dining", "diningVenues", "restaurants", "outlets"]).map(normalizeDining).filter(Boolean) as DiningVenue[];
   const spa = firstArray(root, ["spa", "spaServices", "wellness", "treatments"]).map(normalizeSpa).filter(Boolean) as SpaService[];
   const faq = firstArray(root, ["customFAQ", "faq", "faqs", "knowledgeBase"]).map(normalizeFaq).filter(Boolean) as { question: string; answer: string }[];
+  const settingsArray = firstArray(root, ["settings"]);
+  const policiesFromSettings: UnknownRecord = {};
+  
+  for (const s of settingsArray) {
+    const sr = asRecord(s);
+    if (sr && typeof sr.key === "string" && typeof sr.value === "string") {
+      const camelKey = sr.key.replace(/_([a-z])/g, g => g[1].toUpperCase());
+      policiesFromSettings[camelKey] = sr.value;
+      faq.push({
+        question: typeof sr.label === "string" ? sr.label : sr.key.replace(/_/g, " "),
+        answer: sr.value,
+      });
+    }
+  }
 
-  const policies = asRecord(root.policies);
+  const policies = asRecord(root.policies) ?? policiesFromSettings;
   const operations = asRecord(root.operations ?? root.hours);
 
   const updates: Partial<HotelConfig> = {

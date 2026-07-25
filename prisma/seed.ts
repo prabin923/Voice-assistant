@@ -118,9 +118,9 @@ async function main() {
   });
 
   await prisma.roomInventoryDefault.upsert({
-    where: { roomType: "Standard Room" },
+    where: { hotelId_roomType: { hotelId, roomType: "Standard Room" } },
     update: { count: 5 },
-    create: { roomType: "Standard Room", count: 5 },
+    create: { hotelId, roomType: "Standard Room", count: 5 },
   });
 
   await prisma.guest.upsert({
@@ -128,6 +128,7 @@ async function main() {
     update: {},
     create: {
       id: guestId,
+      hotelId,
       name: "Sample Guest",
       email: "guest@example.com",
       password: bcrypt.hashSync("password123", 10),
@@ -142,6 +143,7 @@ async function main() {
     update: {},
     create: {
       id: bookingId,
+      hotelId,
       roomType: "Standard Room",
       checkIn: "2026-12-01",
       checkOut: "2026-12-03",
@@ -157,6 +159,7 @@ async function main() {
   await prisma.interaction.create({
     data: {
       id: randomUUID(),
+      hotelId,
       guestMessage: "What time is check-in?",
       aiResponse: "Check-in begins at 3:00 PM.",
       language: "en-US",

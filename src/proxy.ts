@@ -30,14 +30,14 @@ export async function proxy(request: NextRequest) {
   const token = request.cookies.get("session")?.value;
   const session = token ? await verifySession(token) : null;
 
-  // Redirect authenticated users away from auth pages
-  if (authRoutes.some((route) => matchesRoute(path, route)) && session) {
-    return NextResponse.redirect(new URL("/settings", request.url));
-  }
-
   // Protect admin pages
   if (protectedRoutes.some((route) => matchesRoute(path, route)) && !session) {
     return NextResponse.redirect(new URL("/admin/login", request.url));
+  }
+
+  // Redirect authenticated users away from auth pages
+  if (authRoutes.some((route) => matchesRoute(path, route)) && session) {
+    return NextResponse.redirect(new URL("/settings", request.url));
   }
 
   // Protect config mutations only; GET is public (assistant + landing branding)
@@ -50,7 +50,16 @@ export async function proxy(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  return NextResponse.next();
+  const requestHeaders = new Headers(request.headers);
+  if (session?.hotelId) {
+    requestHeaders.set("x-hotel-id", session.hotelId);
+  }
+
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
 }
 
 export const config = {
