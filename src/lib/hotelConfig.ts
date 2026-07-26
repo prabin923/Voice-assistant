@@ -345,3 +345,26 @@ export async function resetHotelConfig(hotelId?: string): Promise<HotelConfig> {
   scheduleKnowledgeSync(currentConfig);
   return currentConfig;
 }
+
+export async function findHotelByPhoneNumber(phoneNumber: string) {
+  if (!phoneNumber) return null;
+  const target = phoneNumber.replace(/\D/g, "");
+  if (!target) return null;
+
+  const allHotels = await hotels.list();
+  for (const hotel of allHotels) {
+    if (!hotel.config || hotel.config === "{}") continue;
+    try {
+      const config = JSON.parse(hotel.config) as HotelConfig;
+      const telnyx = config.telephony?.telnyxPhoneNumber?.replace(/\D/g, "");
+      const contact = config.contact?.phone?.replace(/\D/g, "");
+      // endsWith handles country codes correctly if they differ slightly
+      if ((telnyx && target.endsWith(telnyx)) || (contact && target.endsWith(contact))) {
+        return hotel;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}

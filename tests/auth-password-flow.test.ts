@@ -73,12 +73,12 @@ vi.mock("@/lib/auth", () => ({
   requireAuth: mockRequireAuth,
 }));
 
-vi.mock("@/lib/rateLimit", () => ({
+vi.mock("@/lib/ratelimit", () => ({
   getClientIP: mockGetClientIP,
   checkRateLimit: mockCheckRateLimit,
 }));
 
-vi.mock("@/lib/rateLimitDistributed", () => ({
+vi.mock("@/lib/ratelimitDistributed", () => ({
   checkRateLimitAsync: mockCheckRateLimitAsync,
 }));
 

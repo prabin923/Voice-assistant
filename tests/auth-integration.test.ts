@@ -51,12 +51,12 @@ vi.mock("@/lib/auth", () => ({
   clearSession: mockClearSession,
 }));
 
-vi.mock("@/lib/rateLimit", () => ({
+vi.mock("@/lib/ratelimit", () => ({
   checkRateLimit: mockCheckRateLimit,
   getClientIP: mockGetClientIP,
 }));
 
-vi.mock("@/lib/rateLimitDistributed", () => ({
+vi.mock("@/lib/ratelimitDistributed", () => ({
   checkRateLimitAsync: mockCheckRateLimitAsync,
 }));
 

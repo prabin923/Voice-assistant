@@ -173,6 +173,8 @@ async function handleGather(req: Request, language: string, transcript: string):
   return xmlResponse(buildTelnyxConversationXml(aiReply, gatherActionUrl(req), language));
 }
 
+import { findHotelByPhoneNumber, runWithTenant } from "@/lib/hotelConfig";
+
 async function handleTelnyxPost(req: Request, action: TelnyxWebhookAction): Promise<Response> {
   const { raw, data } = await parseTelnyxBody(req);
 
@@ -180,18 +182,24 @@ async function handleTelnyxPost(req: Request, action: TelnyxWebhookAction): Prom
     return new Response("Forbidden", { status: 403 });
   }
 
-  const ctx = extractTelnyxCallContext(data);
-  forwardTelnyxDebugPayload(req, { action, raw, data, context: ctx });
+  const to = data["To"] || data["to"] || data["data.payload.to"] || data["data.payload.called_number"] || "";
+  const hotel = await findHotelByPhoneNumber(to);
+  const hotelId = hotel ? hotel.id : undefined;
 
-  console.log(
-    `[Telnyx Webhook] action=${action} callId=${ctx.callId} from=${ctx.from} event=${ctx.eventType} transcript="${ctx.transcript.slice(0, 80)}"`
-  );
+  return runWithTenant({ hotelId }, async () => {
+    const ctx = extractTelnyxCallContext(data);
+    forwardTelnyxDebugPayload(req, { action, raw, data, context: ctx });
 
-  if (action === "gather") {
-    return handleGather(req, ctx.language, ctx.transcript);
-  }
+    console.log(
+      `[Telnyx Webhook] action=${action} callId=${ctx.callId} from=${ctx.from} to=${to} event=${ctx.eventType} transcript="${String(ctx.transcript).slice(0, 80)}"`
+    );
 
-  return handleInboundCall(req, ctx.language);
+    if (action === "gather") {
+      return handleGather(req, ctx.language, ctx.transcript);
+    }
+
+    return handleInboundCall(req, ctx.language);
+  });
 }
 
 export async function POST(req: Request): Promise<Response> {

@@ -18,6 +18,19 @@ model Hotel {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
+  interactions           Interaction[]
+  supportTickets         SupportTicket[]
+  bookings               Booking[]
+  guests                 Guest[]
+  knowledgeGaps          KnowledgeGap[]
+  diningReservations     DiningReservation[]
+  feedback               Feedback[]
+  serviceRequests        ServiceRequest[]
+  spaReservations        SpaReservation[]
+  roomInventoryDefaults  RoomInventoryDefault[]
+  roomInventoryOverrides RoomInventoryOverride[]
+  reviews                Review[]
+
   @@map("hotels")
 }
 
@@ -28,6 +41,9 @@ model Interaction {
   language     String
   guestId      String?  @map("guest_id")
   createdAt    DateTime @default(now()) @map("created_at")
+
+  hotelId String @map("hotel_id")
+  hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
   @@index([createdAt])
   @@index([guestId])
@@ -45,13 +61,20 @@ model SupportTicket {
   createdAt        DateTime  @default(now()) @map("created_at")
   resolvedAt       DateTime? @map("resolved_at")
 
+  hotelId String @map("hotel_id")
+  hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
   @@map("support_tickets")
 }
 
 model RoomInventoryDefault {
-  roomType String @id @map("room_type")
+  roomType String @map("room_type")
   count    Int
 
+  hotelId String @map("hotel_id")
+  hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@id([hotelId, roomType])
   @@map("room_inventory_defaults")
 }
 
@@ -59,24 +82,29 @@ model RoomInventoryOverride {
   roomType String @map("room_type")
   date     String
   count    Int
+  hotelId  String @map("hotel_id")
+  hotel    Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
-  @@id([roomType, date])
+  @@id([hotelId, roomType, date])
   @@map("room_inventory_overrides")
 }
 
 model Booking {
-  id               String   @id
-  roomType         String   @map("room_type")
-  checkIn          String   @map("check_in")
-  checkOut         String   @map("check_out")
-  rooms            Int
-  guestName        String   @map("guest_name")
-  guestPhone       String   @map("guest_phone")
-  guestEmail       String?  @map("guest_email")
-  guestId          String?  @map("guest_id")
-  status           String   @default("confirmed")
-  specialRequests  String?  @map("special_requests")
-  createdAt        DateTime @default(now()) @map("created_at")
+  id              String   @id
+  roomType        String   @map("room_type")
+  checkIn         String   @map("check_in")
+  checkOut        String   @map("check_out")
+  rooms           Int
+  guestName       String   @map("guest_name")
+  guestPhone      String   @map("guest_phone")
+  guestEmail      String?  @map("guest_email")
+  guestId         String?  @map("guest_id")
+  status          String   @default("confirmed")
+  specialRequests String?  @map("special_requests")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  hotelId String @map("hotel_id")
+  hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
   @@index([guestId])
   @@index([status, checkIn, checkOut])
@@ -90,6 +118,9 @@ model KnowledgeGap {
   language     String   @default("en-US")
   status       String   @default("open")
   createdAt    DateTime @default(now()) @map("created_at")
+
+  hotelId String @map("hotel_id")
+  hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@map("knowledge_gaps")
@@ -108,6 +139,9 @@ model DiningReservation {
   status          String   @default("confirmed")
   specialRequests String?  @map("special_requests")
   createdAt       DateTime @default(now()) @map("created_at")
+
+  hotelId String @map("hotel_id")
+  hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
   @@index([guestId])
   @@index([status, reservationDate])
@@ -138,6 +172,9 @@ model Feedback {
   comment        String?
   guestId        String?  @map("guest_id")
   createdAt      DateTime @default(now()) @map("created_at")
+
+  hotelId String @map("hotel_id")
+  hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
   @@map("feedback")
 }
@@ -182,21 +219,27 @@ model Guest {
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
+  hotelId String @map("hotel_id")
+  hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
   @@map("guests")
 }
 
 model ServiceRequest {
-  id             String    @id
-  type           String
-  description    String
-  roomNumber     String?   @map("room_number")
-  guestName      String    @map("guest_name")
-  guestId        String?   @map("guest_id")
-  status         String    @default("open")
-  priority       String    @default("medium")
-  staffNotes     String?   @map("staff_notes")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  resolvedAt     DateTime? @map("resolved_at")
+  id          String    @id
+  type        String
+  description String
+  roomNumber  String?   @map("room_number")
+  guestName   String    @map("guest_name")
+  guestId     String?   @map("guest_id")
+  status      String    @default("open")
+  priority    String    @default("medium")
+  staffNotes  String?   @map("staff_notes")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  resolvedAt  DateTime? @map("resolved_at")
+
+  hotelId String @map("hotel_id")
+  hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@index([guestId])
@@ -221,26 +264,39 @@ model SpaReservation {
   currency            String   @default("USD")
   createdAt           DateTime @default(now()) @map("created_at")
 
+  hotelId String @map("hotel_id")
+  hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
   @@index([guestId])
   @@index([status, reservationDate])
   @@map("spa_reservations")
 }
 
 model Review {
-  id            String    @id
-  guestId       String?   @map("guest_id")
-  guestName     String    @map("guest_name")
-  bookingId     String?   @map("booking_id")
-  hotelId       String?   @map("hotel_id")
+  id            String   @id
+  guestId       String?  @map("guest_id")
+  guestName     String   @map("guest_name")
+  bookingId     String?  @map("booking_id")
+  hotelId       String?  @map("hotel_id")
   rating        Int
   title         String?
   comment       String?
-  status        String    @default("pending")
-  staffResponse String?   @map("staff_response")
-  createdAt     DateTime  @default(now()) @map("created_at")
+  status        String   @default("pending")
+  staffResponse String?  @map("staff_response")
+  createdAt     DateTime @default(now()) @map("created_at")
+  hotel         Hotel?   @relation(fields: [hotelId], references: [id])
 
   @@index([hotelId])
   @@index([status])
   @@index([guestId])
   @@map("reviews")
+}
+
+model WhatsAppSession {
+  id        String   @id
+  hotelId   String?  @map("hotel_id")
+  history   String   @default("[]")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("whatsapp_sessions")
 }
