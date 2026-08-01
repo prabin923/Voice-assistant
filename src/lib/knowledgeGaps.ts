@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import prisma from "@/lib/prisma";
+import { getRequiredTenantHotelId, tenantPrisma } from "@/lib/prisma-tenant";
 
 export type KnowledgeGapRow = {
   id: string;
@@ -23,7 +23,7 @@ export const knowledgeGaps = {
     const normalized = normalizeQuestion(input.question);
 
     // Dedup: if an open gap with the same normalized question exists, skip insert
-    const existing = await prisma.knowledgeGap.findFirst({
+    const existing = await tenantPrisma().knowledgeGap.findFirst({
       where: { status: "open" },
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -33,7 +33,7 @@ export const knowledgeGaps = {
     }).catch(() => null);
     void existing; // suppress unused warning — using findMany below
 
-    const recentOpen = await prisma.knowledgeGap.findMany({
+    const recentOpen = await tenantPrisma().knowledgeGap.findMany({
       where: { status: "open" },
       orderBy: { createdAt: "desc" },
       take: 200,
@@ -45,7 +45,7 @@ export const knowledgeGaps = {
     );
     if (duplicate) {
       // Return the existing gap row instead of creating a duplicate
-      const row = await prisma.knowledgeGap.findUnique({ where: { id: duplicate.id } });
+      const row = await tenantPrisma().knowledgeGap.findUnique({ where: { id: duplicate.id } });
       if (row) {
         return {
           id: row.id,
@@ -58,9 +58,11 @@ export const knowledgeGaps = {
       }
     }
 
-    const row = await prisma.knowledgeGap.create({
+    const hotelId = await getRequiredTenantHotelId();
+    const row = await tenantPrisma().knowledgeGap.create({
       data: {
         id: randomUUID(),
+        hotelId,
         question: input.question.slice(0, 500),
         guestMessage: input.guestMessage.slice(0, 2000),
         language: input.language.slice(0, 12),
@@ -78,7 +80,7 @@ export const knowledgeGaps = {
   },
 
   async listOpen(limit = 50): Promise<KnowledgeGapRow[]> {
-    const rows = await prisma.knowledgeGap.findMany({
+    const rows = await tenantPrisma().knowledgeGap.findMany({
       where: { status: "open" },
       orderBy: { createdAt: "desc" },
       take: Math.max(1, Math.floor(limit)),
@@ -94,6 +96,6 @@ export const knowledgeGaps = {
   },
 
   async updateStatus(id: string, status: "open" | "added_to_faq" | "dismissed"): Promise<void> {
-    await prisma.knowledgeGap.update({ where: { id }, data: { status } });
+    await tenantPrisma().knowledgeGap.update({ where: { id }, data: { status } });
   },
 };

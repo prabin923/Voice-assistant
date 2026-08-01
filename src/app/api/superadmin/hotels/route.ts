@@ -36,7 +36,7 @@ export async function GET() {
 
     const hotelName: string = cfg.branding?.hotelName ?? row.name;
     const isConfigured = Boolean(
-      hotelName && hotelName !== "Aurelian Grand" && (cfg.rooms?.length ?? 0) > 0
+      hotelName && hotelName !== "Murmur" && (cfg.rooms?.length ?? 0) > 0
     );
 
     return {

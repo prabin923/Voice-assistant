@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import prisma from "@/lib/prisma";
-import { tenantPrisma } from "@/lib/prisma-tenant";
+import { getRequiredTenantHotelId, tenantPrisma } from "@/lib/prisma-tenant";
 
 import {
   mapAuthAuditLog,
@@ -94,9 +94,11 @@ export const interactions = {
     language: string;
     guestId?: string | null;
   }) {
+    const hotelId = await getRequiredTenantHotelId();
     await tenantPrisma().interaction.create({
       data: {
         id: id(),
+        hotelId,
         guestMessage: data.guestMessage,
         aiResponse: data.aiResponse,
         language: data.language,
@@ -199,9 +201,11 @@ export const supportTickets = {
     escalationReason?: string;
   }): Promise<SupportTicket> {
     const ticketId = id();
+    const hotelId = await getRequiredTenantHotelId();
     await tenantPrisma().supportTicket.create({
       data: {
         id: ticketId,
+        hotelId,
         guestMessage: data.guestMessage,
         aiResponse: data.aiResponse,
         language: data.language,
@@ -257,34 +261,36 @@ export const availability = {
   },
 
   async hasDefault(roomType: string): Promise<boolean> {
-    const row = await tenantPrisma().roomInventoryDefault.findUnique({ where: { roomType } });
+    const row = await tenantPrisma().roomInventoryDefault.findFirst({ where: { roomType } });
     return Boolean(row);
   },
 
   async getDefault(roomType: string): Promise<number> {
-    const row = await tenantPrisma().roomInventoryDefault.findUnique({ where: { roomType } });
+    const row = await tenantPrisma().roomInventoryDefault.findFirst({ where: { roomType } });
     return row?.count ?? 1;
   },
 
   async setDefault(roomType: string, count: number) {
+    const hotelId = await getRequiredTenantHotelId();
     await tenantPrisma().roomInventoryDefault.upsert({
-      where: { roomType },
-      create: { roomType, count: Math.max(0, Math.floor(count)) },
+      where: { hotelId_roomType: { hotelId, roomType } },
+      create: { hotelId, roomType, count: Math.max(0, Math.floor(count)) },
       update: { count: Math.max(0, Math.floor(count)) },
     });
   },
 
   async getOverride(roomType: string, date: string): Promise<number | null> {
-    const row = await tenantPrisma().roomInventoryOverride.findUnique({
-      where: { roomType_date: { roomType, date } },
+    const row = await tenantPrisma().roomInventoryOverride.findFirst({
+      where: { roomType, date },
     });
     return row?.count ?? null;
   },
 
   async setOverride(roomType: string, date: string, count: number) {
+    const hotelId = await getRequiredTenantHotelId();
     await tenantPrisma().roomInventoryOverride.upsert({
-      where: { roomType_date: { roomType, date } },
-      create: { roomType, date, count: Math.max(0, Math.floor(count)) },
+      where: { hotelId_roomType_date: { hotelId, roomType, date } },
+      create: { hotelId, roomType, date, count: Math.max(0, Math.floor(count)) },
       update: { count: Math.max(0, Math.floor(count)) },
     });
   },
@@ -333,6 +339,7 @@ export const bookings = {
   },
 
   async createTransactional(data: CreateBookingData): Promise<Booking> {
+    const hotelId = await getRequiredTenantHotelId();
     return prisma.$transaction(async (tx) => {
       const normalizedRooms = Math.max(1, Math.floor(data.rooms));
       const status = data.status ?? "confirmed";
@@ -352,6 +359,7 @@ export const bookings = {
       await tx.booking.create({
         data: {
           id: bookingId,
+          hotelId,
           roomType: data.roomType,
           checkIn: data.checkIn,
           checkOut: data.checkOut,
@@ -499,14 +507,14 @@ export const bookings = {
 
 export const guests = {
   async findByEmail(email: string): Promise<Guest | undefined> {
-    const row = await tenantPrisma().guest.findUnique({
+    const row = await tenantPrisma().guest.findFirst({
       where: { email: email.trim().toLowerCase() },
     });
     return row ? mapGuest(row) : undefined;
   },
 
   async findById(guestId: string): Promise<Guest | undefined> {
-    const row = await tenantPrisma().guest.findUnique({ where: { id: guestId } });
+    const row = await tenantPrisma().guest.findFirst({ where: { id: guestId } });
     return row ? mapGuest(row) : undefined;
   },
 
@@ -518,9 +526,11 @@ export const guests = {
     preferredLanguage?: string;
   }): Promise<Guest> {
     const guestId = id();
+    const hotelId = await getRequiredTenantHotelId();
     await tenantPrisma().guest.create({
       data: {
         id: guestId,
+        hotelId,
         name: data.name.trim(),
         email: data.email.trim().toLowerCase(),
         password: data.password,
@@ -642,6 +652,11 @@ export const hotels = {
     const row = await prisma.hotel.findFirst();
     return row ? mapHotel(row) : undefined;
   },
+
+  async list(): Promise<Hotel[]> {
+    const rows = await prisma.hotel.findMany({ orderBy: { createdAt: "asc" } });
+    return rows.map(mapHotel);
+  },
 };
 
 export const authAuditLogs = {
@@ -729,9 +744,11 @@ export const diningReservations = {
     guestId?: string | null;
     specialRequests?: string | null;
   }): Promise<DiningReservation> {
+    const hotelId = await getRequiredTenantHotelId();
     const row = await tenantPrisma().diningReservation.create({
       data: {
         id: data.id,
+        hotelId,
         venueName: data.venueName,
         reservationDate: data.reservationDate,
         reservationTime: data.reservationTime,
@@ -778,9 +795,11 @@ export const feedback = {
     guestId?: string | null;
   }) {
     const feedbackId = id();
+    const hotelId = await getRequiredTenantHotelId();
     await tenantPrisma().feedback.create({
       data: {
         id: feedbackId,
+        hotelId,
         messageContent: data.messageContent,
         rating: data.rating,
         comment: data.comment || null,
@@ -815,9 +834,11 @@ export const serviceRequests = {
     guestId?: string;
     priority?: string;
   }): Promise<ServiceRequest> {
+    const hotelId = await getRequiredTenantHotelId();
     const row = await tenantPrisma().serviceRequest.create({
       data: {
         id: id(),
+        hotelId,
         type: data.type,
         description: data.description,
         roomNumber: data.roomNumber ?? null,
@@ -891,9 +912,11 @@ export const spaReservations = {
     price?: number;
     currency?: string;
   }): Promise<SpaReservation> {
+    const hotelId = await getRequiredTenantHotelId();
     const row = await tenantPrisma().spaReservation.create({
       data: {
         id: id(),
+        hotelId,
         serviceName: data.serviceName,
         reservationDate: data.reservationDate,
         reservationTime: data.reservationTime,

@@ -61,8 +61,11 @@ function classifyPriority(description: string): string {
 }
 
 export function isServiceRequestIntent(message: string): boolean {
-  const lower = message.toLowerCase();
-  return SERVICE_KEYWORDS.some((kw) => lower.includes(kw)) &&
+  const containsKeyword = SERVICE_KEYWORDS.some((keyword) => {
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`\\b${escaped}\\b`, "i").test(message);
+  });
+  return containsKeyword &&
     !(/\b(book|reserve|reservation|check.?in|check.?out|cancel|modify|available)\b/i.test(message));
 }
 

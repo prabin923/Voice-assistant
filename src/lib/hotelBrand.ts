@@ -3,11 +3,11 @@ import type { BrandingConfig, HotelConfig } from "@/lib/hotelConfig";
 export const HOTEL_CONFIG_UPDATED_EVENT = "hotel-config-updated";
 
 const DEFAULT_BRANDING: BrandingConfig = {
-  hotelName: "Aurelian Grand",
+  hotelName: "Murmur",
   tagline: "Where Elegance Meets Serenity",
   accentColor: "#c9a96e",
-  welcomeMessage: "Welcome to Aurelian Grand! How can I assist you with your stay today?",
-  farewellMessage: "Thank you for choosing Aurelian Grand. Have a wonderful day!",
+  welcomeMessage: "Welcome to Murmur! How can I assist you with your stay today?",
+  farewellMessage: "Thank you for choosing Murmur. Have a wonderful day!",
 };
 
 export function defaultWelcomeMessage(hotelName: string): string {

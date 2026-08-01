@@ -15,22 +15,23 @@ async function main() {
   const guestId = randomUUID();
   const bookingId = randomUUID();
 
-  // Hotel 1: Aurelian Grand (existing)
-  await prisma.hotel.upsert({
+  // Hotel 1: Murmur (existing)
+  const murmur = await prisma.hotel.upsert({
     where: { email: "admin@hotel.com" },
     update: {
-      name: "Aurelian Grand",
+      name: "Murmur",
       slug: "aurelian-grand",
     },
     create: {
       id: hotelId,
-      name: "Aurelian Grand",
+      name: "Murmur",
       slug: "aurelian-grand",
       email: "admin@hotel.com",
       password: bcrypt.hashSync("password123", 10),
       config: "{}",
     },
   });
+  const actualHotelId = murmur.id;
 
   // Hotel 2: The Sapphire Resort
   await prisma.hotel.upsert({
@@ -117,10 +118,45 @@ async function main() {
     },
   });
 
+  // Hotel 7: Linit Exceeds (demo account)
+  const linitExceeds = await prisma.hotel.upsert({
+    where: { email: "admin@linitexceeds.com" },
+    update: {
+      name: "Linit Exceeds",
+      slug: "linit-exceeds",
+    },
+    create: {
+      id: randomUUID(),
+      name: "Linit Exceeds",
+      slug: "linit-exceeds",
+      email: "admin@linitexceeds.com",
+      password: bcrypt.hashSync("password123", 10),
+      config: "{}",
+    },
+  });
+
+  await prisma.guest.upsert({
+    where: { email: "admin@linitexceeds.com" },
+    update: {
+      name: "Linit Exceeds Demo Guest",
+      hotelId: linitExceeds.id,
+    },
+    create: {
+      id: randomUUID(),
+      hotelId: linitExceeds.id,
+      name: "Linit Exceeds Demo Guest",
+      email: "admin@linitexceeds.com",
+      password: bcrypt.hashSync("password123", 10),
+      phone: "+15551234567",
+      visitCount: 1,
+      lastVisitAt: new Date(),
+    },
+  });
+
   await prisma.roomInventoryDefault.upsert({
-    where: { hotelId_roomType: { hotelId, roomType: "Standard Room" } },
+    where: { hotelId_roomType: { hotelId: actualHotelId, roomType: "Standard Room" } },
     update: { count: 5 },
-    create: { hotelId, roomType: "Standard Room", count: 5 },
+    create: { hotelId: actualHotelId, roomType: "Standard Room", count: 5 },
   });
 
   await prisma.guest.upsert({
@@ -128,11 +164,27 @@ async function main() {
     update: {},
     create: {
       id: guestId,
-      hotelId,
+      hotelId: actualHotelId,
       name: "Sample Guest",
       email: "guest@example.com",
       password: bcrypt.hashSync("password123", 10),
       phone: "+15551234567",
+      visitCount: 1,
+      lastVisitAt: new Date(),
+    },
+  });
+
+  // Guest account for quick sign-in testing
+  await prisma.guest.upsert({
+    where: { email: "prabin@guest.com" },
+    update: {},
+    create: {
+      id: randomUUID(),
+      hotelId: actualHotelId,
+      name: "Prabin Sharma",
+      email: "prabin@guest.com",
+      password: bcrypt.hashSync("password123", 10),
+      phone: "+9779800000000",
       visitCount: 1,
       lastVisitAt: new Date(),
     },
@@ -143,7 +195,7 @@ async function main() {
     update: {},
     create: {
       id: bookingId,
-      hotelId,
+      hotelId: actualHotelId,
       roomType: "Standard Room",
       checkIn: "2026-12-01",
       checkOut: "2026-12-03",
@@ -159,7 +211,7 @@ async function main() {
   await prisma.interaction.create({
     data: {
       id: randomUUID(),
-      hotelId,
+      hotelId: actualHotelId,
       guestMessage: "What time is check-in?",
       aiResponse: "Check-in begins at 3:00 PM.",
       language: "en-US",

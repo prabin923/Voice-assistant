@@ -19,7 +19,7 @@ import {
 describe('Hotel Config — Default Configuration', () => {
 
   it('TC-4.1: Default config should have correct hotel name', () => {
-    expect(DEFAULT_HOTEL_CONFIG.branding.hotelName).toBe('Aurelian Grand');
+    expect(DEFAULT_HOTEL_CONFIG.branding.hotelName).toBe('Murmur');
   });
 
   it('should have valid accent color hex', () => {

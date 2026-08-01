@@ -12,7 +12,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // Since the store is module-level, we use dynamic imports with cache clearing.
 
 // Direct import for type reference
-import { checkRateLimit, getClientIP } from '@/lib/ratelimit';
+import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 
 describe('Rate Limiter — checkRateLimit()', () => {
 

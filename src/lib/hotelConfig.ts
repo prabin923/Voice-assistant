@@ -128,11 +128,11 @@ export interface HotelConfig {
 // ============================================================
 export const DEFAULT_HOTEL_CONFIG: HotelConfig = {
   branding: {
-    hotelName: "Aurelian Grand",
+    hotelName: "Murmur",
     tagline: "Where Elegance Meets Serenity",
     accentColor: "#c9a96e",
-    welcomeMessage: "Welcome to Aurelian Grand! How can I assist you with your stay today?",
-    farewellMessage: "Thank you for choosing Aurelian Grand. Have a wonderful day!",
+    welcomeMessage: "Welcome to Murmur! How can I assist you with your stay today?",
+    farewellMessage: "Thank you for choosing Murmur. Have a wonderful day!",
   },
   telephony: {
     webhookUrl: "/api/telephony/telnyx",

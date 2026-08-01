@@ -276,7 +276,7 @@ export default function HomePage() {
                   <div className="w-full max-w-xs space-y-3">
                     {[
                       { role: "user", text: "Which hotels have a rooftop pool?" },
-                      { role: "assistant", text: "The Aurelian Grand has a rooftop infinity pool on the 12th floor with city views. Want me to tell you more, or compare it with nearby options?" },
+                      { role: "assistant", text: "Murmur has a rooftop infinity pool on the 12th floor with city views. Want me to tell you more, or compare it with nearby options?" },
                       { role: "user", text: "What's the starting price?" },
                     ].map((msg, i) => (
                       <div key={i} className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>

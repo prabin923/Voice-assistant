@@ -4,6 +4,7 @@ import {
   DEFAULT_HOTEL_CONFIG,
   type HotelConfig,
 } from "@/lib/hotelConfig";
+import { defaultFarewellMessage, defaultWelcomeMessage } from "@/lib/hotelBrand";
 import { normalizeHotelSlug } from "@/lib/slug";
 
 type TenantStore = {
@@ -21,12 +22,21 @@ function cacheKey(slug?: string, hotelId?: string): string {
 }
 
 async function loadConfigForHotelRow(
-  row: { id: string; config: string } | undefined
+  row: { id: string; name: string; config: string } | undefined
 ): Promise<{ hotelId?: string; config: HotelConfig }> {
   if (row?.config && row.config !== "{}") {
     return { hotelId: row.id, config: JSON.parse(row.config) as HotelConfig };
   }
-  return { hotelId: row?.id, config: { ...DEFAULT_HOTEL_CONFIG } };
+
+  const config = structuredClone(DEFAULT_HOTEL_CONFIG);
+  const hotelName = row?.name.trim();
+  if (hotelName) {
+    config.branding.hotelName = hotelName;
+    config.branding.welcomeMessage = defaultWelcomeMessage(hotelName);
+    config.branding.farewellMessage = defaultFarewellMessage(hotelName);
+  }
+
+  return { hotelId: row?.id, config };
 }
 
 export async function resolveTenantConfig(options?: {

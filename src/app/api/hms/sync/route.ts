@@ -34,7 +34,19 @@ async function fetchHmsPayload(body: HmsSyncBody): Promise<unknown> {
   if (!res.ok) {
     throw new Error(`HMS responded with ${res.status}.`);
   }
-  return res.json();
+
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    throw new Error(
+      "The HMS endpoint returned a non-JSON response. Check that the URL targets its API endpoint, not a login or HTML page."
+    );
+  }
+
+  try {
+    return await res.json();
+  } catch {
+    throw new Error("The HMS endpoint returned invalid JSON. Check its API response format.");
+  }
 }
 
 export async function POST(req: Request) {
