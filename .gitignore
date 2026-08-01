@@ -52,3 +52,14 @@ next-env.d.ts
 
 # claude agent metadata
 .claude/
+CLAUDE.md
+
+# IDE
+.vscode/
+
+# lock files (npm only — ignore bun)
+bun.lock
+bun.lockb
+
+# one-off scripts
+*.py
