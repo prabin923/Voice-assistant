@@ -107,6 +107,8 @@ GOOGLE_GENERATIVE_AI_API_KEY=your_key_from_aistudio.google.com
 JWT_SECRET=your_random_secret_here
 NEXT_PUBLIC_APP_URL=https://your-production-domain.com
 WEBHOOK_SECRET=your_webhook_shared_secret
+# Optional: select the hotel served at /assistant when no tenant slug is given
+DEFAULT_HOTEL_SLUG=your-hotel-slug
 
 # Optional: Azure Speech (MAI-Voice + MAI-Transcribe)
 AZURE_SPEECH_KEY=...

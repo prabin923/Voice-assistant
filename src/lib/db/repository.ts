@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import prisma from "@/lib/prisma";
 import { getRequiredTenantHotelId, tenantPrisma } from "@/lib/prisma-tenant";
+import { normalizeHotelSlug } from "@/lib/slug";
 
 import {
   mapAuthAuditLog,
@@ -648,8 +649,27 @@ export const hotels = {
     await prisma.hotel.update({ where: { id: hotelId }, data: { config } });
   },
 
+  /**
+   * Resolve the hotel used when a request has no explicit tenant context.
+   *
+   * Database `findFirst()` without an order is not deterministic: local and
+   * production can return different rows from the same seed data. An explicit
+   * DEFAULT_HOTEL_SLUG wins; otherwise use the oldest fully configured hotel,
+   * then the oldest hotel as a final fallback.
+   */
   async getFirst(): Promise<Hotel | undefined> {
-    const row = await prisma.hotel.findFirst();
+    const defaultSlug = normalizeHotelSlug(process.env.DEFAULT_HOTEL_SLUG);
+    if (defaultSlug) {
+      const selected = await prisma.hotel.findUnique({ where: { slug: defaultSlug } });
+      if (selected) return mapHotel(selected);
+      console.warn(`[tenant] DEFAULT_HOTEL_SLUG "${defaultSlug}" was not found; using the configured default.`);
+    }
+
+    const configured = await prisma.hotel.findFirst({
+      where: { config: { not: "{}" } },
+      orderBy: { createdAt: "asc" },
+    });
+    const row = configured ?? await prisma.hotel.findFirst({ orderBy: { createdAt: "asc" } });
     return row ? mapHotel(row) : undefined;
   },
 
