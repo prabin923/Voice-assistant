@@ -13,6 +13,7 @@ import { resolveEscalation } from "@/lib/escalation";
 import { sanitizeChatMessage, sanitizeChatHistory } from "@/lib/chatValidation";
 import { checkGuestChatRateLimit } from "@/lib/guestRateLimit";
 import type { HotelConfig } from "@/lib/hotelConfig";
+import { handleTouristGuideFlow, buildTourismSystemContext } from "@/lib/touristGuideFlow";
 
 export const dynamic = "force-dynamic";
 
@@ -33,36 +34,51 @@ function parseHotelConfig(raw: string): HotelConfig | null {
   }
 }
 
-function buildStayNepSystemInstruction(channel: ChatChannel, hotelCount: number, hotelBlocks: string[]): string {
+function buildStayNepSystemInstruction(channel: ChatChannel, hotelCount: number, hotelBlocks: string[], tourismContext?: string): string {
   const compact = channel === "voice";
 
   const voiceRules = compact
     ? `VOICE STYLE:
 - 1–2 short sentences only. Warm, conversational. No lists, no bullet points.
-- Use contractions (we've, there's, it's). Sound like a helpful travel advisor.`
+- Use contractions (we've, there's, it's). Sound like a knowledgeable travel advisor who loves Nepal.`
     : "";
 
   const directory = hotelBlocks.join("\n---\n");
 
-  return `You are StayNep, the AI travel assistant for the StayNep hotel platform.
-You help guests discover and choose from ${hotelCount} hotel${hotelCount !== 1 ? "s" : ""} registered on StayNep.
+  const tourismBlock = tourismContext
+    ? `\n\nTOURISM KNOWLEDGE (use for destination/activity/travel questions):\n${tourismContext}`
+    : "";
+
+  return `You are StayNep — Nepal's AI travel assistant, tourist guide, and hotel concierge.
+You are an expert on Nepal tourism: destinations, trekking routes, activities, festivals, culture, food, and practical travel advice.
+You also help guests discover and choose from ${hotelCount} hotel${hotelCount !== 1 ? "s" : ""} registered on the StayNep platform.
 ${voiceRules}
 
 CAPABILITIES:
+- Be a complete Nepal travel guide — recommend destinations, activities, local food, festivals, and practical tips
+- Generate personalized day-by-day itineraries for any trip length
+- Advise on trekking routes (difficulty, permits, season, gear, altitude)
+- Share practical travel info: visa, currency, safety, transport, customs, weather
 - List all hotels or filter by location, price, amenity, or style
 - Compare hotels side-by-side when asked
 - Answer detailed questions about any hotel's rooms, policies, dining, or facilities
-- When a guest is ready to book, direct them: "To book with [Hotel Name], use their voice concierge directly — just say the hotel name or go to their page."
+- When a guest is ready to book a hotel, direct them: "To book with [Hotel Name], use their voice concierge directly — just say the hotel name or go to their page."
+- Cross-reference hotel recommendations with destination itineraries
 
-TONE: Warm, knowledgeable platform host — like a well-travelled advisor who knows each property personally. Not a generic chatbot.
+TONE: Warm, knowledgeable, and passionate about Nepal — like a well-travelled local advisor who knows every trail, temple, and tea shop. Enthusiastic but not pushy. Not a generic chatbot.
 
-GROUNDING: Answer ONLY from the HOTEL DIRECTORY below. Never invent hotels, prices, amenities, or availability.
-If a guest asks about something not in the directory, say: "I don't have that detail for this hotel — I'd recommend reaching out to them directly."
+GROUNDING:
+- For hotel-specific info: use ONLY the HOTEL DIRECTORY below. Never invent hotels, prices, or availability.
+- For tourism/travel info: use the TOURISM KNOWLEDGE provided. Answer confidently about destinations, activities, and travel advice.
+- If asked about a hotel not in the directory: "That hotel isn't on StayNep yet — but I can recommend great stays in that area!"
+- If asked about something completely outside Nepal travel: "I'm your Nepal travel specialist! Ask me anything about visiting Nepal."
 
 Reply in the same language the guest is writing in.
 
+${buildTourismSystemContext()}
+
 HOTEL DIRECTORY:
-${directory}`;
+${directory}${tourismBlock}`;
 }
 
 async function callGemini(systemInstruction: string, history: ReturnType<typeof sanitizeChatHistory>, userContent: string, channel: ChatChannel): Promise<{ reply: string; escalate: boolean }> {
@@ -186,8 +202,23 @@ export async function POST(req: Request) {
 
     const startTime = Date.now();
 
+    // --- Tourist Guide Flow: handle itineraries directly, inject context for others ---
+    const guideResult = handleTouristGuideFlow(message, channel);
+    if (guideResult.handled && guideResult.reply) {
+      return NextResponse.json({
+        reply: guideResult.reply,
+        escalated: false,
+        language: langCode,
+        responseTimeMs: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const { hotelCount, hotelBlocks } = await loadHotelDirectory();
-    const systemInstruction = buildStayNepSystemInstruction(channel, hotelCount, hotelBlocks);
+
+    // Inject tourism knowledge into the system prompt when relevant
+    const tourismContext = guideResult.passToLlm ? guideResult.tourismContext : undefined;
+    const systemInstruction = buildStayNepSystemInstruction(channel, hotelCount, hotelBlocks, tourismContext);
 
     const provider = getActiveAiProvider();
     const { reply, escalate } = provider === "openai"

@@ -45,11 +45,13 @@ const CONCIERGE_NAME = "StayNep";
 const STT_STORAGE_KEY = "staynep-stt-mode";
 
 const SUGGESTED_QUESTIONS = [
+  "Plan a 7-day Nepal itinerary",
+  "Best places to visit in Nepal",
+  "Tell me about trekking in Nepal",
+  "What to do in Pokhara?",
   "Which hotels are on StayNep?",
-  "Find a hotel with a pool",
-  "What are the cheapest rooms?",
-  "Hotels in Nepal",
-  "Compare amenities",
+  "Do I need a visa for Nepal?",
+  "What festivals are happening?",
   "I want to book a hotel",
 ];
 
