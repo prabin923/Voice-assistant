@@ -1,12 +1,14 @@
-# StayNep — AI Voice Concierge for Hotels
+# StayNep — AI Voice Concierge & Nepal Tourist Guide
 
-> **Multi-tenant, multilingual voice assistant platform that handles guest conversations, autonomous bookings, dining & spa reservations, service requests, and staff operations — powered by Next.js 16, Google Gemini, and RAG.**
+> **Multi-tenant, multilingual voice assistant platform that doubles as a complete Nepal tourist guide — handling guest conversations, autonomous bookings, dining & spa reservations, itinerary planning, destination guidance, trekking advice, and staff operations — powered by Next.js 16, Google Gemini, and RAG.**
 
-StayNep is a production-grade AI voice concierge SaaS for the hospitality industry. Each hotel gets its own branded assistant with a unique knowledge base, conversation memory, and booking engine. Guests speak naturally in 40+ languages and get instant, spoken responses grounded in the hotel's real data — rooms, policies, dining, amenities, and FAQs.
+StayNep is a production-grade AI voice concierge SaaS for Nepal's hospitality and tourism industry. Each hotel gets its own branded assistant with a unique knowledge base, conversation memory, and booking engine. Guests speak naturally in 40+ languages and get instant, spoken responses grounded in the hotel's real data — rooms, policies, dining, amenities, and FAQs.
 
-The assistant handles **live availability checks**, **end-to-end room bookings**, **dining and spa reservations**, **modifications**, **cancellations**, and **service requests** autonomously. Staff are notified only when a booking completes (FYI) or when a situation genuinely requires human intervention.
+Beyond hotel operations, StayNep serves as a **comprehensive Nepal travel guide** — helping tourists plan trips with personalized day-by-day itineraries, recommending destinations, advising on trekking routes and permits, sharing festival calendars, and providing practical travel tips covering visa, currency, altitude safety, local customs, and more.
 
-Built as the foundation for **StayNep** — a comprehensive hotel management platform for Nepal's hospitality industry.
+The assistant handles **live availability checks**, **end-to-end room bookings**, **dining and spa reservations**, **modifications**, **cancellations**, **service requests**, and **tourism guidance** autonomously. Staff are notified only when a booking completes (FYI) or when a situation genuinely requires human intervention.
+
+Built as the foundation for **StayNep** — a comprehensive hotel management and tourism platform for Nepal.
 
 ---
 
@@ -32,6 +34,19 @@ Built as the foundation for **StayNep** — a comprehensive hotel management pla
 | **Embeddable Widget** | Drop-in `<script>` tag to embed the assistant on any hotel website |
 | **Stripe Payments** | Optional deposit collection during booking via Stripe Checkout |
 | **Service Health** | Live AI / DB / STT / SMS / Email readiness indicators in the assistant UI |
+
+### Tourist Guide
+
+| Feature | Description |
+|---------|-------------|
+| **Nepal Destination Guide** | Detailed knowledge of 20+ destinations — Kathmandu, Pokhara, Chitwan, Lumbini, Bhaktapur, Nagarkot, Upper Mustang, Namche Bazaar, Rara Lake, and more — with attractions, activities, local food, budget estimates, and travel tips |
+| **Itinerary Generation** | Personalized day-by-day trip itineraries for any duration (1–30 days) with morning/afternoon/evening activities, accommodation, meals, cost estimates, and packing lists |
+| **Trekking Advisor** | 8 major trekking routes (Everest Base Camp, Annapurna Circuit, Poon Hill, Langtang, Manaslu, etc.) with difficulty, duration, permits, altitude info, fitness requirements, and cost estimates |
+| **Activity Recommendations** | 10+ adventure and cultural activities — paragliding, rafting, bungee, jungle safari, mountain biking, yoga retreats, cooking classes, heritage tours, helicopter tours |
+| **Festival Calendar** | 9 major festivals (Dashain, Tihar, Holi, Indra Jatra, Bisket Jatra, Buddha Jayanti, Shivaratri, Teej, Chhath) with dates, locations, and cultural significance |
+| **Practical Travel Info** | 15 essential topics — visa, currency, permits, altitude sickness, health, transport, tipping, SIM cards, customs, food, emergencies, shopping, weather, electricity |
+| **Hotel Cross-Referencing** | Automatically suggests registered StayNep hotels when recommending destinations |
+| **Voice & Text Modes** | Full itineraries in text mode; concise summaries in voice mode with offer to send details |
 
 ### Hotel Admin
 
@@ -142,7 +157,7 @@ Open [http://localhost:3000](http://localhost:3000) — the landing page. The as
 
 ### Guest Message Routing
 
-Every message to `/api/chat` is routed by intent before the general AI is invoked.
+Every message to `/api/chat` (hotel concierge) is routed by intent before the general AI is invoked. Messages to `/api/staynep-chat` (platform assistant) are additionally routed through the tourist guide flow.
 
 ```mermaid
 flowchart TD
@@ -165,6 +180,32 @@ flowchart TD
   K -->|No| J
   K -->|Yes| L[Support ticket + alert email]
   L --> J
+```
+
+### StayNep Tourist Guide Flow
+
+The platform-level StayNep assistant (`/api/staynep-chat`) routes tourism queries through a dedicated flow before falling back to the hotel directory.
+
+```mermaid
+flowchart TD
+  A[User message] --> B{Tourist Guide Router}
+  B -->|Itinerary request| C[Itinerary Engine]
+  B -->|Destination query| D[Tourism KB → LLM]
+  B -->|Activity / trekking| E[Tourism KB → LLM]
+  B -->|Festival / culture| F[Tourism KB → LLM]
+  B -->|Practical question| G[Tourism KB → LLM]
+  B -->|Hotel query| H[Hotel Directory → LLM]
+  B -->|General| I[LLM with tourism context]
+
+  C --> J[Day-by-day itinerary]
+  D --> K[Destination guide + hotel suggestions]
+  E --> K
+  F --> K
+  G --> K
+  H --> K
+  I --> K
+  J --> L[User response]
+  K --> L
 ```
 
 ### Autonomous Booking Flow
@@ -313,6 +354,9 @@ flowchart LR
 │       ├── bookingFlow.ts      # Intent router + booking state machine
 │       ├── bookingService.ts   # Transactional create, modify, cancel
 │       ├── responseEngine.ts   # AI prompt construction + streaming
+│       ├── nepalTourismData.ts # Nepal tourism knowledge base (20 destinations, treks, activities, festivals)
+│       ├── itineraryEngine.ts  # Day-by-day itinerary generator with route templates
+│       ├── touristGuideFlow.ts # Tourist guide intent router + tourism context injection
 │       ├── rag/                # Embeddings, chunking, retrieval, lexical search
 │       ├── db/                 # Repository layer, mappers, types
 │       ├── prisma-tenant.ts    # Tenant-scoped Prisma client
