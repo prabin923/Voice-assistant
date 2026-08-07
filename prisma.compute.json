@@ -1,0 +1,11 @@
+{
+  "region": "ap-southeast-1",
+  "app": {
+    "name": "voice-assistant",
+    "framework": "nextjs",
+    "httpPort": 3000,
+    "build": {
+      "command": "npm run build"
+    }
+  }
+}
