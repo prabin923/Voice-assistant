@@ -12,6 +12,29 @@ Built as the foundation for **StayNep** — a comprehensive hotel management and
 
 ---
 
+## Demo & Screenshots
+
+### Landing Page
+<p align="center">
+  <img src="public/screenshots/landing-page.png" alt="StayNep Landing Page" width="720" />
+</p>
+
+### Voice Assistant — Itinerary Generation
+<p align="center">
+  <img src="public/screenshots/voice-assistant.png" alt="StayNep Voice Assistant generating a 7-day Nepal itinerary" width="720" />
+</p>
+
+> Ask StayNep to *"Plan a 7-day Nepal itinerary"* and get a personalized day-by-day travel plan with destinations, activities, meals, accommodation, costs, permits, and packing tips — all generated instantly.
+
+### Hotel Admin Dashboard
+<p align="center">
+  <img src="public/screenshots/admin-dashboard.png" alt="StayNep Hotel Admin Dashboard with analytics" width="720" />
+</p>
+
+> Each hotel gets a full admin panel with booking analytics, operations queue, support inbox, and a settings dashboard to configure rooms, dining, amenities, and AI persona.
+
+---
+
 ## Features
 
 ### Guest-Facing
